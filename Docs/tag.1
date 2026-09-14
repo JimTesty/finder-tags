@@ -165,6 +165,8 @@ tag --set 'Red,"Project, Alpha","Needs review"' file
 .fi
 .PP
 Matching is case-insensitive by default while stored spelling is preserved.
+Tag names containing CR, LF, or NUL are rejected because Foundation does not
+reliably round-trip them as Finder tags.
 .SH FILES
 See the finder-tags README and REVIEW.md for detailed behavior, reliability
 notes, compatibility differences, and JSONL fields.

@@ -107,6 +107,21 @@ if "$bin" --set '"unterminated' --dry-run "$work/a" >/dev/null 2>&1; then
     exit 1
 fi
 
+newline_tag='Line one
+Line two'
+if "$bin" --set "$newline_tag" --dry-run "$work/a" >/dev/null 2>"$work/newline.err"; then
+    echo "expected newline-containing tag to fail" >&2
+    exit 1
+fi
+grep -q 'may not contain CR, LF, or NUL' "$work/newline.err"
+
+cr_tag=$(printf 'Line one\rLine two')
+if "$bin" --set "$cr_tag" --dry-run "$work/a" >/dev/null 2>"$work/cr.err"; then
+    echo "expected CR-containing tag to fail" >&2
+    exit 1
+fi
+grep -q 'may not contain CR, LF, or NUL' "$work/cr.err"
+
 # --usage requires TAGS.
 if "$bin" --usage >/dev/null 2>&1; then
     echo "expected --usage without TAGS to fail" >&2
@@ -221,14 +236,11 @@ if [ "$(uname -s)" = Darwin ]; then
     "$bin" --remove Orange "$work/a"
     [ -z "$("$bin" -N "$work/a")" ]
 
-    # Quoted comma-containing tags and newline-containing tags round-trip.
+    # Quoted comma-containing tags round-trip. Foundation does not reliably
+    # round-trip CR/LF inside Finder tag names, so those inputs are rejected.
     "$bin" --set '"Project, Alpha","Needs review"' "$work/a"
     [ "$("$bin" -N "$work/a")" = 'Project, Alpha,Needs review' ]
     "$bin" --match '"Project, Alpha"' "$work/a" | grep -Fxq "$work/a"
-    newline_tag='Line one
-Line two'
-    "$bin" --set "$newline_tag" "$work/a"
-    "$bin" --jsonl "$work/a" | grep -Fq 'Line one\nLine two'
 
     # Ordered insertion/movement, including semantic neighbors.
     "$bin" --set 'A,C' "$work/a"

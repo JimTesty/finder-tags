@@ -2,6 +2,7 @@
 .DS_Store
 
 /_tmp/
+/private/
 
 /build/
 /Tests/.cli-work.*/

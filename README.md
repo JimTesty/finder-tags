@@ -198,9 +198,13 @@ That represents exactly three tags. A doubled quote inside a quoted component
 represents one literal quote, CSV-style. Unquoted components have surrounding
 whitespace trimmed; whitespace inside quoted components is preserved.
 
+Tag names containing CR, LF, or NUL are rejected. In particular, Foundation's
+Finder-tag API can accept a write containing a newline but read back only the
+prefix, so treating such a write as successful would silently corrupt the tag.
+
 The plain comma-separated **output** format is inherently ambiguous when tag
-names contain commas. Use `--jsonl` for machine consumption, or
-`--one-per-line` when tag names do not contain newlines.
+names contain commas. Use `--jsonl` for machine consumption or
+`--one-per-line` when a simple text format is sufficient.
 
 `*` remains reserved for wildcard behavior in `--match`, `--usage`, `--find`,
 and `--remove`.

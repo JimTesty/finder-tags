@@ -1,138 +1,5 @@
 import Foundation
 
-func usage(code: Int32 = 0) -> Never {
-    let text = """
-    \(programName) - manipulate macOS Finder tags while preserving tag order
-
-    finder-tags executable: tag
-    Usage-compatible with jdberry/tag where noted.
-
-    usage:
-      \(programName) [-l | --list] [options] [path ...]
-      \(programName) -a | --add TAGS [placement] [options] path ...
-      \(programName) -r | --remove TAGS [options] path ...
-      \(programName) -s | --set TAGS [options] path ...
-      \(programName) -m | --match TAGS [options] [path ...]
-      \(programName) -u | --usage TAGS [options] [path ...]
-      \(programName) -f | --find TAGS [options] [path ...]
-      \(programName) --move TAG POSITION [options] path ...
-      \(programName) --move TAG --before|--after TAG [options] path ...
-      \(programName) --copy SOURCE DESTINATION [--dry-run]
-
-    TAGS uses a CSV-like comma-separated grammar. Shell quoting still works as
-    usual, and quotes inside TAGS allow literal commas, for example:
-      tag --set 'Red,"Project, Alpha","Needs review"' file
-
-    operations:
-      -l, --list                 List tags (default)
-      -a, --add TAGS             Add/re-case tags, preserving existing order
-          --append TAGS          Alias for --add (insert new tags last)
-          --prepend TAGS         Add new tags at first/left/bottom
-      -r, --remove TAGS          Remove matching tags; '*' removes all tags
-      -s, --set TAGS             Replace all tags in the specified order
-          --copy SRC DST         Replace DST's tags with SRC's ordered tags
-      -m, --match TAGS           List traversed files matching all TAGS
-      -u, --usage TAGS           Count tags on traversed files matching TAGS
-      -f, --find TAGS            Spotlight search for files matching TAGS
-          --move TAG POSITION    Move one existing tag to POSITION
-
-    ordering/editing:
-          --at POSITION          Placement for --add/--move; zero-based index or
-                                first/left/bottom, last/right/top
-          --before TAG           Place added/moved tag(s) before TAG
-          --after TAG            Place added/moved tag(s) after TAG
-          --sorted-tags          Sort displayed tags; mutating operations also
-                                store their resulting tag arrays sorted
-      -V, --reverse              Reverse display order only; do not rewrite
-      -C, --case-sensitive       Make tag matching case-sensitive
-                                (default matching is case-insensitive)
-
-    output:
-      -c, --color                Display known Finder tag colors on a terminal
-      -n, --filename             Show filenames
-      -N, --no-filename          Hide filenames
-          --name/--no-name       Backward-compatible aliases
-      -t, --tags                 Show tags
-      -T, --no-tags              Hide tags
-      -g, --one-per-line         Display one tag per line
-      -G, --comma-separated      Display comma-separated tags (default)
-          --garrulous            Alias for --one-per-line
-          --no-garrulous         Alias for --comma-separated
-      -p, --slash                Append '/' to directory names
-      -0, --null                 Terminate text records with NUL
-          --nul                  Backward-compatible alias for --null
-          --absolute             Display absolute logical paths
-          --jsonl                Emit one JSON object per line (NDJSON)
-          --ndjson               Alias for --jsonl
-
-    path input / enumeration:
-          --stdin                Read additional newline-delimited paths on stdin
-          --stdin0               Read additional NUL-delimited paths on stdin
-          --files-from-stdin     Alias for --stdin
-          --files0-from-stdin    Alias for --stdin0
-      -A, --all                  Include hidden files while enumerating
-      -e, --enter                Enumerate contents of explicit directories
-      -R, -d, --recursive        Recursively enumerate directories
-          --no-follow-symlinks   Do not resolve/follow symlinked directories
-          --follow-symlinks      Restore the default follow behavior
-
-    mutation safety:
-          --dry-run              Show intended changes without writing
-          --dryrun               Alias for --dry-run
-
-    other:
-      -h, --help                 Show this help
-      -v, --version              Show version
-
-    TAG matching is case-insensitive by default, but stored case is preserved.
-    Case-distinct stored tags are not merged. For example, adding Orange to an
-    existing red,orange,yellow re-cases the unique match in place to
-    red,Orange,yellow. Use --case-sensitive to append a distinct Orange instead.
-
-    '*' means any tag for --match/--usage/--find and all tags for --remove. An
-    empty TAGS expression matches files with no tags. --usage requires TAGS.
-
-    Placement names map to Finder's visual stack: first/left/bottom = index 0,
-    last/right/top = the end, because Finder draws the last/rightmost color on
-    top. --before/--after use the same case-matching rules as other operations.
-
-    --sorted-tags is opt-in. Read-only commands only sort their output; they do
-    not rewrite metadata. Mutating commands sort the final stored array after
-    applying the requested edit. Default behavior always preserves tag order.
-
-    Symbolic links are followed by default. --no-follow-symlinks prevents
-    recursive traversal through symlinked directories and avoids explicitly
-    resolving symlink paths before Foundation tag I/O.
-
-    Defaults match jdberry/tag where practical: list shows filename+tags;
-    match/find show filenames only. With no paths, list/match/usage enumerate the
-    current directory; find uses Spotlight's default search scope. Mutating
-    operations require explicit paths.
-
-    Important differences from jdberry/tag:
-      * Stored tag order is preserved by default. --sorted-tags opts into sorted
-        display/results and sorted mutation output.
-      * --usage traverses paths directly; it does NOT use Spotlight.
-      * --usage requires TAGS instead of making it optional.
-      * --home/--local/--network are not implemented for --find.
-      * --copy, --move, placement controls, --reverse, --case-sensitive,
-        --sorted-tags, --absolute, stdin path input, --jsonl, and --dry-run are
-        additions.
-      * Quoted TAGS can contain commas; jdberry/tag's grammar cannot.
-      * Symlinked targets/directories are followed intentionally by default.
-
-    Use -- before a path beginning with '-'.
-    """
-
-    if code == 0 { print(text) } else { eprint(text) }
-    exit(code)
-}
-
-func version() -> Never {
-    print("\(programName) \(programVersion)")
-    exit(0)
-}
-
 private func setOperation(_ operation: Operation, options: inout Options) {
     if options.operationWasSet {
         fail("operation may be specified only once")
@@ -236,6 +103,7 @@ func parseArguments() -> Options {
                     fail("--move does not take '=...'; use --move TAG POSITION")
                 }
                 let tag = requireValue("--move", args: args, index: &i)
+                validateSingleTagOperand(tag)
                 var position: PositionSpec? = nil
                 if i + 1 < args.count && !args[i + 1].hasPrefix("-") {
                     position = parsePosition(requireValue("--move", args: args, index: &i))
@@ -244,9 +112,13 @@ func parseArguments() -> Options {
             case "at":
                 setPosition(parsePosition(operand()), options: &options, option: "--at")
             case "before":
-                setPosition(.before(operand()), options: &options, option: "--before")
+                let tag = operand()
+                validateSingleTagOperand(tag)
+                setPosition(.before(tag), options: &options, option: "--before")
             case "after":
-                setPosition(.after(operand()), options: &options, option: "--after")
+                let tag = operand()
+                validateSingleTagOperand(tag)
+                setPosition(.after(tag), options: &options, option: "--after")
             case "sorted-tags", "sort-tags": options.sortedTags = true
             case "color": options.color = true
             case "reverse": options.reverse = true

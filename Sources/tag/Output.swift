@@ -91,10 +91,6 @@ final class Output {
         record("[dry-run] \(operation) \(target.displayPath)\t\(before) \(marker) \(after)")
     }
 
-    func finish() throws {
-        // JSONL is streamed one object at a time; there is nothing to flush.
-    }
-
     private func pathObject(_ target: Target) -> [String: Any] {
         var object: [String: Any] = [
             "path": target.displayPath,

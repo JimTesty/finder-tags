@@ -79,11 +79,11 @@ would make deterministic output and mutation/error behavior more complicated.
 
 Quoted input supports commas inside tag names, but default output still uses
 commas between tags. A tag containing a comma is therefore ambiguous in that
-text format. One-tag-per-line output is also ambiguous if a tag itself contains
-a newline.
+text format. CR, LF, and NUL are rejected in tag-name input because Foundation
+does not reliably round-trip them as Finder tags.
 
 `--jsonl` is the recommended machine-readable format because JSON escaping
-preserves those strings structurally.
+preserves comma-containing tags and path strings structurally.
 
 `*` remains reserved as a wildcard for match/usage/find/remove, so those
 operations cannot target a literal tag named `*`.
