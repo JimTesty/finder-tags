@@ -2,6 +2,8 @@
 
 _arguments \
   '(-l --list)'{-l,--list}'[list tags]' \
+  '--export[export tagged ordered tags]:root:_files' \
+  '--restore[restore archive]:archive:_files' \
   '(-a --add)'{-a,--add}'[add tags]:tags:' \
   '--append[add tags at end]:tags:' \
   '--prepend[add tags at beginning]:tags:' \
@@ -20,6 +22,7 @@ _arguments \
   '(-V --reverse)'{-V,--reverse}'[reverse display order]' \
   '(-C --case-sensitive)'{-C,--case-sensitive}'[case-sensitive matching]' \
   '(-c --color)'{-c,--color}'[color tags]' \
+  '--tagged-only[list/export only tagged items]' \
   '(-n --filename)'{-n,--filename}'[show filenames]' \
   '(-N --no-filename)'{-N,--no-filename}'[hide filenames]' \
   '(-t --tags)'{-t,--tags}'[show tags]' \
@@ -39,6 +42,10 @@ _arguments \
   '--no-follow-symlinks[do not recurse through symlinked directories]' \
   '--follow-symlinks[follow symlinks (default)]' \
   '--dry-run[preview mutations]' \
+  '--root[relocate restore root]:directory:_files' \
+  '--backup[write undo archive]:archive:_files' \
+  '--no-backup[disable undo archive]' \
+  '--sync-backup[sync each undo record]' \
   '(-h --help)'{-h,--help}'[help]' \
   '(-v --version)'{-v,--version}'[version]' \
   '*:path:_files'

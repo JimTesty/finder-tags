@@ -4,6 +4,7 @@ final class App {
     private let options: Options
     private let store = TagStore()
     private let output: Output
+    private var undoWriter: UndoWriter?
     private var hadError = false
 
     init(options: Options) {
@@ -11,15 +12,25 @@ final class App {
         self.output = Output(
             options: options,
             colors: FinderColors(
-                enabled: options.color && !options.jsonLines && stdoutIsTerminal()
+                enabled: !options.jsonLines && colorIsEnabled(options.colorMode)
             )
         )
+        if options.isMutating && !options.dryRun && options.backupEnabled {
+            self.undoWriter = UndoWriter(
+                path: options.backupPath ?? defaultUndoArchivePath(),
+                syncEachRecord: options.syncBackup
+            )
+        }
     }
 
     func run() -> Int32 {
         switch options.operation {
         case .copy:
             runCopy()
+        case .export:
+            runExport()
+        case .restore:
+            runRestore()
         case .usage(let query):
             runUsage(query)
         case .find(let query):
@@ -28,7 +39,89 @@ final class App {
             runTraversal()
         }
 
+        finishUndo()
         return hadError ? ExitCode.ioError : 0
+    }
+
+    private func runExport() {
+        let rootURL: URL
+        if let path = options.paths.first {
+            rootURL = expandedFileURL(path)
+        } else {
+            rootURL = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+                .standardizedFileURL
+        }
+
+        do {
+            guard try rootURL.checkResourceIsReachable() else {
+                report("export root is not reachable: \(rootURL.path)")
+                return
+            }
+            guard try rootURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+                report("export root must be a directory: \(rootURL.path)")
+                return
+            }
+
+            let writer = ArchiveWriter(options: options, colors: output.colorsForArchive)
+            try writer.emitRoot(rootURL)
+            let traversal = Traversal(
+                options: options,
+                onError: { message in
+                    writer.stats.errors += 1
+                    self.report(message)
+                }
+            )
+            traversal.forEachTarget { target in
+                let tags: [String]
+                do {
+                    tags = try self.store.read(target.url)
+                } catch {
+                    writer.stats.errors += 1
+                    writer.stats.visited += 1
+                    self.report("\(target.absolutePath): \(error.localizedDescription)")
+                    return
+                }
+                do {
+                    try writer.emitTarget(target, tags: tags)
+                } catch {
+                    writer.stats.errors += 1
+                    self.report("\(target.absolutePath): \(error.localizedDescription)")
+                }
+            }
+            try writer.finish()
+        } catch {
+            report("export failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func runRestore() {
+        guard let archivePath = options.archivePath else {
+            report("--restore requires an archive path or '-'")
+            return
+        }
+
+        do {
+            let document = try ArchiveReader().read(path: archivePath)
+            let destinationRoot = expandedFileURL(options.restoreRoot ?? document.rootPath)
+            let engine = RestoreEngine(
+                document: document,
+                destinationRoot: destinationRoot,
+                options: options,
+                store: store,
+                output: output,
+                onError: report,
+                onWarning: { message in
+                    eprint("\(programName): warning: \(message)")
+                },
+                beforeMutation: { target, tags in
+                    try self.recordUndo(target: target, tags: tags)
+                }
+            )
+            let stats = engine.run()
+            try output.emitSummary(stats, operation: "restore")
+        } catch {
+            report("restore failed: \(error.localizedDescription)")
+        }
     }
 
     private func report(_ message: String) {
@@ -119,7 +212,10 @@ final class App {
             do {
                 switch options.operation {
                 case .list:
-                    try output.emitFile(target, tags: store.read(target.url))
+                    let tags = try store.read(target.url)
+                    if !options.taggedOnly || !tags.isEmpty {
+                        try output.emitFile(target, tags: tags)
+                    }
 
                 case .match(let query):
                     let tags = try store.read(target.url)
@@ -160,7 +256,7 @@ final class App {
                     )
                     try performMutation("move", target: target, change: change)
 
-                case .copy, .usage, .find:
+                case .copy, .usage, .find, .export, .restore:
                     preconditionFailure("operation handled outside traversal")
                 }
             } catch {
@@ -176,7 +272,8 @@ final class App {
         source: Target? = nil
     ) throws {
         let change = sortedChangeIfRequested(rawChange, options: options)
-        if !options.dryRun {
+        if !options.dryRun && change.before != change.after {
+            try recordUndo(target: target, tags: change.before)
             try store.apply(change, to: target.url)
         }
         try output.emitChange(
@@ -186,5 +283,17 @@ final class App {
             source: source,
             dryRun: options.dryRun
         )
+    }
+
+    private func finishUndo() {
+        do {
+            try undoWriter?.finish()
+        } catch {
+            report("closing undo archive: \(error.localizedDescription)")
+        }
+    }
+
+    private func recordUndo(target: Target, tags: [String]) throws {
+        try undoWriter?.record(target: target, tags: tags)
     }
 }

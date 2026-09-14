@@ -10,6 +10,8 @@ enum PositionSpec: Equatable {
 
 enum Operation {
     case list
+    case export
+    case restore
     case add([String])
     case remove([String])
     case set([String])
@@ -25,11 +27,17 @@ enum StdinPathMode {
     case nul
 }
 
+enum ColorMode {
+    case auto
+    case always
+    case never
+}
+
 struct Options {
     var operation: Operation = .list
     var operationWasSet = false
 
-    var color = false
+    var colorMode: ColorMode = .never
     var reverse = false
     var sortedTags = false
     var caseSensitive = false
@@ -43,6 +51,12 @@ struct Options {
     var nulTerminate = false
     var jsonLines = false
     var dryRun = false
+    var taggedOnly = false
+    var archivePath: String? = nil
+    var restoreRoot: String? = nil
+    var backupEnabled = true
+    var backupPath: String? = nil
+    var syncBackup = false
     var position: PositionSpec? = nil
     var absolutePaths = false
     var followSymlinks = true
@@ -70,7 +84,7 @@ struct Options {
 
     var isMutating: Bool {
         switch operation {
-        case .add, .remove, .set, .copy, .move: return true
+        case .add, .remove, .set, .copy, .move, .restore: return true
         default: return false
         }
     }

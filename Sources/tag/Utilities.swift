@@ -17,6 +17,14 @@ func stdoutIsTerminal() -> Bool {
     return isatty(STDOUT_FILENO) == 1
 }
 
+func colorIsEnabled(_ mode: ColorMode) -> Bool {
+    switch mode {
+    case .auto: return stdoutIsTerminal()
+    case .always: return true
+    case .never: return false
+    }
+}
+
 func fail(_ message: String, code: Int32 = ExitCode.usage) -> Never {
     eprint("\(programName): \(message)")
     exit(code)

@@ -95,7 +95,57 @@ tag --find Work ~/Documents          # Spotlight-backed search
 tag --absolute -R directory          # absolute logical output paths
 tag --jsonl file1 file2              # streaming structured output
 find files -print0 | tag --stdin0 -T # read NUL-delimited paths
+
+tag --export directory > tags.archive
+tag --export directory | gzip > tags.archive.gz
+tag --restore tags.archive --root restored-directory --dry-run
+gzip -dc tags.archive.gz | tag --restore - --root restored-directory
 ```
+
+## Export and restore
+
+`--export` writes a v1, root-relative archive for one directory. It includes
+hidden items by default and emits tagged items only, preserving each stored tag
+array exactly. Plaintext output is find-like and can be read back by
+`--restore`; `--jsonl` provides the streaming machine-readable form. JSONL uses
+explicit `root` and one-per-symlink records, and never repeats an
+`absolutePath` field. A final export summary is written to stderr for
+plaintext, or as a JSONL `summary` record.
+
+`--restore ARCHIVE` accepts an archive path or `-` for stdin. `--root DEST`
+relocates the archive's one root. Restore changes only listed existing items;
+it does not create or delete files, and an archive containing only tagged items
+does not clear tags from unlisted items. Ordered tag arrays are compared before
+writing, and a final summary reports visited, restored/changed, unchanged,
+missing, errors, and symlink warnings. `--dry-run` performs the same reads and
+comparisons without changing tags.
+
+Before a real restore writes anything, the complete archive is read and
+validated. The v1 archive format is line-oriented: a header and `@root` record
+are followed by tab-separated root-relative paths and quoted comma-separated
+tags. JSONL uses `root`, `symlink`, item, and final `summary` records. Restore
+also accepts ANSI-colored plaintext because it removes terminal color escapes
+before parsing. This validation prevents malformed or lexically escaping input
+from being discovered halfway through a restore; it does not make filesystem
+changes transactional if a later metadata write fails.
+
+Symlinks are followed by default. If a symlink resolves to a different target
+than the one recorded during export, restore warns once to stderr and follows
+the current target. `--no-follow-symlinks` retains the general defensive mode.
+Archive paths are validated before writes, including rejection of absolute
+paths, lexical `..` escapes, malformed records, and conflicting duplicates.
+
+Mutating operations write a per-file undo archive by default in the system
+temporary directory. The archive path is printed to stderr when the first
+change needs it. Use `--no-backup` to disable this, `--backup PATH` to choose a
+path, or `--sync-backup` to sync each undo record before its mutation. Syncing
+is intentionally opt-in because it can be expensive.
+
+Export output can be piped through ordinary compressors, and restore can read
+such a pipeline through stdin. The default undo archive is a local temporary
+file rather than a pipe so each preimage is available immediately before its
+corresponding mutation. Managed compressed undo journals and stronger crash
+atomicity are future work.
 
 ## Ordering
 
@@ -264,9 +314,9 @@ recursive mutation from escaping its starting tree through a directory symlink.
 
 ## `--dry-run`
 
-Valid with `--add`, `--remove`, `--set`, `--move`, and `--copy`. It performs the
-normal metadata reads and computes the exact before/after arrays, but does not
-write.
+Valid with `--add`, `--remove`, `--set`, `--move`, `--copy`, and `--restore`. It
+performs the normal metadata reads and computes the exact before/after arrays,
+but does not write.
 
 Text output shows the before/after arrays. With `--jsonl`, each record contains
 `operation`, `path`, `before`, `after`, `changed`, and `dryRun`; copy records
@@ -277,18 +327,17 @@ also contain source path information.
 `--jsonl` (alias `--ndjson`) emits one JSON object per line and streams results
 without buffering an entire recursive traversal.
 
-File records contain:
-
-* `path`: the normal displayed path
-* `absolutePath`: the absolute logical path, preserving symlink spelling
-* `resolvedPath`: the symlink-resolved absolute path
-* `root`: the traversal root when applicable
-* `tags`: the displayed tag array
+Normal file records contain `path` and `tags`. Recursive output emits a
+`{"type":"root","path":"..."}` record once per traversal root, and emits
+one `{"type":"symlink",...}` record per symlink when path-resolution
+provenance is needed. It never emits `absolutePath`; root plus logical path is
+the authoritative identity. Export adds a final `summary` record with counts.
 
 Example:
 
 ```json
-{"absolutePath":"/tmp/tree/file","path":"file","resolvedPath":"/tmp/tree/file","root":"/tmp/tree","tags":["First","Second"]}
+{"type":"root","path":"/tmp/tree"}
+{"path":"file","tags":["First","Second"]}
 ```
 
 For `--usage`, records contain `tag` and `count`. Mutations emit before/after
@@ -297,6 +346,11 @@ records after a successful write; dry runs emit the same shape with
 
 Text-only switches such as color, filename suppression, one-per-line, slash
 decoration, and NUL termination do not change the JSONL schema.
+
+For text output, bare `--color` and `--color=yes` mean automatic terminal
+coloring. `--color=always` and `--color=force` force ANSI colors, while
+`--color=no`, `--color=none`, and `--color=never` disable them. JSONL is never
+colored.
 
 ## Reliability behavior
 
@@ -307,6 +361,10 @@ Every destructive operation reads target metadata before writing. `--copy`
 completes both source and destination reads before any destination write. Every
 actual write is then read back and compared, including array ordering. A
 mismatch is reported as an error.
+
+The macOS integration suite also checks that a tag write leaves the file's
+content modification time unchanged. Creation time and attribute-change time
+are not rewritten by this tool.
 
 This is intentionally best-effort rather than transactional. A concurrent tag
 change between read and write can still be lost, and a multi-file operation can

@@ -32,6 +32,13 @@ tag \- manipulate macOS Finder tags while preserving tag order
 .B tag --copy
 .I SOURCE DESTINATION
 .br
+.B tag --export
+.RI [ ROOT ]
+.br
+.B tag --restore
+.I ARCHIVE
+.RI [ --root DEST ]
+.br
 .B tag --move
 .I TAG POSITION path ...
 .SH DESCRIPTION
@@ -44,6 +51,16 @@ The interface is compatible with jdberry/tag where practical.
 .TP
 .BR -l , " --list"
 List tags. This is the default operation.
+.TP
+.B --export [ROOT]
+Write a tagged-only, root-relative archive for one directory. Hidden items are
+included by default. Plaintext is find-like; --jsonl selects the streaming JSON
+format.
+.TP
+.B --restore ARCHIVE
+Restore an archive from a file, or from standard input when ARCHIVE is -. Use
+--root DEST to relocate the archive's one root. Current symlink targets are
+followed by default and redirected targets produce warnings.
 .TP
 .BR -a , " --add " TAGS
 Add or re-case tags without disturbing unrelated tag order.
@@ -99,6 +116,8 @@ Use exact-case matching instead of the default case-insensitive matching.
 .TP
 .BR -c , " --color"
 Display known Finder tag colors when stdout is a terminal.
+The explicit modes are auto/yes, always/force, and no/none/never; JSONL is
+never colored.
 .TP
 .BR -n , " --filename"
 Show filenames. --name is an alias.
@@ -129,6 +148,9 @@ Display absolute logical paths.
 .TP
 .B --jsonl
 Emit newline-delimited JSON. --ndjson is an alias.
+.TP
+.B --tagged-only
+List or export only items having at least one tag.
 .SH PATH INPUT AND TRAVERSAL
 .TP
 .B --stdin
@@ -138,7 +160,7 @@ Read newline-delimited paths from standard input.
 Read NUL-delimited paths from standard input.
 .TP
 .BR -A , " --all"
-Include hidden files while enumerating.
+Include hidden files while enumerating. Export includes them by default.
 .TP
 .BR -e , " --enter"
 Enumerate immediate contents of explicit directories.
@@ -155,7 +177,19 @@ Restore default symlink following.
 .SH SAFETY
 .TP
 .B --dry-run
-Compute and display intended mutations without writing. --dryrun is an alias.
+Compute and display intended mutations without writing. Restore reports the
+same change count as a real run. --dryrun is an alias.
+.TP
+.B --backup PATH
+Write a per-file undo archive at PATH before mutations. Mutating operations
+write a temporary undo archive by default.
+.TP
+.B --no-backup
+Disable the default undo archive.
+.TP
+.B --sync-backup
+Sync each undo record before its mutation. This is more durable but can be
+expensive.
 .SH TAG SYNTAX
 TAGS is comma separated. Quoted CSV-style components permit literal commas,
 for example:
@@ -169,6 +203,6 @@ Tag names containing CR, LF, or NUL are rejected because Foundation does not
 reliably round-trip them as Finder tags.
 .SH FILES
 See the finder-tags README and REVIEW.md for detailed behavior, reliability
-notes, compatibility differences, and JSONL fields.
+notes, compatibility differences, archive syntax, and JSONL fields.
 .SH LICENSE
 MIT.

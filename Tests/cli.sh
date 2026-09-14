@@ -11,6 +11,9 @@ repo=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
 work="$repo/Tests/.cli-work.$$"
 rm -rf "$work"
 mkdir -p "$work"
+mkdir -p "$work/tmp"
+TMPDIR="$work/tmp"
+export TMPDIR
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 touch "$work/a" "$work/b" "$work/c" "$work/space name"
@@ -29,6 +32,10 @@ ln -s .. "$work/tree/real/back-to-tree"
 "$bin" --help | grep -q -- '--no-follow-symlinks'
 "$bin" --help | grep -q -- '--find TAGS'
 "$bin" --help | grep -q -- '--jsonl'
+"$bin" --help | grep -q -- '--export'
+"$bin" --help | grep -q -- '--restore ARCHIVE'
+"$bin" --help | grep -q -- '--tagged-only'
+"$bin" --help | grep -q -- '--no-backup'
 [ "$("$bin" --version)" = "tag 8.0" ]
 
 # Explicit directory first, then descendants relative to that argument.
@@ -63,14 +70,22 @@ if "$bin" -e "$work/tree" | grep -q '^\.hidden$'; then
 fi
 "$bin" -Ae "$work/tree" | grep -q '^\.hidden$'
 
-# Absolute paths and richer JSONL path provenance.
+# Absolute paths and compact stateful JSONL path provenance.
 absolute_output=$(cd "$work" && "$bin" --absolute a)
 [ "$absolute_output" = "$work/a" ]
 json_path=$(cd "$work" && "$bin" --jsonl a)
-printf '%s\n' "$json_path" | grep -Fq '"absolutePath"'
-printf '%s\n' "$json_path" | grep -Fq '"resolvedPath"'
-printf '%s\n' "$json_path" | grep -Fq '"root"'
+printf '%s\n' "$json_path" | grep -Fq '"type":"root"'
+if printf '%s\n' "$json_path" | grep -Fq '"absolutePath"'; then
+    echo "JSONL unexpectedly repeated absolutePath" >&2
+    exit 1
+fi
 printf '%s\n' "$json_path" | grep -Fq '"path":"a"'
+json_recursive=$("$bin" --jsonl -R "$work/tree")
+[ "$(printf '%s\n' "$json_recursive" | grep -c '"type":"root"')" -eq 1 ]
+if printf '%s\n' "$json_recursive" | grep -q '"absolutePath"'; then
+    echo "recursive JSONL unexpectedly repeated absolutePath" >&2
+    exit 1
+fi
 
 # Paths from stdin, including NUL-delimited input. Explicit empty stdin means
 # zero files rather than silently falling back to current-directory traversal.
@@ -276,6 +291,135 @@ if [ "$(uname -s)" = Darwin ]; then
     # Hard links should naturally observe the same file metadata.
     ln "$work/target-file" "$work/hard-link"
     [ "$("$bin" -N "$work/hard-link")" = 'ViaLink' ]
+
+    # Export/restore uses one root, includes hidden items by default, and
+    # preserves the exact stored tag order.
+    export_root="$work/export-root"
+    restore_root="$work/restore-root"
+    mkdir -p "$export_root/sub" "$export_root/real" "$restore_root/sub"
+    touch "$export_root/alpha" "$export_root/.hidden" "$export_root/space name" "$export_root/sub/beta"
+    touch "$restore_root/alpha" "$restore_root/.hidden" "$restore_root/space name" "$restore_root/sub/beta"
+    ln -s real "$export_root/alias"
+
+    "$bin" --set 'Second,First' --no-backup "$export_root/alpha"
+    "$bin" --set HiddenTag --no-backup "$export_root/.hidden"
+    "$bin" --set 'Nested,Tag' --no-backup "$export_root/sub/beta"
+    "$bin" --set '"Project, Alpha","Needs review"' --no-backup "$export_root/space name"
+    "$bin" --set Wrong --no-backup "$restore_root/alpha"
+    "$bin" --set WrongHidden --no-backup "$restore_root/.hidden"
+    "$bin" --set WrongNested --no-backup "$restore_root/sub/beta"
+    "$bin" --set WrongSpace --no-backup "$restore_root/space name"
+    "$bin" --set Keep --no-backup "$restore_root"
+
+    export_archive="$work/export.archive"
+    "$bin" --export "$export_root" >"$export_archive" 2>"$work/export.err"
+    grep -Fq '# finder-tags archive v1' "$export_archive"
+    grep -Fq '.hidden' "$export_archive"
+    grep -Fq 'alpha' "$export_archive"
+    grep -Fq '"space name"' "$export_archive"
+    grep -Fq '"Project, Alpha"' "$export_archive"
+    grep -Fq '@symlink' "$export_archive"
+    grep -q 'exported 4 tagged items' "$work/export.err"
+
+    restore_dry_output="$work/restore-dry.out"
+    restore_dry_error="$work/restore-dry.err"
+    "$bin" --restore "$export_archive" --root "$restore_root" --dry-run --no-backup \
+        >"$restore_dry_output" 2>"$restore_dry_error"
+    grep -q 'would change' "$restore_dry_error"
+    grep -q 'warnings' "$restore_dry_error"
+    grep -q '\[dry-run\] restore' "$restore_dry_output"
+    [ "$("$bin" -N "$restore_root/alpha")" = 'Wrong' ]
+    [ "$("$bin" -N "$restore_root/.hidden")" = 'WrongHidden' ]
+    [ "$("$bin" -N "$restore_root/sub/beta")" = 'WrongNested' ]
+
+    "$bin" --restore "$export_archive" --root "$restore_root" --no-backup \
+        >"$work/restore.out" 2>"$work/restore.err"
+    grep -q 'restored 4 files' "$work/restore.err"
+    grep -q 'following the current target' "$work/restore.err"
+    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+    [ "$("$bin" -N "$restore_root/.hidden")" = 'HiddenTag' ]
+    [ "$("$bin" -N "$restore_root/sub/beta")" = 'Nested,Tag' ]
+    [ "$("$bin" -N "$restore_root/space name")" = 'Project, Alpha,Needs review' ]
+    [ "$("$bin" -N "$restore_root")" = 'Keep' ]
+
+    json_archive="$work/export.jsonl"
+    "$bin" --export --jsonl "$export_root" >"$json_archive"
+    grep -q '"type":"summary"' "$json_archive"
+    if grep -q '"absolutePath"' "$json_archive"; then
+        echo "export JSONL unexpectedly contains absolutePath" >&2
+        exit 1
+    fi
+    "$bin" --restore "$json_archive" --root "$restore_root" --jsonl --dry-run --no-backup \
+        >"$work/json-restore.out"
+    grep -q '"type":"summary"' "$work/json-restore.out"
+
+    colored_archive="$work/colored.archive"
+    printf '%s\n' '# finder-tags archive v1' "@root $export_root" >"$colored_archive"
+    printf '\033[31malpha\033[0m\t\033[31mColorized\033[0m\n' >>"$colored_archive"
+    "$bin" --restore "$colored_archive" --root "$restore_root" --dry-run --no-backup \
+        >"$work/colored.out"
+    grep -q 'Colorized' "$work/colored.out"
+    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+
+    # The complete archive is validated before any listed item is changed.
+    malformed_archive="$work/malformed.archive"
+    printf '%s\n' '# finder-tags archive v1' "@root $export_root" >"$malformed_archive"
+    printf '%s\t%s\n' alpha Rejected >>"$malformed_archive"
+    printf '%s\n' 'not an archive record' >>"$malformed_archive"
+    if "$bin" --restore "$malformed_archive" --root "$restore_root" --no-backup \
+        >"$work/malformed.out" 2>"$work/malformed.err"; then
+        echo "malformed archive unexpectedly restored" >&2
+        exit 1
+    fi
+    grep -q 'archive line' "$work/malformed.err"
+    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+
+    duplicate_archive="$work/duplicate.archive"
+    printf '%s\n' '# finder-tags archive v1' "@root $export_root" >"$duplicate_archive"
+    printf '%s\t%s\n' alpha First >>"$duplicate_archive"
+    printf '%s\t%s\n' alpha Second >>"$duplicate_archive"
+    if "$bin" --restore "$duplicate_archive" --root "$restore_root" --no-backup \
+        >"$work/duplicate.out" 2>"$work/duplicate.err"; then
+        echo "duplicate archive unexpectedly restored" >&2
+        exit 1
+    fi
+    grep -q 'duplicate archive item' "$work/duplicate.err"
+    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+
+    escape_archive="$work/escape.archive"
+    printf '%s\n' '# finder-tags archive v1' "@root $export_root" >"$escape_archive"
+    printf '%s\t%s\n' ../alpha Hacked >>"$escape_archive"
+    if "$bin" --restore "$escape_archive" --root "$restore_root" --no-backup \
+        >"$work/escape.out" 2>"$work/escape.err"; then
+        echo "path-escape archive unexpectedly restored" >&2
+        exit 1
+    fi
+    grep -q 'invalid archive item path' "$work/escape.err"
+    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+
+    # Tag writes must not change mtime on the supported macOS filesystem.
+    touch "$work/mtime-file"
+    mtime_before=$(stat -f %m "$work/mtime-file")
+    "$bin" --set MtimeTest --no-backup "$work/mtime-file"
+    mtime_after=$(stat -f %m "$work/mtime-file")
+    [ "$mtime_before" = "$mtime_after" ]
+
+    # Explicit undo archives capture the preimage immediately before the
+    # mutation and can themselves be restored.
+    undo_archive="$work/undo.archive"
+    "$bin" --set UndoNew --backup "$undo_archive" "$restore_root/alpha" \
+        2>"$work/undo.err"
+    grep -Fq 'alpha' "$undo_archive"
+    "$bin" --restore "$undo_archive" --no-backup >/dev/null
+    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+
+    # The default undo archive is created in the system temporary directory.
+    "$bin" --set DefaultUndo "$restore_root/alpha" 2>"$work/default-undo.err"
+    grep -q 'undo archive:' "$work/default-undo.err"
+    default_undo=$(sed -n 's/.*undo archive: //p' "$work/default-undo.err" | tail -n 1)
+    if [ -n "$default_undo" ] && [ -f "$default_undo" ]; then
+        rm -f "$default_undo"
+    fi
 
     "$bin" --set 'X,Y' --jsonl "$work/b" | grep -q '"dryRun":false'
     [ "$("$bin" -N "$work/b")" = 'X,Y' ]

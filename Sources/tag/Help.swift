@@ -18,6 +18,8 @@ func usage(code: Int32 = 0) -> Never {
       \(programName) --move TAG POSITION [options] path ...
       \(programName) --move TAG --before|--after TAG [options] path ...
       \(programName) --copy SOURCE DESTINATION [--dry-run]
+      \(programName) --export [options] [ROOT]
+      \(programName) --restore ARCHIVE [--root DEST] [--dry-run]
 
     TAGS uses a CSV-like comma-separated grammar. Shell quoting still works as
     usual, and quotes inside TAGS allow literal commas, for example:
@@ -26,6 +28,8 @@ func usage(code: Int32 = 0) -> Never {
 
     operations:
       -l, --list                 List tags (default)
+          --export               Export ordered tags for one root
+          --restore ARCHIVE      Restore an archive (use '-' for stdin)
       -a, --add TAGS             Add/re-case tags, preserving existing order
           --append TAGS          Alias for --add (insert new tags last)
           --prepend TAGS         Add new tags at first/left/bottom
@@ -49,7 +53,7 @@ func usage(code: Int32 = 0) -> Never {
                                 (default matching is case-insensitive)
 
     output:
-      -c, --color                Display known Finder tag colors on a terminal
+      -c, --color                Display known Finder tag colors when appropriate
       -n, --filename             Show filenames
       -N, --no-filename          Hide filenames
           --name/--no-name       Backward-compatible aliases
@@ -65,21 +69,27 @@ func usage(code: Int32 = 0) -> Never {
           --absolute             Display absolute logical paths
           --jsonl                Emit one JSON object per line (NDJSON)
           --ndjson               Alias for --jsonl
+          --tagged-only          List/export only items with at least one tag
 
     path input / enumeration:
           --stdin                Read additional newline-delimited paths on stdin
           --stdin0               Read additional NUL-delimited paths on stdin
           --files-from-stdin     Alias for --stdin
           --files0-from-stdin    Alias for --stdin0
-      -A, --all                  Include hidden files while enumerating
+      -A, --all                  Include hidden files while enumerating (export
+                                includes them by default)
       -e, --enter                Enumerate contents of explicit directories
       -R, -d, --recursive        Recursively enumerate directories
           --no-follow-symlinks   Do not resolve/follow symlinked directories
           --follow-symlinks      Restore the default follow behavior
 
     mutation safety:
-          --dry-run              Show intended changes without writing
+          --dry-run              Show intended changes without writing; restore
+                                reports the same change count
           --dryrun               Alias for --dry-run
+          --backup PATH          Write a per-file undo archive (default: temp)
+          --no-backup             Disable the default undo archive
+          --sync-backup           Sync each undo record before mutation
 
     other:
       -h, --help                 Show this help
@@ -104,6 +114,14 @@ func usage(code: Int32 = 0) -> Never {
     Symbolic links are followed by default. --no-follow-symlinks prevents
     recursive traversal through symlinked directories and avoids explicitly
     resolving symlink paths before Foundation tag I/O.
+
+    Export archives are tagged-only, root-relative, and preserve stored tag
+    order. Plaintext archives are suitable for reading and restore; --jsonl is
+    the streaming machine-readable form. Restore follows current symlink
+    targets and warns when they differ from the archived target. A tagged-only
+    restore changes listed items only; it does not clear tags from unlisted
+    items. --color accepts auto/yes, always/force, and never/no/none aliases;
+    JSONL is never colored.
 
     Defaults match jdberry/tag where practical: list shows filename+tags;
     match/find show filenames only. With no paths, list/match/usage enumerate the
@@ -133,4 +151,3 @@ func version() -> Never {
     print("\(programName) \(programVersion)")
     exit(0)
 }
-

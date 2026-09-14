@@ -94,8 +94,9 @@ To match `jdberry/tag`, descendants of each explicit `-e/-R` directory are
 shown relative to that root. If several roots each contain `sub/file`, plain
 text can therefore contain repeated `sub/file` paths.
 
-Use `--absolute` or JSONL's `root`, `absolutePath`, and `resolvedPath` fields
-when disambiguation matters.
+Use `--absolute` for ordinary output, or use JSONL's stateful `root` record and
+logical relative paths when consuming recursive output. Export/restore v1
+intentionally supports one archive root and uses `--root DEST` for relocation.
 
 ### 11. Finder color discovery is private and fragile
 
@@ -132,6 +133,16 @@ omit a newly matching file until it is indexed.
 `--usage` deliberately uses direct traversal instead, so compatibility testing
 cannot compare fresh `--usage` results strictly against `jdberry/tag`'s
 Spotlight-backed implementation.
+
+### 14. Export/restore is not transactional
+
+Restore validates the complete archive before the first tag write and
+re-resolves each destination immediately before comparing and changing it. It
+does not lock files or roll back earlier changes if a later file fails. A
+per-file undo archive is written before each mutation by default, but without
+`--sync-backup` a sudden power loss can still leave the most recent buffered
+preimage unavailable. The undo archive is deliberately a local temporary file;
+compressed/journaled undo output needs a separate atomicity design.
 
 ## Potential improvements / features
 

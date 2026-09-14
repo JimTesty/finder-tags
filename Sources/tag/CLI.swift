@@ -21,10 +21,20 @@ private func requireValue(_ option: String, args: [String], index: inout Int) ->
     return args[index]
 }
 
+private func parseColorMode(_ raw: String) -> ColorMode {
+    switch raw.lowercased() {
+    case "auto", "yes": return .auto
+    case "always", "force": return .always
+    case "no", "none", "never": return .never
+    default:
+        fail("invalid color mode '\(raw)'; use auto, always/force, or never/no")
+    }
+}
+
 private func applyShortFlag(_ ch: Character, options: inout Options) {
     switch ch {
     case "l": setOperation(.list, options: &options)
-    case "c": options.color = true
+    case "c": options.colorMode = .auto
     case "V": options.reverse = true
     case "C": options.caseSensitive = true
     case "n": options.showNamesOverride = true
@@ -75,6 +85,12 @@ func parseArguments() -> Options {
             case "list":
                 if inlineValue != nil { fail("--list does not take an argument") }
                 setOperation(.list, options: &options)
+            case "export":
+                if inlineValue != nil { fail("--export does not take an argument") }
+                setOperation(.export, options: &options)
+            case "restore":
+                setOperation(.restore, options: &options)
+                options.archivePath = operand()
             case "add":
                 setOperation(.add(parseTagList(operand())), options: &options)
             case "append":
@@ -120,7 +136,8 @@ func parseArguments() -> Options {
                 validateSingleTagOperand(tag)
                 setPosition(.after(tag), options: &options, option: "--after")
             case "sorted-tags", "sort-tags": options.sortedTags = true
-            case "color": options.color = true
+            case "color":
+                options.colorMode = inlineValue.map(parseColorMode) ?? .auto
             case "reverse": options.reverse = true
             case "case-sensitive": options.caseSensitive = true
             case "filename", "name": options.showNamesOverride = true
@@ -137,6 +154,13 @@ func parseArguments() -> Options {
             case "absolute": options.absolutePaths = true
             case "jsonl", "ndjson": options.jsonLines = true
             case "dry-run", "dryrun": options.dryRun = true
+            case "tagged-only": options.taggedOnly = true
+            case "root": options.restoreRoot = operand()
+            case "backup":
+                options.backupPath = operand()
+                options.backupEnabled = true
+            case "no-backup": options.backupEnabled = false
+            case "sync-backup": options.syncBackup = true
             case "no-follow-symlinks": options.followSymlinks = false
             case "follow-symlinks": options.followSymlinks = true
             case "stdin", "files-from-stdin":
@@ -201,6 +225,17 @@ func parseArguments() -> Options {
     switch options.operation {
     case .list, .match, .usage, .find:
         break
+    case .export:
+        if options.paths.count > 1 {
+            fail("--export accepts at most one root path")
+        }
+        if options.stdinPathMode != nil {
+            fail("--export does not accept --stdin path input")
+        }
+    case .restore:
+        if !options.paths.isEmpty {
+            fail("--restore accepts the archive path followed by --root DEST, not filesystem paths")
+        }
     case .copy:
         if options.paths.count != 2 {
             fail("--copy requires exactly SOURCE and DESTINATION")
@@ -209,6 +244,55 @@ func parseArguments() -> Options {
         if options.paths.isEmpty {
             fail("this operation requires at least one explicit path")
         }
+    }
+
+    switch options.operation {
+    case .list, .export:
+        break
+    default:
+        if options.taggedOnly {
+            fail("--tagged-only is only valid with --list or --export")
+        }
+    }
+
+    switch options.operation {
+    case .export:
+        // Archives are ordered, root-relative records. Display-only ordering
+        // and path decorations must not silently change their meaning.
+        options.recursive = true
+        options.includeHidden = true
+        options.taggedOnly = true
+        if options.absolutePaths {
+            fail("--absolute is not valid with --export; archive paths are root-relative")
+        }
+        if options.sortedTags || options.reverse {
+            fail("--sorted-tags and --reverse are not valid with --export")
+        }
+        if options.oneTagPerLine || options.slashDirectories || options.nulTerminate {
+            fail("text display formatting options are not valid with --export")
+        }
+    default:
+        break
+    }
+
+    if options.restoreRoot != nil {
+        switch options.operation {
+        case .restore: break
+        default: fail("--root is only valid with --restore")
+        }
+    }
+
+    if options.backupPath != nil || !options.backupEnabled || options.syncBackup {
+        if !options.isMutating {
+            fail("backup options are only valid with a mutating operation")
+        }
+    }
+
+    switch options.operation {
+    case .restore:
+        if options.archivePath == nil { fail("--restore requires an archive path or '-'") }
+    default:
+        break
     }
 
     switch options.operation {
@@ -228,7 +312,7 @@ func parseArguments() -> Options {
     }
 
     if options.dryRun && !options.isMutating {
-        fail("--dry-run is only valid with --add, --remove, --set, --move, or --copy")
+        fail("--dry-run is only valid with --add, --remove, --set, --move, --copy, or --restore")
     }
 
     return options

@@ -3,6 +3,10 @@ import Foundation
 final class Output {
     private let options: Options
     private let colors: FinderColors
+    private var lastJSONRoot: String?
+    private var emittedJSONSymlinks = Set<String>()
+
+    var colorsForArchive: FinderColors { return colors }
 
     init(options: Options, colors: FinderColors) {
         self.options = options
@@ -14,6 +18,7 @@ final class Output {
         if options.reverse { tags.reverse() }
 
         if options.jsonLines {
+            try emitJSONState(for: target)
             var object = pathObject(target)
             object["tags"] = tags
             try jsonRecord(object)
@@ -58,6 +63,35 @@ final class Output {
         }
     }
 
+    func emitSummary(_ stats: ArchiveStats, operation: String) throws {
+        if options.jsonLines {
+            var object: [String: Any] = [
+                "type": "summary",
+                "operation": operation,
+                "visited": stats.visited,
+                "changed": stats.changed,
+                "restored": stats.restored,
+                "unchanged": stats.unchanged,
+                "missing": stats.missing,
+                "errors": stats.errors,
+                "warnings": stats.warnings
+            ]
+            if operation == "export" {
+                object["tagged"] = stats.tagged
+                object["emitted"] = stats.emitted
+            }
+            try jsonRecord(object)
+            return
+        }
+
+        if operation == "export" {
+            eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors)")
+        } else {
+            let changed = options.dryRun ? "\(stats.changed) would change" : "\(stats.changed) changed"
+            eprint("\(programName): restored \(stats.restored) files (\(changed), \(stats.visited) visited, \(stats.unchanged) unchanged, \(stats.missing) missing, \(stats.errors) errors, \(stats.warnings) warnings)")
+        }
+    }
+
     func emitChange(
         operation: String,
         target: Target,
@@ -66,6 +100,7 @@ final class Output {
         dryRun: Bool
     ) throws {
         if options.jsonLines {
+            try emitJSONState(for: target)
             var object = pathObject(target)
             object["operation"] = operation
             object["before"] = change.before
@@ -74,8 +109,6 @@ final class Output {
             object["dryRun"] = dryRun
             if let source = source {
                 object["source"] = source.displayPath
-                object["sourceAbsolutePath"] = source.absolutePath
-                object["sourceResolvedPath"] = source.resolvedPath
             }
             try jsonRecord(object)
             return
@@ -92,13 +125,24 @@ final class Output {
     }
 
     private func pathObject(_ target: Target) -> [String: Any] {
-        var object: [String: Any] = [
+        return ["path": target.displayPath]
+    }
+
+    private func emitJSONState(for target: Target) throws {
+        if let root = target.rootPath, root != lastJSONRoot {
+            try jsonRecord(["type": "root", "path": root])
+            lastJSONRoot = root
+            emittedJSONSymlinks.removeAll()
+        }
+
+        guard isSymbolicLink(target.logicalURL) else { return }
+        let key = (target.rootPath ?? "") + "\n" + target.logicalURL.path
+        guard emittedJSONSymlinks.insert(key).inserted else { return }
+        try jsonRecord([
+            "type": "symlink",
             "path": target.displayPath,
-            "absolutePath": target.absolutePath,
             "resolvedPath": target.resolvedPath
-        ]
-        if let root = target.rootPath { object["root"] = root }
-        return object
+        ])
     }
 
     private func displayPath(_ target: Target) throws -> String {
