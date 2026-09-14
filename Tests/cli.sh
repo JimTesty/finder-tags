@@ -11,9 +11,6 @@ repo=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
 work="$repo/Tests/.cli-work.$$"
 rm -rf "$work"
 mkdir -p "$work"
-mkdir -p "$work/tmp"
-TMPDIR="$work/tmp"
-export TMPDIR
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 touch "$work/a" "$work/b" "$work/c" "$work/space name"
@@ -187,104 +184,104 @@ fi
 # Real Finder-tag integration checks when running on macOS. Everything remains
 # inside Tests/.cli-work.*, including symlink targets.
 if [ "$(uname -s)" = Darwin ]; then
-    "$bin" --set 'First,Second' "$work/a"
+    "$bin" --set 'First,Second' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'First,Second' ]
 
-    "$bin" --add 'Third,First' "$work/a"
+    "$bin" --add 'Third,First' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'First,Second,Third' ]
     [ "$("$bin" -VN "$work/a")" = 'Third,Second,First' ]
 
-    "$bin" --remove 'Second' "$work/a"
+    "$bin" --remove 'Second' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'First,Third' ]
 
-    "$bin" --copy "$work/a" "$work/b"
+    "$bin" --copy "$work/a" "$work/b" --no-backup
     [ "$("$bin" -N "$work/b")" = 'First,Third' ]
 
     # --sorted-tags sorts read-only output without rewriting, and sorts the
     # resulting stored array for mutating operations.
-    "$bin" --set 'B,A,C' "$work/a"
+    "$bin" --set 'B,A,C' --no-backup "$work/a"
     [ "$("$bin" --sorted-tags -N "$work/a")" = 'A,B,C' ]
     [ "$("$bin" -N "$work/a")" = 'B,A,C' ]
-    "$bin" --set 'B,A,C' --sorted-tags "$work/a"
+    "$bin" --set 'B,A,C' --sorted-tags --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'A,B,C' ]
-    "$bin" --set 'C,A' "$work/a"
-    "$bin" --add B --sorted-tags "$work/a"
+    "$bin" --set 'C,A' --no-backup "$work/a"
+    "$bin" --add B --sorted-tags --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'A,B,C' ]
-    "$bin" --set 'C,B,A' "$work/a"
-    "$bin" --remove B --sorted-tags "$work/a"
+    "$bin" --set 'C,B,A' --no-backup "$work/a"
+    "$bin" --remove B --sorted-tags --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'A,C' ]
-    "$bin" --set 'C,A' "$work/a"
-    "$bin" --copy "$work/a" "$work/b" --sorted-tags
+    "$bin" --set 'C,A' --no-backup "$work/a"
+    "$bin" --copy "$work/a" "$work/b" --sorted-tags --no-backup
     [ "$("$bin" -N "$work/b")" = 'A,C' ]
 
     # Case-insensitive matching preserves case as data and re-cases a unique
     # match in place instead of appending/merging it.
-    "$bin" --set 'red,orange,yellow' "$work/a"
-    "$bin" --add 'Orange' "$work/a"
+    "$bin" --set 'red,orange,yellow' --no-backup "$work/a"
+    "$bin" --add 'Orange' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'red,Orange,yellow' ]
     [ "$("$bin" -m orange "$work/a")" = "$work/a" ]
 
-    "$bin" --set 'red,orange,yellow' "$work/a"
-    "$bin" -C --add 'Orange' "$work/a"
+    "$bin" --set 'red,orange,yellow' --no-backup "$work/a"
+    "$bin" -C --add 'Orange' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'red,orange,yellow,Orange' ]
     [ -z "$("$bin" -C -m ORANGE "$work/a")" ]
     [ "$("$bin" -C -m Orange "$work/a")" = "$work/a" ]
 
     # A small Unicode folding check. This intentionally tests our documented
     # Foundation folding approximation, not an assertion about Finder internals.
-    "$bin" --set 'Äpfel' "$work/a"
+    "$bin" --set 'Äpfel' --no-backup "$work/a"
     [ "$("$bin" --match 'äPFEL' "$work/a")" = "$work/a" ]
 
-    "$bin" --set 'orange' "$work/a"
-    "$bin" --add 'orange,Orange' "$work/a"
+    "$bin" --set 'orange' --no-backup "$work/a"
+    "$bin" --add 'orange,Orange' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'orange,Orange' ]
 
-    "$bin" --set 'orange,Orange' "$work/a"
+    "$bin" --set 'orange,Orange' --no-backup "$work/a"
     usage_output=$("$bin" --usage '*' "$work/a")
     printf '%s\n' "$usage_output" | grep -qx '1[[:space:]]orange'
     printf '%s\n' "$usage_output" | grep -qx '1[[:space:]]Orange'
     [ "$("$bin" --usage '*' --sorted-tags "$work/a" | cut -f2 | paste -sd, -)" = 'Orange,orange' ]
 
-    "$bin" -C --remove Orange "$work/a"
+    "$bin" -C --remove Orange --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'orange' ]
-    "$bin" --set 'orange,Orange' "$work/a"
-    "$bin" --remove Orange "$work/a"
+    "$bin" --set 'orange,Orange' --no-backup "$work/a"
+    "$bin" --remove Orange --no-backup "$work/a"
     [ -z "$("$bin" -N "$work/a")" ]
 
     # Quoted comma-containing tags round-trip. Foundation does not reliably
     # round-trip CR/LF inside Finder tag names, so those inputs are rejected.
-    "$bin" --set '"Project, Alpha","Needs review"' "$work/a"
+    "$bin" --set '"Project, Alpha","Needs review"' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'Project, Alpha,Needs review' ]
     "$bin" --match '"Project, Alpha"' "$work/a" | grep -Fxq "$work/a"
 
     # Ordered insertion/movement, including semantic neighbors.
-    "$bin" --set 'A,C' "$work/a"
-    "$bin" --add B --at 1 "$work/a"
+    "$bin" --set 'A,C' --no-backup "$work/a"
+    "$bin" --add B --at 1 --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'A,B,C' ]
-    "$bin" --add Z --at bottom "$work/a"
+    "$bin" --add Z --at bottom --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'Z,A,B,C' ]
-    "$bin" --add X --at top "$work/a"
+    "$bin" --add X --at top --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'Z,A,B,C,X' ]
-    "$bin" --add D --before X "$work/a"
+    "$bin" --add D --before X --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'Z,A,B,C,D,X' ]
-    "$bin" --add E --after D "$work/a"
+    "$bin" --add E --after D --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'Z,A,B,C,D,E,X' ]
-    "$bin" --move B first "$work/a"
+    "$bin" --move B first --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'B,Z,A,C,D,E,X' ]
-    "$bin" --move B --after D "$work/a"
+    "$bin" --move B --after D --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'Z,A,C,D,B,E,X' ]
-    "$bin" --move X --before Z "$work/a"
+    "$bin" --move X --before Z --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'X,Z,A,C,D,B,E' ]
 
     # Paths from stdin can drive mutations too.
-    printf '%s\n%s\n' "$work/a" "$work/b" | "$bin" --stdin --set ViaStdin
+    printf '%s\n%s\n' "$work/a" "$work/b" | "$bin" --stdin --set ViaStdin --no-backup
     [ "$("$bin" -N "$work/a")" = 'ViaStdin' ]
     [ "$("$bin" -N "$work/b")" = 'ViaStdin' ]
 
     # Symlink operations target the referent by default.
     touch "$work/target-file"
     ln -s target-file "$work/file-link"
-    "$bin" --set 'ViaLink' "$work/file-link"
+    "$bin" --set 'ViaLink' --no-backup "$work/file-link"
     [ "$("$bin" -N "$work/target-file")" = 'ViaLink' ]
     [ "$("$bin" -N "$work/file-link")" = 'ViaLink' ]
 
@@ -421,7 +418,7 @@ if [ "$(uname -s)" = Darwin ]; then
         rm -f "$default_undo"
     fi
 
-    "$bin" --set 'X,Y' --jsonl "$work/b" | grep -q '"dryRun":false'
+    "$bin" --set 'X,Y' --jsonl --no-backup "$work/b" | grep -q '"dryRun":false'
     [ "$("$bin" -N "$work/b")" = 'X,Y' ]
 fi
 

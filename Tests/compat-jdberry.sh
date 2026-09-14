@@ -99,7 +99,7 @@ compare_exact "filename off (-N) on untagged file" -N a
 compare_exact "tags off (-T)" -T a
 
 # Set one tag independently in each tree so order cannot differ.
-(cd "$left" && "$ours" --set Red a)
+(cd "$left" && "$ours" --set Red --no-backup a)
 (cd "$right" && "$ref" --set Red a)
 compare_exact "set/list one tag" a
 compare_exact "no filename (-N)" -N a
@@ -109,10 +109,10 @@ compare_exact "long --name alias" --name a
 compare_exact "long --garrulous alias" --garrulous a
 
 # Add/remove one tag on a fresh file.
-(cd "$left" && "$ours" --add Blue b)
+(cd "$left" && "$ours" --add Blue --no-backup b)
 (cd "$right" && "$ref" --add Blue b)
 compare_exact "add one tag" b
-(cd "$left" && "$ours" --remove Blue b)
+(cd "$left" && "$ours" --remove Blue --no-backup b)
 (cd "$right" && "$ref" --remove Blue b)
 compare_exact "remove one tag" b
 
@@ -129,12 +129,12 @@ compare_exact "NUL termination (-0)" -0 a
 
 # Recursive mutation should touch the explicit directory plus descendants in
 # both programs. Use one tag only to avoid the intentional ordering difference.
-(cd "$left" && "$ours" --set Walk -R tree)
+(cd "$left" && "$ours" --set Walk -R --no-backup tree)
 (cd "$right" && "$ref" --set Walk -R tree)
 compare_sorted "recursive mutation + list" -te tree
 
 # Deliberate difference: ours preserves B,A, upstream sorts display as A,B.
-(cd "$left" && "$ours" --set 'B,A' a)
+(cd "$left" && "$ours" --set 'B,A' --no-backup a)
 (cd "$right" && "$ref" --set 'B,A' a)
 lo="$work/order-left.out"; ro="$work/order-right.out"
 run_one "$ours" "$left" "$lo" -N a
@@ -161,7 +161,7 @@ else
 fi
 
 # Sorted mutation result should also display compatibly afterward.
-(cd "$left" && "$ours" --set 'B,A' --sorted-tags empty)
+(cd "$left" && "$ours" --set 'B,A' --sorted-tags --no-backup empty)
 (cd "$right" && "$ref" --set 'B,A' empty)
 lo="$work/sorted-mutation-ours"; ro="$work/sorted-mutation-ref"
 (cd "$left" && "$ours" -N empty) >"$lo"
