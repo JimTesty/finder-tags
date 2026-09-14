@@ -6,7 +6,7 @@ import Glibc
 #endif
 
 let programName = URL(fileURLWithPath: CommandLine.arguments[0]).lastPathComponent
-let programVersion = "6.0"
+let programVersion = "8.0"
 let fileManager = FileManager.default
 
 func eprint(_ message: String) {

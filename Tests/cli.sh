@@ -29,7 +29,7 @@ ln -s .. "$work/tree/real/back-to-tree"
 "$bin" --help | grep -q -- '--no-follow-symlinks'
 "$bin" --help | grep -q -- '--find TAGS'
 "$bin" --help | grep -q -- '--jsonl'
-[ "$("$bin" --version)" = "tag 6.0" ]
+[ "$("$bin" --version)" = "tag 8.0" ]
 
 # Explicit directory first, then descendants relative to that argument.
 enter_output=$("$bin" -e "$work/tree")
