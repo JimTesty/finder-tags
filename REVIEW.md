@@ -2,29 +2,9 @@
 
 Last reviewed: 2026-09-14
 
-This is a lightweight source review, not a security audit. The project is still
-barely tested, especially on real macOS filesystems other than the maintainer's
-machine.
-
-## Findings fixed during this review
-
-1. **Explicit-directory output differed from `jdberry/tag`.** With `-e/-R`,
-   descendants were printed with the directory argument prefixed. They are now
-   displayed relative to each explicit directory, matching `jdberry/tag`.
-2. **Color output leaked into pipes.** `-c` now emits ANSI color only when
-   stdout is a terminal, matching `jdberry/tag` behavior.
-3. **JSON plus a real mutation emitted `[]`.** Successful add/remove/set/copy
-   operations now emit structured before/after JSON records.
-4. **Long output names had one extra space.** Filename padding now matches
-   `jdberry/tag` more closely before the tag-field tab.
-5. **Relative child error paths could be ambiguous.** User-facing listing paths
-   stay relative for compatibility, but metadata errors now identify the real
-   filesystem path.
-6. **Build settings could change without rebuilding.** `Makefile` is now a
-   dependency of the binary, and builds explicitly select Swift 5 language
-   mode for Swift 5.5 compatibility.
-7. **macOS tests did not exercise real tag writes.** `make test` now performs a
-   small ordered set/add/remove/reverse/copy integration test when run on macOS.
+This is a lightweight source review, not a security audit. The code has shell
+coverage and macOS integration tests, but the project is still **not thoroughly
+tested** across machines, macOS versions, filesystems, and workloads.
 
 ## Known limitations / risks
 
@@ -33,14 +13,14 @@ machine.
 Foundation exposes Finder tags as an array through `URLResourceKey.tagNamesKey`,
 and current Finder behavior makes the array order useful. Apple does not appear
 to promise that Finder's UI ordering semantics are a permanent API contract.
-The whole project intentionally relies on the behavior that motivated it.
+The project intentionally relies on the behavior that motivated it.
 
 ### 2. Read-modify-write races
 
-`--add` and `--remove` read the complete tag array, compute a replacement, then
-write it. Another process changing tags in between can have its change
-silently overwritten. Avoiding this would require locking or another
-coordination mechanism with substantially more complexity.
+`--add`, `--remove`, and `--move` read the complete tag array, compute a
+replacement, then write it. Another process changing tags in between can have
+its change overwritten. Avoiding this robustly would require locking or file
+coordination with considerably more complexity.
 
 For Finder tags this is currently considered an acceptable tradeoff.
 
@@ -51,11 +31,11 @@ rolled back. `--dry-run` is available when a preview matters.
 
 ### 4. Immediate read-back verification may be strict on unusual filesystems
 
-Every write is read back and compared byte-for-byte at the Swift string-array
-level, including order. This catches silent write failures, normalization, and
-reordering. On a network or unusual filesystem with delayed metadata
-visibility, it could theoretically report a failure even if the metadata
-appears shortly afterward.
+Every write is immediately read back and compared at the Swift string-array
+level, including order. This catches silent persistence, normalization, and
+reordering failures. On a network or unusual filesystem with delayed metadata
+visibility, it could report failure even if metadata becomes visible shortly
+afterward.
 
 ### 5. Filesystem support varies
 
@@ -64,88 +44,99 @@ foreign filesystems, synchronization tools, and copy utilities can drop or
 transform that metadata. This tool cannot make an underlying filesystem support
 Finder tags reliably.
 
-### 6. `--usage` has an unavoidable optional-operand ambiguity
+### 6. Case-insensitive comparison may not exactly reproduce Finder forever
 
-`--usage TAGS` is compatible and convenient, but if TAGS is optional then the
-next bare token can also look like a path. The parser currently preserves the
-accepted behavior from earlier versions.
+The implementation uses Swift/Foundation Unicode case folding with a fixed
+POSIX locale for default case-insensitive tag matching. That is a reasonable
+approximation to Finder behavior, but Apple's exact internal comparison rules
+are not documented here and could differ for unusual Unicode strings.
 
-Prefer `--usage=TAG`, `-uTAG`, or `--usage -- PATH` in scripts.
+Case-distinct stored strings are preserved. When an operation is ambiguous
+among multiple case-fold-equivalent stored tags, `--add`/`--move` prefer exact
+spelling where possible and otherwise report ambiguity rather than guessing.
 
-### 7. The tag-list grammar cannot represent every possible tag name
+### 7. Symlink traversal can escape the requested tree
 
-For compatibility with `jdberry/tag`, tag operands are comma-separated and
-whitespace around each component is trimmed. A tag name containing a literal
-comma cannot be specified unambiguously. `*` is also reserved by match/remove
-semantics.
+Symlinks are intentionally resolved because Finder's visible tags belong to the
+target. Recursive traversal follows symlinked directories and suppresses cycles
+using the active chain of resolved directory paths.
 
-A future escaped or repeated-option grammar could remove this limitation, but
-changing the existing grammar would hurt compatibility.
+Consequently, `tag -R --set ... directory` can modify a target outside
+`directory` if a descendant symlink points there. This is deliberate but worth
+remembering for recursive mutations.
 
-### 8. Symlink behavior is not explicitly specified or tested
+A target can also be visited more than once through different non-cyclic aliases.
+That is useful for traversal semantics but means the same underlying file could
+be processed repeatedly.
 
-Foundation/FileManager decides how resource values behave for symbolic links.
-The current tests do not establish whether users expect tags to apply to a link
-itself or its target in every case. This should be tested on macOS before
-promising semantics.
-
-### 9. Recursive traversal is synchronous
+### 8. Recursive traversal is synchronous
 
 Large trees can take time and a metadata read is performed for each visited
 item. There is no parallelism. Parallel reads might improve throughput, but
-would make output ordering and error handling more complicated.
+would make deterministic output and mutation/error behavior more complicated.
 
-### 10. JSON buffers the whole result in memory
+### 9. Plain text cannot unambiguously encode every tag/path
 
-Text output streams as it is produced. JSON accumulates all records before
-serialization so it can emit one valid array. This is simple and convenient,
-but a huge recursive query can use significant memory.
+Quoted input now supports commas inside tag names, but the default output still
+uses commas between tags. A tag containing a comma is therefore ambiguous in
+that text format. One-tag-per-line output is also ambiguous if a tag itself
+contains a newline.
 
-A future `--jsonl` / NDJSON mode would stream naturally.
+`--jsonl` is the recommended machine-readable format because JSON escaping
+preserves those strings structurally.
 
-### 11. Relative JSON paths can be ambiguous with multiple directory roots
+`*` remains reserved as a wildcard for match/usage/remove, so those operations
+cannot target a literal tag named `*`.
+
+### 10. Relative output paths can be ambiguous with multiple roots
 
 To match `jdberry/tag`, descendants of each explicit `-e/-R` directory are
-shown relative to that root. If several roots contain `sub/file`, JSON can
-therefore contain repeated `"path": "sub/file"` values.
+shown relative to that root. If several roots each contain `sub/file`, text and
+JSONL can therefore contain repeated `sub/file` paths.
 
-Possible future fix: add a separate `root` and/or `absolutePath` JSON field
-without changing text output.
+A future JSONL `root`/`absolutePath` field or `--absolute` switch could remove
+that ambiguity without changing compatibility-oriented text output.
 
-### 12. Finder color discovery is private and fragile
+### 11. Finder color discovery is private and fragile
 
 Tag read/write uses public Foundation APIs. `--color` is different: Finder does
 not expose its named-tag color map through the same API, so color discovery
 best-effort parses Finder preference data. A future macOS release can break it.
 Failure is intentionally non-fatal.
 
+The color lookup is case-insensitive and may not distinguish hypothetical
+case-distinct Finder tag definitions with different colors.
+
+### 12. Compatibility testing has an intentional blind spot around `--usage`
+
+`Tests/compat-jdberry.sh` differentially checks the common direct-file/traversal
+features against a locally installed `jdberry/tag`, but does not make
+`--usage` a strict pass/fail comparison. Upstream uses Spotlight and this tool
+uses direct traversal, so newly created sample files may not be visible to both
+engines at the same moment.
+
 ## Potential improvements / features
 
 Roughly in order of usefulness:
 
-1. **`--at INDEX` for add/insert.** Insert a new tag at an exact position rather
-   than only appending it. This directly complements the project's ordered-tag
-   purpose.
-2. **`--move TAG INDEX`.** Reorder an existing tag without requiring callers to
-   fetch and rewrite the whole array themselves.
-3. **`--jsonl` / `--ndjson`.** Stream one JSON object per result, avoiding the
-   memory cost of a giant JSON array.
-4. **`--absolute` or richer JSON paths.** Useful with multiple recursive roots
-   and for machine consumers.
-5. **Paths from stdin / NUL-delimited input.** Helpful for very large file sets
+1. **`--before TAG` / `--after TAG`.** More convenient than calculating a
+   numeric `--at`/`--move` index in scripts that know neighboring tags.
+2. **`--absolute` and richer JSONL path fields.** Include the logical root and
+   resolved/absolute path for multi-root and symlink-heavy machine workflows.
+3. **Paths from stdin / NUL-delimited input.** Helpful for very large file sets
    and unusual filenames, analogous to `find -print0 | xargs -0` workflows.
-6. **Optional Spotlight-backed `--find`.** This could restore more
-   `jdberry/tag` compatibility without changing the order-preserving core, but
-   it should remain clearly separate from direct traversal.
-7. **More macOS integration tests.** Especially spaces/newlines/non-ASCII in
-   paths and tags, symlinks, directories, hidden files, package directories,
-   APFS volumes, removable media, and network volumes.
-8. **CI on multiple macOS/Swift versions.** The code is intended to compile on
-   Swift 5.5, but the current environment only verifies Swift 5 language mode
-   with a newer compiler. Testing with the maintainer's Apple Swift 5.5.2 is
-   particularly valuable.
-9. **Man page / completion scripts.** Worth adding only after the command-line
-   interface settles.
+4. **Optional `--no-follow-symlinks`.** The current follow behavior is useful
+   and Finder-like, but a defensive override could be valuable for recursive
+   mutations.
+5. **Optional Spotlight-backed `--find`.** This could restore more
+   `jdberry/tag` compatibility without changing the order-preserving core.
+6. **More macOS integration tests.** Especially Unicode case folding,
+   comma/quote/newline-containing tags, package directories, APFS volumes,
+   removable media, network volumes, aliases/hard links, and permission errors.
+7. **CI on multiple macOS/Swift versions.** Particularly Apple Swift 5.5.x and
+   current Swift/macOS.
+8. **Man page / shell completions.** Worth adding once the command-line
+   interface is stable.
 
 ## Deliberately not recommended yet
 

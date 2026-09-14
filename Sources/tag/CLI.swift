@@ -5,33 +5,45 @@ func usage(code: Int32 = 0) -> Never {
     \(programName) - manipulate macOS Finder tags while preserving tag order
 
     finder-tags executable: tag
-    Usage-compatible with the non-Spotlight parts of jdberry/tag.
+    Usage-compatible with the non-Spotlight parts of jdberry/tag where noted.
 
     usage:
       \(programName) [-l | --list] [options] [path ...]
-      \(programName) -a | --add TAGS [options] path ...
+      \(programName) -a | --add TAGS [--at POSITION] [options] path ...
       \(programName) -r | --remove TAGS [options] path ...
       \(programName) -s | --set TAGS [options] path ...
       \(programName) -m | --match TAGS [options] [path ...]
-      \(programName) -u | --usage [TAGS] [options] [path ...]
+      \(programName) -u | --usage TAGS [options] [path ...]
+      \(programName) --move TAG POSITION [options] path ...
       \(programName) --copy SOURCE DESTINATION [--dry-run]
 
-    TAGS is a comma-separated list. Matching is case-insensitive.
-    '*' means any tag for --match/--usage and all tags for --remove.
-    An empty TAGS expression matches files with no tags.
+    TAGS uses a CSV-like comma-separated grammar. Shell quoting still works as
+    usual, and quotes inside TAGS allow literal commas, for example:
+      tag --set 'Red,"Project, Alpha","Needs review"' file
 
     operations:
       -l, --list                 List tags (default)
-      -a, --add TAGS             Append new tags, preserving existing order
-      -r, --remove TAGS          Remove tags; '*' removes all tags
+      -a, --add TAGS             Add/re-case tags, preserving existing order
+          --append TAGS          Alias for --add (insert new tags last)
+          --prepend TAGS         Add new tags at first/left/bottom
+      -r, --remove TAGS          Remove matching tags; '*' removes all tags
       -s, --set TAGS             Replace all tags in the specified order
           --copy SRC DST         Replace DST's tags with SRC's ordered tags
       -m, --match TAGS           List traversed files matching all TAGS
-      -u, --usage [TAGS]         Count tags on matching traversed files
+      -u, --usage TAGS           Count tags on traversed files matching TAGS
+          --move TAG POSITION    Move one existing tag to POSITION
+
+    ordering/editing:
+          --at POSITION          Where --add inserts new tags (default: last)
+                                POSITION is a zero-based index or one of:
+                                first/left/bottom, last/right/top
+                                (Finder draws the last/rightmost tag on top.)
+      -V, --reverse              Reverse display order only; do not rewrite
+      -C, --case-sensitive       Make tag matching case-sensitive
+                                (default matching is case-insensitive)
 
     output:
-      -c, --color                Display known Finder tag colors
-      -V, --reverse              Reverse tag display order (does not rewrite)
+      -c, --color                Display known Finder tag colors on a terminal
       -n, --filename             Show filenames
       -N, --no-filename          Hide filenames
           --name/--no-name       Backward-compatible aliases
@@ -44,7 +56,8 @@ func usage(code: Int32 = 0) -> Never {
       -p, --slash                Append '/' to directory names
       -0, --null                 Terminate text records with NUL
           --nul                  Backward-compatible alias for --null
-          --json                 Emit structured JSON instead of text
+          --jsonl                Emit one JSON object per line (NDJSON)
+          --ndjson               Alias for --jsonl
 
     mutation safety:
           --dry-run              Show intended changes without writing
@@ -59,22 +72,33 @@ func usage(code: Int32 = 0) -> Never {
       -h, --help                 Show this help
       -v, --version              Show version
 
+    TAG matching is case-insensitive by default, but stored case is preserved.
+    Case-distinct stored tags are not merged. For example, adding Orange to an
+    existing red,orange,yellow re-cases the unique match in place to
+    red,Orange,yellow. Use --case-sensitive to append a distinct Orange instead.
+
+    '*' means any tag for --match/--usage and all tags for --remove. An empty
+    TAGS expression matches files with no tags. --usage requires TAGS; use '*'
+    to count tags on all tagged files in the traversal scope.
+
+    Symbolic links are followed deliberately: Finder shows the target's tags and
+    does not meaningfully tag the symlink itself. Recursive traversal follows
+    symlinked directories while suppressing directory cycles.
+
     Defaults match jdberry/tag where practical: list shows filename+tags;
     match shows filenames only. With no paths, list/match/usage enumerate the
     current directory. Mutating operations require explicit paths.
 
     Important differences from jdberry/tag:
       * Stored tag order is preserved; tags are never sorted for display.
-      * --usage traverses paths directly; it does NOT use Spotlight and does
-        not search the whole system. Use -R to recurse.
+      * --usage traverses paths directly; it does NOT use Spotlight.
+      * --usage requires TAGS instead of making it optional.
       * --find and --home/--local/--network are not implemented.
-      * With -e/-R, explicit directory arguments are printed once, then their
-        descendants are displayed relative to that directory, like jdberry/tag.
-      * --copy, --reverse, --json, and --dry-run are additions.
+      * --copy, --move, --at, --prepend/--append, --reverse,
+        --case-sensitive, --jsonl, and --dry-run are additions.
+      * Quoted TAGS can contain commas; jdberry/tag's grammar cannot.
+      * Symlinked targets/directories are followed intentionally.
 
-    For --usage, no TAGS means '*'. Because TAGS is optional, prefer
-    "--usage='*' PATH", "--usage=Work PATH", or "-uWork PATH" when paths
-    are also present. "--usage '*' PATH" remains accepted.
     Use -- before a path beginning with '-'.
     """
 
@@ -101,25 +125,12 @@ private func requireValue(_ option: String, args: [String], index: inout Int) ->
     return args[index]
 }
 
-private func optionalUsageValue(
-    inlineValue: String?,
-    args: [String],
-    index: inout Int
-) -> String {
-    if let value = inlineValue { return value }
-    let next = index + 1
-    if next < args.count && !args[next].hasPrefix("-") {
-        index = next
-        return args[next]
-    }
-    return "*"
-}
-
 private func applyShortFlag(_ ch: Character, options: inout Options) {
     switch ch {
     case "l": setOperation(.list, options: &options)
     case "c": options.color = true
     case "V": options.reverse = true
+    case "C": options.caseSensitive = true
     case "n": options.showNamesOverride = true
     case "N": options.showNamesOverride = false
     case "t": options.showTagsOverride = true
@@ -166,8 +177,11 @@ func parseArguments() -> Options {
             case "list":
                 if inlineValue != nil { fail("--list does not take an argument") }
                 setOperation(.list, options: &options)
-            case "add":
+            case "add", "append":
                 setOperation(.add(parseTagList(operand())), options: &options)
+            case "prepend":
+                setOperation(.add(parseTagList(operand())), options: &options)
+                options.addPosition = .first
             case "remove":
                 setOperation(.remove(parseTagList(operand())), options: &options)
             case "set":
@@ -175,17 +189,24 @@ func parseArguments() -> Options {
             case "match":
                 setOperation(.match(parseTagList(operand())), options: &options)
             case "usage":
-                let raw = optionalUsageValue(
-                    inlineValue: inlineValue, args: args, index: &i
-                )
-                setOperation(.usage(parseTagList(raw)), options: &options)
+                setOperation(.usage(parseTagList(operand())), options: &options)
             case "copy":
                 if inlineValue != nil {
                     fail("--copy does not take '=...'; use --copy SOURCE DESTINATION")
                 }
                 setOperation(.copy, options: &options)
+            case "move":
+                if inlineValue != nil {
+                    fail("--move does not take '=...'; use --move TAG POSITION")
+                }
+                let tag = requireValue("--move", args: args, index: &i)
+                let position = requireValue("--move", args: args, index: &i)
+                setOperation(.move(tag, parsePosition(position)), options: &options)
+            case "at":
+                options.addPosition = parsePosition(operand())
             case "color": options.color = true
             case "reverse": options.reverse = true
+            case "case-sensitive": options.caseSensitive = true
             case "filename", "name": options.showNamesOverride = true
             case "no-filename", "no-name": options.showNamesOverride = false
             case "tags": options.showTagsOverride = true
@@ -197,7 +218,7 @@ func parseArguments() -> Options {
             case "recursive", "descend": options.recursive = true
             case "slash": options.slashDirectories = true
             case "null", "nul": options.nulTerminate = true
-            case "json": options.json = true
+            case "jsonl", "ndjson": options.jsonLines = true
             case "dry-run", "dryrun": options.dryRun = true
             case "help": usage()
             case "version": version()
@@ -215,7 +236,7 @@ func parseArguments() -> Options {
             while j < chars.count {
                 let ch = chars[j]
 
-                if ch == "a" || ch == "r" || ch == "s" || ch == "m" {
+                if ch == "a" || ch == "r" || ch == "s" || ch == "m" || ch == "u" {
                     let remainder = String(chars.dropFirst(j + 1))
                     let raw = remainder.isEmpty
                         ? requireValue("-\(ch)", args: args, index: &i)
@@ -226,20 +247,9 @@ func parseArguments() -> Options {
                     case "a": setOperation(.add(tags), options: &options)
                     case "r": setOperation(.remove(tags), options: &options)
                     case "s": setOperation(.set(tags), options: &options)
-                    default: setOperation(.match(tags), options: &options)
+                    case "m": setOperation(.match(tags), options: &options)
+                    default: setOperation(.usage(tags), options: &options)
                     }
-                    break
-                }
-
-                if ch == "u" {
-                    let remainder = String(chars.dropFirst(j + 1))
-                    let raw: String
-                    if remainder.isEmpty {
-                        raw = optionalUsageValue(inlineValue: nil, args: args, index: &i)
-                    } else {
-                        raw = remainder
-                    }
-                    setOperation(.usage(parseTagList(raw)), options: &options)
                     break
                 }
 
@@ -262,14 +272,22 @@ func parseArguments() -> Options {
         if options.paths.count != 2 {
             fail("--copy requires exactly SOURCE and DESTINATION")
         }
-    case .add, .remove, .set:
+    case .add, .remove, .set, .move:
         if options.paths.isEmpty {
-            fail("add/remove/set require at least one explicit path")
+            fail("this operation requires at least one explicit path")
+        }
+    }
+
+    if options.addPosition != nil {
+        if case .add = options.operation {
+            // valid
+        } else {
+            fail("--at is only valid with --add")
         }
     }
 
     if options.dryRun && !options.isMutating {
-        fail("--dry-run is only valid with --add, --remove, --set, or --copy")
+        fail("--dry-run is only valid with --add, --remove, --set, --move, or --copy")
     }
 
     return options

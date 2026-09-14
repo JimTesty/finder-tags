@@ -2,7 +2,10 @@ import Foundation
 
 let options = parseArguments()
 let store = TagStore()
-let output = Output(options: options, colors: FinderColors(enabled: options.color && !options.json && stdoutIsTerminal()))
+let output = Output(
+    options: options,
+    colors: FinderColors(enabled: options.color && !options.jsonLines && stdoutIsTerminal())
+)
 var hadError = false
 
 func report(_ message: String) {
@@ -14,27 +17,29 @@ switch options.operation {
 case .copy:
     let sourcePath = options.paths[0]
     let destinationPath = options.paths[1]
-    let source = expandedFileURL(sourcePath)
-    let destination = expandedFileURL(destinationPath)
+    let sourceLogical = expandedFileURL(sourcePath)
+    let destinationLogical = expandedFileURL(destinationPath)
 
     do {
-        if try !source.checkResourceIsReachable() {
+        if try !sourceLogical.checkResourceIsReachable() {
             fail("source is not reachable: \(sourcePath)", code: ExitCode.noInput)
         }
-        if try !destination.checkResourceIsReachable() {
+        if try !destinationLogical.checkResourceIsReachable() {
             fail("destination is not reachable: \(destinationPath)", code: ExitCode.noInput)
         }
 
+        let source = resolvedTagURL(sourceLogical)
+        let destination = resolvedTagURL(destinationLogical)
         let change = try store.copyChange(from: source, to: destination)
         let target = Target(url: destination, displayPath: destinationPath)
         if options.dryRun {
-            output.emitChange(
+            try output.emitChange(
                 operation: "copy", target: target, change: change,
                 sourcePath: sourcePath, dryRun: true
             )
         } else {
             try store.apply(change, to: destination)
-            output.emitChange(
+            try output.emitChange(
                 operation: "copy", target: target, change: change,
                 sourcePath: sourcePath, dryRun: false
             )
@@ -50,16 +55,20 @@ case .usage(let query):
     traversal.forEachTarget { target in
         do {
             let tags = try store.read(target.url)
-            if tagsMatch(tags, query: query) {
+            if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
                 counter.add(tags)
             }
         } catch {
             report("\(target.url.path): \(error.localizedDescription)")
         }
     }
-    output.emitUsage(counter.entries(reverse: options.reverse))
+    do {
+        try output.emitUsage(counter.entries(reverse: options.reverse))
+    } catch {
+        report("writing output: \(error.localizedDescription)")
+    }
 
-case .list, .match, .add, .remove, .set:
+case .list, .match, .add, .remove, .set, .move:
     let traversal = Traversal(options: options, onError: report)
 
     traversal.forEachTarget { target in
@@ -70,35 +79,58 @@ case .list, .match, .add, .remove, .set:
 
             case .match(let query):
                 let tags = try store.read(target.url)
-                if tagsMatch(tags, query: query) {
+                if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
                     try output.emitFile(target, tags: tags)
                 }
 
             case .add(let tags):
-                let change = try store.addChange(tags, to: target.url)
+                let change = try store.addChange(
+                    tags,
+                    to: target.url,
+                    caseSensitive: options.caseSensitive,
+                    position: options.addPosition
+                )
                 if options.dryRun {
-                    output.emitChange(operation: "add", target: target, change: change, dryRun: true)
+                    try output.emitChange(operation: "add", target: target, change: change, dryRun: true)
                 } else {
                     try store.apply(change, to: target.url)
-                    output.emitChange(operation: "add", target: target, change: change, dryRun: false)
+                    try output.emitChange(operation: "add", target: target, change: change, dryRun: false)
                 }
 
             case .remove(let tags):
-                let change = try store.removeChange(tags, from: target.url)
+                let change = try store.removeChange(
+                    tags,
+                    from: target.url,
+                    caseSensitive: options.caseSensitive
+                )
                 if options.dryRun {
-                    output.emitChange(operation: "remove", target: target, change: change, dryRun: true)
+                    try output.emitChange(operation: "remove", target: target, change: change, dryRun: true)
                 } else {
                     try store.apply(change, to: target.url)
-                    output.emitChange(operation: "remove", target: target, change: change, dryRun: false)
+                    try output.emitChange(operation: "remove", target: target, change: change, dryRun: false)
                 }
 
             case .set(let tags):
                 let change = try store.setChange(tags, on: target.url)
                 if options.dryRun {
-                    output.emitChange(operation: "set", target: target, change: change, dryRun: true)
+                    try output.emitChange(operation: "set", target: target, change: change, dryRun: true)
                 } else {
                     try store.apply(change, to: target.url)
-                    output.emitChange(operation: "set", target: target, change: change, dryRun: false)
+                    try output.emitChange(operation: "set", target: target, change: change, dryRun: false)
+                }
+
+            case .move(let tag, let position):
+                let change = try store.moveChange(
+                    tag: tag,
+                    to: position,
+                    on: target.url,
+                    caseSensitive: options.caseSensitive
+                )
+                if options.dryRun {
+                    try output.emitChange(operation: "move", target: target, change: change, dryRun: true)
+                } else {
+                    try store.apply(change, to: target.url)
+                    try output.emitChange(operation: "move", target: target, change: change, dryRun: false)
                 }
 
             case .copy, .usage:
@@ -113,7 +145,7 @@ case .list, .match, .add, .remove, .set:
 do {
     try output.finish()
 } catch {
-    report("writing JSON output: \(error.localizedDescription)")
+    report("writing output: \(error.localizedDescription)")
 }
 
 exit(hadError ? ExitCode.ioError : 0)

@@ -7,19 +7,21 @@ struct Traversal {
     func forEachTarget(_ body: (Target) -> Void) {
         if options.paths.isEmpty {
             let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+            var active = Set<String>()
             enumerateDirectory(
-                Target(url: cwd, displayPath: ""),
+                resolvedTagURL(cwd),
+                displayPrefix: "",
                 recursive: options.recursive,
+                activeDirectories: &active,
                 body: body
             )
             return
         }
 
         for path in options.paths {
-            let url = expandedFileURL(path)
-
+            let logicalURL = expandedFileURL(path)
             do {
-                guard try url.checkResourceIsReachable() else {
+                guard try logicalURL.checkResourceIsReachable() else {
                     onError("not reachable: \(path)")
                     continue
                 }
@@ -28,13 +30,21 @@ struct Traversal {
                 continue
             }
 
-            let target = Target(url: url, displayPath: path)
+            let targetURL = resolvedTagURL(logicalURL)
+            let target = Target(url: targetURL, displayPath: path)
             body(target)
 
             guard options.enterDirectories || options.recursive else { continue }
             do {
-                if try directoryFlag(url) {
-                    enumerateDirectory(target, recursive: options.recursive, body: body)
+                if try directoryFlag(targetURL) {
+                    var active = Set<String>()
+                    enumerateDirectory(
+                        targetURL,
+                        displayPrefix: "",
+                        recursive: options.recursive,
+                        activeDirectories: &active,
+                        body: body
+                    )
                 }
             } catch {
                 onError("\(path): cannot determine file type: \(error.localizedDescription)")
@@ -43,50 +53,59 @@ struct Traversal {
     }
 
     func directoryFlag(_ url: URL) throws -> Bool {
-        try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+        return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
     }
 
     private func enumerateDirectory(
-        _ directory: Target,
+        _ directoryURL: URL,
+        displayPrefix: String,
         recursive: Bool,
+        activeDirectories: inout Set<String>,
         body: (Target) -> Void
     ) {
+        let resolvedDirectory = resolvedTagURL(directoryURL)
+        let identity = resolvedDirectory.path
+        if !activeDirectories.insert(identity).inserted {
+            return
+        }
+        defer { activeDirectories.remove(identity) }
+
         var enumerationOptions: FileManager.DirectoryEnumerationOptions = []
         if !options.includeHidden { enumerationOptions.insert(.skipsHiddenFiles) }
-        if !recursive { enumerationOptions.insert(.skipsSubdirectoryDescendants) }
 
-        guard let enumerator = fileManager.enumerator(
-            at: directory.url,
-            includingPropertiesForKeys: [.isDirectoryKey, .tagNamesKey],
-            options: enumerationOptions,
-            errorHandler: { url, error in
-                onError("\(url.path): \(error.localizedDescription)")
-                return true
-            }
-        ) else {
-            onError("unable to enumerate \(directory.displayPath.isEmpty ? "." : directory.displayPath)")
+        let children: [URL]
+        do {
+            children = try fileManager.contentsOfDirectory(
+                at: resolvedDirectory,
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .tagNamesKey],
+                options: enumerationOptions
+            )
+        } catch {
+            onError("\(resolvedDirectory.path): \(error.localizedDescription)")
             return
         }
 
-        for case let url as URL in enumerator {
-            // Match jdberry/tag: after printing an explicit directory itself,
-            // enumerate its children relative to that directory rather than
-            // repeating the directory argument as a prefix.
-            let relative = relativePath(of: url, under: directory.url)
-            body(Target(url: url, displayPath: relative))
+        for logicalChild in children {
+            let name = logicalChild.lastPathComponent
+            let displayPath = displayPrefix.isEmpty ? name : displayPrefix + "/" + name
+            let resolvedChild = resolvedTagURL(logicalChild)
+            body(Target(url: resolvedChild, displayPath: displayPath))
+
+            if recursive {
+                do {
+                    if try directoryFlag(resolvedChild) {
+                        enumerateDirectory(
+                            resolvedChild,
+                            displayPrefix: displayPath,
+                            recursive: true,
+                            activeDirectories: &activeDirectories,
+                            body: body
+                        )
+                    }
+                } catch {
+                    onError("\(logicalChild.path): cannot determine file type: \(error.localizedDescription)")
+                }
+            }
         }
     }
-
-    private func relativePath(of child: URL, under directory: URL) -> String {
-        let base = directory.standardizedFileURL.path
-        let full = child.standardizedFileURL.path
-
-        guard full == base || full.hasPrefix(base + "/") else {
-            return child.lastPathComponent
-        }
-
-        if full == base { return "" }
-        return String(full.dropFirst(base.count + 1))
-    }
-
 }

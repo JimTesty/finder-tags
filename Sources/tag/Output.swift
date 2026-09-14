@@ -3,7 +3,6 @@ import Foundation
 final class Output {
     private let options: Options
     private let colors: FinderColors
-    private var jsonRecords: [[String: Any]] = []
 
     init(options: Options, colors: FinderColors) {
         self.options = options
@@ -14,8 +13,8 @@ final class Output {
         var tags = storedTags
         if options.reverse { tags.reverse() }
 
-        if options.json {
-            jsonRecords.append([
+        if options.jsonLines {
+            try jsonRecord([
                 "path": target.displayPath,
                 "tags": tags
             ])
@@ -50,16 +49,13 @@ final class Output {
         }
     }
 
-    func emitUsage(_ entries: [UsageEntry]) {
-        if options.json {
-            for entry in entries {
-                jsonRecords.append(["tag": entry.tag, "count": entry.count])
-            }
-            return
-        }
-
+    func emitUsage(_ entries: [UsageEntry]) throws {
         for entry in entries {
-            record("\(entry.count)\t\(colors.render(entry.tag))")
+            if options.jsonLines {
+                try jsonRecord(["tag": entry.tag, "count": entry.count])
+            } else {
+                record("\(entry.count)\t\(colors.render(entry.tag))")
+            }
         }
     }
 
@@ -69,8 +65,8 @@ final class Output {
         change: TagChange,
         sourcePath: String? = nil,
         dryRun: Bool
-    ) {
-        if options.json {
+    ) throws {
+        if options.jsonLines {
             var object: [String: Any] = [
                 "operation": operation,
                 "path": target.displayPath,
@@ -80,7 +76,7 @@ final class Output {
                 "dryRun": dryRun
             ]
             if let source = sourcePath { object["source"] = source }
-            jsonRecords.append(object)
+            try jsonRecord(object)
             return
         }
 
@@ -95,13 +91,7 @@ final class Output {
     }
 
     func finish() throws {
-        if !options.json { return }
-        let data = try JSONSerialization.data(
-            withJSONObject: jsonRecords,
-            options: [.prettyPrinted, .sortedKeys]
-        )
-        FileHandle.standardOutput.write(data)
-        FileHandle.standardOutput.write(Data([10]))
+        // JSONL is streamed one object at a time; there is nothing to flush.
     }
 
     private func displayPath(_ target: Target) throws -> String {
@@ -109,6 +99,12 @@ final class Output {
         let values = try target.url.resourceValues(forKeys: [.isDirectoryKey])
         if values.isDirectory != true { return target.displayPath }
         return target.displayPath.hasSuffix("/") ? target.displayPath : target.displayPath + "/"
+    }
+
+    private func jsonRecord(_ object: [String: Any]) throws {
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data([10]))
     }
 
     private func record(_ string: String) {

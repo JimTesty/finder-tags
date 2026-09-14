@@ -5,7 +5,7 @@ BINARY := $(BUILD_DIR)/tag
 SOURCES := $(wildcard Sources/tag/*.swift)
 SWIFTFLAGS ?= -O -swift-version 5
 
-.PHONY: all build debug test install clean
+.PHONY: all build debug test compat install clean
 
 all: build
 
@@ -21,6 +21,10 @@ debug:
 
 test: build
 	sh Tests/cli.sh "$(BINARY)"
+
+compat: build
+	@test -n "$(JDBERRY_TAG)" || { echo "usage: make compat JDBERRY_TAG=/path/to/jdberry/tag" >&2; exit 64; }
+	sh Tests/compat-jdberry.sh "$(BINARY)" "$(JDBERRY_TAG)"
 
 install: build
 	install -d "$(PREFIX)/bin"

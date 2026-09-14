@@ -1,5 +1,8 @@
 
 .DS_Store
 
-/build/
 /_tmp/
+
+/build/
+/Tests/.cli-work.*/
+/Tests/.compat-work.*/

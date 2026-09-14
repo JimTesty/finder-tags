@@ -2,25 +2,22 @@ import Foundation
 
 struct UsageCounter {
     private var counts: [String: Int] = [:]
-    private var names: [String: String] = [:]
     private var order: [String] = []
 
     mutating func add(_ tags: [String]) {
+        // Case is part of the stored tag. Matching can be case-insensitive,
+        // but usage must not merge "orange" and "Orange" into one bucket.
         for tag in tags {
-            let key = canonicalTag(tag)
-            if counts[key] == nil {
-                counts[key] = 0
-                names[key] = tag
-                order.append(key)
+            if counts[tag] == nil {
+                counts[tag] = 0
+                order.append(tag)
             }
-            counts[key] = (counts[key] ?? 0) + 1
+            counts[tag] = (counts[tag] ?? 0) + 1
         }
     }
 
     func entries(reverse: Bool) -> [UsageEntry] {
-        let keys = reverse ? Array(order.reversed()) : order
-        return keys.map { key in
-            UsageEntry(tag: names[key] ?? key, count: counts[key] ?? 0)
-        }
+        let tags = reverse ? Array(order.reversed()) : order
+        return tags.map { UsageEntry(tag: $0, count: counts[$0] ?? 0) }
     }
 }

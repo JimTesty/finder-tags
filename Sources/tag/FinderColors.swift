@@ -8,7 +8,7 @@ struct FinderColors {
     }
 
     func render(_ tag: String) -> String {
-        guard let escape = ansiByName[canonicalTag(tag)] else { return tag }
+        guard let escape = ansiByName[foldedTag(tag)] else { return tag }
         return escape + tag + "\u{001B}[m"
     }
 
@@ -44,7 +44,7 @@ struct FinderColors {
                       let escape = ansiByCode[color.intValue]
                 else { continue }
 
-                result[canonicalTag(name)] = escape
+                result[foldedTag(name)] = escape
             }
             return result
         }

@@ -2,11 +2,20 @@ import Foundation
 
 enum TagStoreError: LocalizedError {
     case verificationFailed(path: String, expected: [String], actual: [String])
+    case ambiguousCaseMatch(tag: String, matches: [String])
+    case tagNotFound(tag: String)
+    case invalidIndex(value: Int, count: Int)
 
     var errorDescription: String? {
         switch self {
         case let .verificationFailed(path, expected, actual):
             return "tag write verification failed for \(path): expected \(expected), read back \(actual)"
+        case let .ambiguousCaseMatch(tag, matches):
+            return "case-insensitive tag '\(tag)' is ambiguous among \(matches); use --case-sensitive or exact casing"
+        case let .tagNotFound(tag):
+            return "tag not found: \(tag)"
+        case let .invalidIndex(value, count):
+            return "index \(value) is out of range; valid insertion indexes are 0...\(count)"
         }
     }
 }
@@ -33,28 +42,75 @@ struct TagStore {
         }
     }
 
-    func addChange(_ requested: [String], to url: URL) throws -> TagChange {
+    func addChange(
+        _ requested: [String],
+        to url: URL,
+        caseSensitive: Bool,
+        position: PositionSpec?
+    ) throws -> TagChange {
         let existing = try read(url)
         var revised = existing
-        var seen = Set(existing.map(canonicalTag))
+        var missing: [String] = []
+
+        // Match only against the original array. A request that explicitly
+        // contains case-distinct variants (for example "orange,Orange") means
+        // the caller wants both spellings, so those variants are never folded
+        // into one another during add.
+        var requestedFoldCounts: [String: Int] = [:]
+        if !caseSensitive {
+            for tag in requested {
+                let key = foldedTag(tag)
+                requestedFoldCounts[key] = (requestedFoldCounts[key] ?? 0) + 1
+            }
+        }
 
         for tag in requested {
-            if seen.insert(canonicalTag(tag)).inserted {
-                revised.append(tag)
+            if existing.contains(tag) { continue }
+
+            if !caseSensitive && requestedFoldCounts[foldedTag(tag)] == 1 {
+                let matches = existing.indices.filter {
+                    foldedTag(existing[$0]) == foldedTag(tag)
+                }
+                if matches.count == 1 {
+                    // Finder matching is normally case-insensitive, but case is
+                    // data. Re-case the unique existing match in place.
+                    revised[matches[0]] = tag
+                    continue
+                }
+                if matches.count > 1 {
+                    throw TagStoreError.ambiguousCaseMatch(
+                        tag: tag,
+                        matches: matches.map { existing[$0] }
+                    )
+                }
             }
+
+            missing.append(tag)
+        }
+
+        if !missing.isEmpty {
+            let insertion = try (position ?? .last).insertionIndex(count: revised.count)
+            revised.insert(contentsOf: missing, at: insertion)
         }
         return TagChange(before: existing, after: revised)
     }
 
-    func removeChange(_ requested: [String], from url: URL) throws -> TagChange {
+    func removeChange(
+        _ requested: [String],
+        from url: URL,
+        caseSensitive: Bool
+    ) throws -> TagChange {
         let existing = try read(url)
         let revised: [String]
 
         if requested.contains("*") {
             revised = []
         } else {
-            let unwanted = Set(requested.map(canonicalTag))
-            revised = existing.filter { !unwanted.contains(canonicalTag($0)) }
+            revised = existing.filter { stored in
+                !requested.contains(where: {
+                    tagsEqual(stored, $0, caseSensitive: caseSensitive)
+                })
+            }
         }
         return TagChange(before: existing, after: revised)
     }
@@ -64,6 +120,40 @@ struct TagStore {
         // misinterpreted as "the file has no tags".
         let existing = try read(url)
         return TagChange(before: existing, after: requested)
+    }
+
+    func moveChange(
+        tag: String,
+        to position: PositionSpec,
+        on url: URL,
+        caseSensitive: Bool
+    ) throws -> TagChange {
+        let existing = try read(url)
+        let matches: [Int]
+
+        if caseSensitive {
+            matches = existing.indices.filter { existing[$0] == tag }
+        } else {
+            let exact = existing.indices.filter { existing[$0] == tag }
+            if exact.count == 1 {
+                matches = exact
+            } else if exact.count > 1 {
+                throw TagStoreError.ambiguousCaseMatch(tag: tag, matches: exact.map { existing[$0] })
+            } else {
+                matches = existing.indices.filter { foldedTag(existing[$0]) == foldedTag(tag) }
+            }
+        }
+
+        if matches.isEmpty { throw TagStoreError.tagNotFound(tag: tag) }
+        if matches.count > 1 {
+            throw TagStoreError.ambiguousCaseMatch(tag: tag, matches: matches.map { existing[$0] })
+        }
+
+        var revised = existing
+        let moved = revised.remove(at: matches[0])
+        let insertion = try position.insertionIndex(count: revised.count)
+        revised.insert(moved, at: insertion)
+        return TagChange(before: existing, after: revised)
     }
 
     func copyChange(from source: URL, to destination: URL) throws -> TagChange {
