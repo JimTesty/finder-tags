@@ -4,52 +4,74 @@ func usage(code: Int32 = 0) -> Never {
     let text = """
     \(programName) - manipulate macOS Finder tags while preserving tag order
 
+    Usage-compatible with the non-Spotlight parts of jdberry/tag.
+
     usage:
       \(programName) [-l | --list] [options] [path ...]
       \(programName) -a | --add TAGS [options] path ...
       \(programName) -r | --remove TAGS [options] path ...
       \(programName) -s | --set TAGS [options] path ...
-      \(programName) --copy SOURCE DESTINATION
+      \(programName) -m | --match TAGS [options] [path ...]
+      \(programName) -u | --usage [TAGS] [options] [path ...]
+      \(programName) --copy SOURCE DESTINATION [--dry-run]
 
     TAGS is a comma-separated list. Matching is case-insensitive.
+    '*' means any tag for --match/--usage and all tags for --remove.
+    An empty TAGS expression matches files with no tags.
 
     operations:
-      -l, --list             List tags (default)
-      -a, --add TAGS         Append new tags, preserving existing order
-      -r, --remove TAGS      Remove tags; '*' removes all tags
-      -s, --set TAGS         Replace all tags in the specified order
-          --copy SRC DST     Replace DST's tags with SRC's tags
+      -l, --list                 List tags (default)
+      -a, --add TAGS             Append new tags, preserving existing order
+      -r, --remove TAGS          Remove tags; '*' removes all tags
+      -s, --set TAGS             Replace all tags in the specified order
+          --copy SRC DST         Replace DST's tags with SRC's ordered tags
+      -m, --match TAGS           List traversed files matching all TAGS
+      -u, --usage [TAGS]         Count tags on matching traversed files
 
-    output (list):
-      -c, --color            Display known Finder tag colors
-      -V, --reverse          Display tags in reverse stored order
-      -n, --name             Show filenames (default)
-      -N, --no-name          Hide filenames
-      -t, --tags             Show tags (default)
-      -T, --no-tags          Hide tags
-      -g, --garrulous        Display one tag per line
-      -G, --no-garrulous     Display comma-separated tags (default)
-      -p, --slash            Append '/' to directory names
-      -0, --nul              Terminate output records with NUL
+    output:
+      -c, --color                Display known Finder tag colors
+      -V, --reverse              Reverse tag display order (does not rewrite)
+      -n, --filename             Show filenames
+      -N, --no-filename          Hide filenames
+          --name/--no-name       Backward-compatible aliases
+      -t, --tags                 Show tags
+      -T, --no-tags              Hide tags
+      -g, --one-per-line         Display one tag per line
+      -G, --comma-separated      Display comma-separated tags (default)
+          --garrulous            Alias for --one-per-line
+          --no-garrulous         Alias for --comma-separated
+      -p, --slash                Append '/' to directory names
+      -0, --null                 Terminate text records with NUL
+          --nul                  Backward-compatible alias for --null
+          --json                 Emit structured JSON instead of text
 
-    enumeration (list/add/remove/set):
-      -A, --all              Include hidden files while enumerating
-      -e, --enter            Enumerate contents of explicit directories
-      -R, -d, --recursive    Recursively enumerate directories
+    mutation safety:
+          --dry-run              Show intended changes without writing
+          --dryrun               Alias for --dry-run
+
+    enumeration:
+      -A, --all                  Include hidden files while enumerating
+      -e, --enter                Enumerate contents of explicit directories
+      -R, -d, --recursive        Recursively enumerate directories
 
     other:
-      -h, --help             Show this help
-      -v, --version          Show version
+      -h, --help                 Show this help
+      -v, --version              Show version
 
-    With no paths, list enumerates the current directory. Mutating operations
-    require explicit paths. Use -- before paths beginning with '-'.
+    Defaults match jdberry/tag where practical: list shows filename+tags;
+    match shows filenames only. With no paths, list/match/usage enumerate the
+    current directory. Mutating operations require explicit paths.
 
-    Ordering:
-      list    displays the stored Foundation tag array unchanged, unless -V
-      add     preserves existing order and appends new tags in argument order
-      remove  preserves the relative order of tags that remain
-      set     writes tags in argument order
-      copy    writes the source tag array to the destination unchanged
+    Important differences from jdberry/tag:
+      * Stored tag order is preserved; tags are never sorted for display.
+      * --usage traverses paths directly; it does NOT use Spotlight and does
+        not search the whole system. Use -R to recurse.
+      * --find and --home/--local/--network are not implemented.
+      * --copy, --reverse, --json, and --dry-run are additions.
+
+    For --usage, no TAGS means '*'. Because TAGS is optional, use
+    "--usage '*' PATH" when you want all tags under an explicit PATH.
+    Use -- before a path beginning with '-'.
     """
 
     if code == 0 { print(text) } else { eprint(text) }
@@ -57,12 +79,12 @@ func usage(code: Int32 = 0) -> Never {
 }
 
 func version() -> Never {
-    print("\(programName) 3.0")
+    print("\(programName) 4.0")
     exit(0)
 }
 
 private func setOperation(_ operation: Operation, options: inout Options) {
-    guard !options.operationWasSet else {
+    if options.operationWasSet {
         fail("operation may be specified only once")
     }
     options.operation = operation
@@ -71,8 +93,22 @@ private func setOperation(_ operation: Operation, options: inout Options) {
 
 private func requireValue(_ option: String, args: [String], index: inout Int) -> String {
     index += 1
-    guard index < args.count else { fail("\(option) requires an argument") }
+    if index >= args.count { fail("\(option) requires an argument") }
     return args[index]
+}
+
+private func optionalUsageValue(
+    inlineValue: String?,
+    args: [String],
+    index: inout Int
+) -> String {
+    if let value = inlineValue { return value }
+    let next = index + 1
+    if next < args.count && !args[next].hasPrefix("-") {
+        index = next
+        return args[next]
+    }
+    return "*"
 }
 
 private func applyShortFlag(_ ch: Character, options: inout Options) {
@@ -80,10 +116,10 @@ private func applyShortFlag(_ ch: Character, options: inout Options) {
     case "l": setOperation(.list, options: &options)
     case "c": options.color = true
     case "V": options.reverse = true
-    case "n": options.showNames = true
-    case "N": options.showNames = false
-    case "t": options.showTags = true
-    case "T": options.showTags = false
+    case "n": options.showNamesOverride = true
+    case "N": options.showNamesOverride = false
+    case "t": options.showTagsOverride = true
+    case "T": options.showTagsOverride = false
     case "g": options.oneTagPerLine = true
     case "G": options.oneTagPerLine = false
     case "A": options.includeHidden = true
@@ -118,13 +154,13 @@ func parseArguments() -> Options {
             let inlineValue = parts.count == 2 ? String(parts[1]) : nil
 
             func operand() -> String {
-                if let inlineValue = inlineValue { return inlineValue }
+                if let value = inlineValue { return value }
                 return requireValue("--\(name)", args: args, index: &i)
             }
 
             switch name {
             case "list":
-                guard inlineValue == nil else { fail("--list does not take an argument") }
+                if inlineValue != nil { fail("--list does not take an argument") }
                 setOperation(.list, options: &options)
             case "add":
                 setOperation(.add(parseTagList(operand())), options: &options)
@@ -132,22 +168,33 @@ func parseArguments() -> Options {
                 setOperation(.remove(parseTagList(operand())), options: &options)
             case "set":
                 setOperation(.set(parseTagList(operand())), options: &options)
+            case "match":
+                setOperation(.match(parseTagList(operand())), options: &options)
+            case "usage":
+                let raw = optionalUsageValue(
+                    inlineValue: inlineValue, args: args, index: &i
+                )
+                setOperation(.usage(parseTagList(raw)), options: &options)
             case "copy":
-                guard inlineValue == nil else { fail("--copy does not take '=...'; use --copy SOURCE DESTINATION") }
+                if inlineValue != nil {
+                    fail("--copy does not take '=...'; use --copy SOURCE DESTINATION")
+                }
                 setOperation(.copy, options: &options)
             case "color": options.color = true
             case "reverse": options.reverse = true
-            case "name": options.showNames = true
-            case "no-name": options.showNames = false
-            case "tags": options.showTags = true
-            case "no-tags": options.showTags = false
-            case "garrulous": options.oneTagPerLine = true
-            case "no-garrulous": options.oneTagPerLine = false
+            case "filename", "name": options.showNamesOverride = true
+            case "no-filename", "no-name": options.showNamesOverride = false
+            case "tags": options.showTagsOverride = true
+            case "no-tags": options.showTagsOverride = false
+            case "one-per-line", "garrulous": options.oneTagPerLine = true
+            case "comma-separated", "no-garrulous": options.oneTagPerLine = false
             case "all": options.includeHidden = true
             case "enter": options.enterDirectories = true
             case "recursive", "descend": options.recursive = true
             case "slash": options.slashDirectories = true
-            case "nul": options.nulTerminate = true
+            case "null", "nul": options.nulTerminate = true
+            case "json": options.json = true
+            case "dry-run", "dryrun": options.dryRun = true
             case "help": usage()
             case "version": version()
             default: fail("unknown option: --\(name)")
@@ -164,7 +211,7 @@ func parseArguments() -> Options {
             while j < chars.count {
                 let ch = chars[j]
 
-                if ch == "a" || ch == "r" || ch == "s" {
+                if ch == "a" || ch == "r" || ch == "s" || ch == "m" {
                     let remainder = String(chars.dropFirst(j + 1))
                     let raw = remainder.isEmpty
                         ? requireValue("-\(ch)", args: args, index: &i)
@@ -174,8 +221,21 @@ func parseArguments() -> Options {
                     switch ch {
                     case "a": setOperation(.add(tags), options: &options)
                     case "r": setOperation(.remove(tags), options: &options)
-                    default: setOperation(.set(tags), options: &options)
+                    case "s": setOperation(.set(tags), options: &options)
+                    default: setOperation(.match(tags), options: &options)
                     }
+                    break
+                }
+
+                if ch == "u" {
+                    let remainder = String(chars.dropFirst(j + 1))
+                    let raw: String
+                    if remainder.isEmpty {
+                        raw = optionalUsageValue(inlineValue: nil, args: args, index: &i)
+                    } else {
+                        raw = remainder
+                    }
+                    setOperation(.usage(parseTagList(raw)), options: &options)
                     break
                 }
 
@@ -192,16 +252,20 @@ func parseArguments() -> Options {
     }
 
     switch options.operation {
-    case .list:
+    case .list, .match, .usage:
         break
     case .copy:
-        guard options.paths.count == 2 else {
+        if options.paths.count != 2 {
             fail("--copy requires exactly SOURCE and DESTINATION")
         }
     case .add, .remove, .set:
-        guard !options.paths.isEmpty else {
+        if options.paths.isEmpty {
             fail("add/remove/set require at least one explicit path")
         }
+    }
+
+    if options.dryRun && !options.isMutating {
+        fail("--dry-run is only valid with --add, --remove, --set, or --copy")
     }
 
     return options

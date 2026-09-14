@@ -1,17 +1,30 @@
-.PHONY: build test install clean
-
-build:
-	swift build -c release
-
-test:
-	swift build
-	.build/debug/tag --help >/dev/null
-	.build/debug/tag --version >/dev/null
-
+SWIFTC ?= swiftc
 PREFIX ?= $(HOME)/.local
+BUILD_DIR ?= build
+BINARY := $(BUILD_DIR)/tag
+SOURCES := $(wildcard Sources/tag/*.swift)
+SWIFTFLAGS ?= -O
+
+.PHONY: all build debug test install clean
+
+all: build
+
+build: $(BINARY)
+
+$(BINARY): $(SOURCES)
+	@mkdir -p "$(BUILD_DIR)"
+	$(SWIFTC) $(SWIFTFLAGS) $(SOURCES) -o "$(BINARY)"
+
+debug:
+	@mkdir -p "$(BUILD_DIR)"
+	$(SWIFTC) -Onone -g $(SOURCES) -o "$(BINARY)"
+
+test: build
+	sh Tests/cli.sh "$(BINARY)"
+
 install: build
 	install -d "$(PREFIX)/bin"
-	install -m 755 "$$(swift build -c release --show-bin-path)/tag" "$(PREFIX)/bin/tag"
+	install -m 755 "$(BINARY)" "$(PREFIX)/bin/tag"
 
 clean:
-	swift package clean
+	rm -rf "$(BUILD_DIR)"

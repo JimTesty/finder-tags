@@ -18,8 +18,6 @@ func fail(_ message: String, code: Int32 = ExitCode.usage) -> Never {
 }
 
 func canonicalTag(_ tag: String) -> String {
-    // Finder-style tag comparison is case-insensitive. Locale-independent
-    // folding avoids surprising behavior when the user's locale changes.
     tag.folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
 }
 
@@ -29,7 +27,7 @@ func parseTagList(_ raw: String) -> [String] {
 
     for piece in raw.split(separator: ",", omittingEmptySubsequences: false) {
         let tag = piece.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tag.isEmpty else { continue }
+        if tag.isEmpty { continue }
 
         if seen.insert(canonicalTag(tag)).inserted {
             result.append(tag)
@@ -39,5 +37,16 @@ func parseTagList(_ raw: String) -> [String] {
 }
 
 func expandedFileURL(_ path: String) -> URL {
-    URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
+    return URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
+}
+
+func tagsMatch(_ stored: [String], query: [String]) -> Bool {
+    if query.contains("*") { return !stored.isEmpty }
+    if query.isEmpty { return stored.isEmpty }
+
+    let present = Set(stored.map(canonicalTag))
+    for tag in query {
+        if !present.contains(canonicalTag(tag)) { return false }
+    }
+    return true
 }

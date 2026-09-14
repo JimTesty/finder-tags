@@ -13,18 +13,18 @@ enum TagStoreError: LocalizedError {
 
 struct TagStore {
     func read(_ url: URL) throws -> [String] {
-        // A missing tag value means "no tags". Any actual resource-value read
-        // failure throws and is never converted into an empty array.
-        try url.resourceValues(forKeys: [.tagNamesKey]).tagNames ?? []
+        // A successful read with no tag value means "no tags". Any resource
+        // value error throws and must never be converted into an empty array.
+        return try url.resourceValues(forKeys: [.tagNamesKey]).tagNames ?? []
     }
 
     func write(_ tags: [String], to url: URL) throws {
         try (url as NSURL).setResourceValue(tags, forKey: .tagNamesKey)
 
-        // setResourceValue is synchronous, but a read-back catches silent
-        // normalization/reordering or a failed persistence path cheaply.
+        // Cheap best-effort verification. This catches silent persistence,
+        // normalization, or ordering failures without adding transaction logic.
         let actual = try read(url)
-        guard actual == tags else {
+        if actual != tags {
             throw TagStoreError.verificationFailed(
                 path: url.path,
                 expected: tags,
@@ -33,22 +33,20 @@ struct TagStore {
         }
     }
 
-    func add(_ requested: [String], to url: URL) throws {
+    func addChange(_ requested: [String], to url: URL) throws -> TagChange {
         let existing = try read(url)
         var revised = existing
         var seen = Set(existing.map(canonicalTag))
 
-        for tag in requested where seen.insert(canonicalTag(tag)).inserted {
-            revised.append(tag)
+        for tag in requested {
+            if seen.insert(canonicalTag(tag)).inserted {
+                revised.append(tag)
+            }
         }
-
-        // Avoid unnecessary metadata writes.
-        if revised != existing {
-            try write(revised, to: url)
-        }
+        return TagChange(before: existing, after: revised)
     }
 
-    func remove(_ requested: [String], from url: URL) throws {
+    func removeChange(_ requested: [String], from url: URL) throws -> TagChange {
         let existing = try read(url)
         let revised: [String]
 
@@ -58,25 +56,26 @@ struct TagStore {
             let unwanted = Set(requested.map(canonicalTag))
             revised = existing.filter { !unwanted.contains(canonicalTag($0)) }
         }
-
-        if revised != existing {
-            try write(revised, to: url)
-        }
+        return TagChange(before: existing, after: revised)
     }
 
-    func set(_ requested: [String], on url: URL) throws {
-        // Read first even though set is destructive. This proves the metadata is
-        // readable before we replace it, preventing "read error == no tags" bugs.
+    func setChange(_ requested: [String], on url: URL) throws -> TagChange {
+        // Even destructive set reads first so a metadata read failure cannot be
+        // misinterpreted as "the file has no tags".
         let existing = try read(url)
-        if existing != requested {
-            try write(requested, to: url)
-        }
+        return TagChange(before: existing, after: requested)
     }
 
-    func copy(from source: URL, to destination: URL) throws {
-        // Crucially, complete the source read before touching the destination.
+    func copyChange(from source: URL, to destination: URL) throws -> TagChange {
+        // Fully complete both reads before any possible destination write.
         let sourceTags = try read(source)
-        _ = try read(destination) // prove destination metadata is readable first
-        try write(sourceTags, to: destination)
+        let destinationTags = try read(destination)
+        return TagChange(before: destinationTags, after: sourceTags)
+    }
+
+    func apply(_ change: TagChange, to url: URL) throws {
+        if change.before != change.after {
+            try write(change.after, to: url)
+        }
     }
 }
