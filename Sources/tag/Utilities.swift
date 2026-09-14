@@ -26,11 +26,18 @@ func colorIsEnabled(_ mode: ColorMode) -> Bool {
 }
 
 func fileMetadata(for url: URL) throws -> FileMetadata {
-    let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-    guard let size = values.fileSize,
-          let date = values.contentModificationDate else {
+    let values = try url.resourceValues(forKeys: [
+        .isDirectoryKey, .fileSizeKey, .contentModificationDateKey
+    ])
+    guard let date = values.contentModificationDate else {
         throw NSError(domain: "finder-tags", code: 1, userInfo: [
             NSLocalizedDescriptionKey: "file size or modification time is unavailable"
+        ])
+    }
+    let size = values.isDirectory == true ? 0 : values.fileSize ?? -1
+    guard size >= 0 else {
+        throw NSError(domain: "finder-tags", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "file size is unavailable"
         ])
     }
     return FileMetadata(size: Int64(size), modificationTime: date.timeIntervalSince1970)

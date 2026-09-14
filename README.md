@@ -134,9 +134,10 @@ changes transactional if a later metadata write fails.
 `size` and `mtime`; plaintext archives use `@metadata` records. Restore
 validates these fields but ignores them, so they are available for later
 change-detection tooling without affecting tag restoration.
-Human-readable `--file-info` listings render metadata as `[SIZE DATE]`: SIZE is
-rounded binary megabytes (`~0MB` means a nonempty file below 0.5 MiB), and
-DATE is `yyyyMMdd`. JSONL and the archive retain exact numeric values.
+Human-readable `--file-info` listings render metadata as `[DATE SIZE]`: DATE is
+`yyyyMMdd`, and SIZE is rounded binary megabytes (`~0MB` means a nonempty
+file below 0.5 MiB). Directories are shown as `0MB`. JSONL and the archive
+retain exact numeric values.
 
 Symlinks are followed by default. If a symlink resolves to a different target
 than the one recorded during export, restore warns once to stderr and follows

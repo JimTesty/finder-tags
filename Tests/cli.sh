@@ -105,7 +105,9 @@ printf '%s\n' "$file_info_json" | grep -q '"size"'
 printf '%s\n' "$file_info_json" | grep -q '"mtime"'
 file_info_text=$("$bin" --file-info "$work/a")
 printf '%s\n' "$file_info_text" | grep -q '\['
-printf '%s\n' "$file_info_text" | grep -Eq '\[[^]]*MB [0-9]{8}\]'
+printf '%s\n' "$file_info_text" | grep -Eq '\[[0-9]{8} [^]]*MB\]'
+file_info_directory=$("$bin" --file-info "$work/tree")
+printf '%s\n' "$file_info_directory" | grep -Eq '\[[0-9]{8} 0MB\]'
 
 quoted=$("$bin" --set '"Orange","Project, Alpha","Needs review"' --dry-run --jsonl "$work/a")
 printf '%s\n' "$quoted" | grep -Fq '"after":["Orange","Project, Alpha","Needs review"]'

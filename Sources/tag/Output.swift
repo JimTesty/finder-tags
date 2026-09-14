@@ -37,7 +37,7 @@ final class Output {
         let name = options.showNames ? try displayPath(target) : nil
         let decoratedName: String?
        if let name = name, let metadata = metadata {
-            decoratedName = "[\(fileInfoSizeText(metadata.size)) \(fileInfoDateText(metadata.modificationTime))] \(name)"
+            decoratedName = "[\(fileInfoDateText(metadata.modificationTime)) \(fileInfoSizeText(metadata.size))] \(name)"
        } else {
             decoratedName = name
         }
