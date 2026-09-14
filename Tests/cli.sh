@@ -4,10 +4,10 @@ set -eu
 bin_arg=${1:?usage: cli.sh /path/to/tag}
 case "$bin_arg" in
     /*) bin=$bin_arg ;;
-    *) bin="$(pwd)/$bin_arg" ;;
+    *) bin="$(pwd -P)/$bin_arg" ;;
 esac
 
-repo=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+repo=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
 work="$repo/Tests/.cli-work.$$"
 rm -rf "$work"
 mkdir -p "$work"
