@@ -135,9 +135,13 @@ changes transactional if a later metadata write fails.
 validates these fields but ignores them, so they are available for later
 change-detection tooling without affecting tag restoration.
 Human-readable `--file-info` listings render metadata as `[DATE SIZE]`: DATE is
-`yyyyMMdd`, and SIZE is rounded binary megabytes (`~0MB` means a nonempty
-file below 0.5 MiB). Directories are shown as `0MB`. JSONL and the archive
-retain exact numeric values.
+`yyyyMMdd`, and SIZE is a right-aligned, rounded binary-megabyte field
+(`~0MB` means a nonempty file below 0.5 MiB). Directories are shown as `0MB`.
+JSONL and the archive retain exact numeric values.
+Use `--space-indent` with plain listings to separate a filename and its tags
+with two spaces instead of the usual tab/alignment separator.
+The human date is for display only; use JSONL/archive values for stable
+change detection.
 
 Symlinks are followed by default. If a symlink resolves to a different target
 than the one recorded during export, restore warns once to stderr and follows

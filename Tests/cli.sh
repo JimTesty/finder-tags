@@ -33,6 +33,7 @@ ln -s .. "$work/tree/real/back-to-tree"
 "$bin" --help | grep -q -- '--restore ARCHIVE'
 "$bin" --help | grep -q -- '--tagged-only'
 "$bin" --help | grep -q -- '--file-info'
+"$bin" --help | grep -q -- '--space-indent'
 "$bin" --help | grep -q -- '--no-backup'
 [ "$("$bin" --version)" = "tag 8.0" ]
 
@@ -107,7 +108,13 @@ file_info_text=$("$bin" --file-info "$work/a")
 printf '%s\n' "$file_info_text" | grep -q '\['
 printf '%s\n' "$file_info_text" | grep -Eq '\[[0-9]{8} [^]]*MB\]'
 file_info_directory=$("$bin" --file-info "$work/tree")
-printf '%s\n' "$file_info_directory" | grep -Eq '\[[0-9]{8} 0MB\]'
+printf '%s\n' "$file_info_directory" | grep -Eq '\[[0-9]{8} +0MB\]'
+esc=$(printf '\033')
+forced_info=$("$bin" --file-info --color=force "$work/a")
+case "$forced_info" in
+    *"$esc[32m"*"$esc[m"*) ;;
+    *) echo "forced file-info color missing" >&2; exit 1 ;;
+esac
 
 quoted=$("$bin" --set '"Orange","Project, Alpha","Needs review"' --dry-run --jsonl "$work/a")
 printf '%s\n' "$quoted" | grep -Fq '"after":["Orange","Project, Alpha","Needs review"]'
@@ -195,6 +202,12 @@ fi
 if [ "$(uname -s)" = Darwin ]; then
     "$bin" --set 'First,Second' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'First,Second' ]
+    space_indent_output=$("$bin" --space-indent "$work/a")
+    printf '%s\n' "$space_indent_output" | grep -Fq '  First,Second'
+    if printf '%s\n' "$space_indent_output" | grep -q "$(printf '\t')"; then
+        echo "--space-indent unexpectedly emitted a tab" >&2
+        exit 1
+    fi
 
     "$bin" --add 'Third,First' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'First,Second,Third' ]

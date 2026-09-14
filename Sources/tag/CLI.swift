@@ -146,6 +146,7 @@ func parseArguments() -> Options {
             case "no-tags": options.showTagsOverride = false
             case "one-per-line", "garrulous": options.oneTagPerLine = true
             case "comma-separated", "no-garrulous": options.oneTagPerLine = false
+            case "space-indent": options.spaceIndent = true
             case "all": options.includeHidden = true
             case "enter": options.enterDirectories = true
             case "recursive", "descend": options.recursive = true
@@ -251,6 +252,12 @@ func parseArguments() -> Options {
         switch options.operation {
         case .list, .export: break
         default: fail("--file-info is only valid with --list or --export")
+        }
+    }
+
+    if options.spaceIndent {
+        guard case .list = options.operation, !options.jsonLines else {
+            fail("--space-indent is only valid with plain --list output")
         }
     }
 

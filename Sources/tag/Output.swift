@@ -37,7 +37,11 @@ final class Output {
         let name = options.showNames ? try displayPath(target) : nil
         let decoratedName: String?
        if let name = name, let metadata = metadata {
-            decoratedName = "[\(fileInfoDateText(metadata.modificationTime)) \(fileInfoSizeText(metadata.size))] \(name)"
+            let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(fileInfoSizeText(metadata.size))]"
+            let coloredDecoration = colors.isEnabled
+                ? "\u{001B}[32m\(decoration)\u{001B}[m"
+                : decoration
+            decoratedName = "\(coloredDecoration) \(name)"
        } else {
             decoratedName = name
         }
@@ -54,6 +58,10 @@ final class Output {
             if renderedTags.isEmpty {
                 record(value)
             } else {
+                if options.spaceIndent {
+                    record(value + "  " + renderedTags.joined(separator: ","))
+                    return
+                }
                 let padding = max(0, 31 - (value as NSString).length)
                 record(
                     value
@@ -143,10 +151,15 @@ final class Output {
    }
 
     private func fileInfoSizeText(_ bytes: Int64) -> String {
-        guard bytes > 0 else { return "0MB" }
-        let megabytes = Double(bytes) / 1_048_576.0
-        let rounded = Int(megabytes.rounded())
-        return rounded == 0 ? "~0MB" : "\(rounded)MB"
+        let value: String
+        if bytes == 0 {
+            value = "0MB"
+        } else {
+            let megabytes = Double(bytes) / 1_048_576.0
+            let rounded = Int(megabytes.rounded())
+            value = rounded == 0 ? "~0MB" : "\(rounded)MB"
+        }
+        return String(repeating: " ", count: max(0, 6 - value.count)) + value
     }
 
     private func fileInfoDateText(_ seconds: Double) -> String {

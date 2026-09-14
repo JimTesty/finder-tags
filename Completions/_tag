@@ -29,6 +29,7 @@ _arguments \
   '(-T --no-tags)'{-T,--no-tags}'[hide tags]' \
   '(-g --one-per-line)'{-g,--one-per-line}'[one tag per line]' \
   '(-G --comma-separated)'{-G,--comma-separated}'[comma-separated tags]' \
+  '--space-indent[use two spaces before tags]' \
   '(-p --slash)'{-p,--slash}'[append slash to directories]' \
   '(-0 --null)'{-0,--null}'[NUL-terminate records]' \
   '--absolute[absolute paths]' \

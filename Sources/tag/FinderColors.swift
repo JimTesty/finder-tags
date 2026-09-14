@@ -2,8 +2,10 @@ import Foundation
 
 struct FinderColors {
     private let ansiByName: [String: String]
+    let isEnabled: Bool
 
     init(enabled: Bool) {
+        isEnabled = enabled
         ansiByName = enabled ? FinderColors.load() : [:]
     }
 

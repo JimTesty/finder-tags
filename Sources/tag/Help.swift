@@ -61,6 +61,7 @@ func usage(code: Int32 = 0) -> Never {
       -T, --no-tags              Hide tags
       -g, --one-per-line         Display one tag per line
       -G, --comma-separated      Display comma-separated tags (default)
+          --space-indent         Use two spaces instead of tab before tags
           --garrulous            Alias for --one-per-line
           --no-garrulous         Alias for --comma-separated
       -p, --slash                Append '/' to directory names
