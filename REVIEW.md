@@ -107,7 +107,21 @@ Failure is intentionally non-fatal.
 The color lookup is case-insensitive and may not distinguish hypothetical
 case-distinct Finder tag definitions with different colors.
 
-### 12. Spotlight results can be stale
+### 12. Colored tags can visually spill across soft-wrapped lines
+
+The text renderer emits each colored tag as one ANSI-colored string and joins
+the tags into one output record. If a tag crosses the terminal's right margin,
+the terminal soft-wraps while its background color is still active, so the
+continuation line can appear colored through its trailing blank cells until
+the reset sequence is processed. This is a terminal presentation issue, not a
+missing reset or an embedded newline in the tag.
+
+There is currently no narrow-terminal TTY test for this behavior. A future fix
+would need width-aware rendering that accounts for the path prefix, tabs,
+separators, and Unicode display width, then closes/reopens the color around
+physical line breaks.
+
+### 13. Spotlight results can be stale
 
 `--find` uses `NSMetadataQuery`, so discovery depends on Spotlight indexing and
 can lag immediately after metadata changes. For each result, the program rereads
