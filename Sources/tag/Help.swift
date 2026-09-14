@@ -67,6 +67,7 @@ func usage(code: Int32 = 0) -> Never {
       -0, --null                 Terminate text records with NUL
           --nul                  Backward-compatible alias for --null
           --absolute             Display absolute logical paths
+          --file-info            Include file size and mtime in list/export output
           --jsonl                Emit one JSON object per line (NDJSON)
           --ndjson               Alias for --jsonl
           --tagged-only          List/export only items with at least one tag

@@ -32,6 +32,7 @@ _arguments \
   '(-p --slash)'{-p,--slash}'[append slash to directories]' \
   '(-0 --null)'{-0,--null}'[NUL-terminate records]' \
   '--absolute[absolute paths]' \
+  '--file-info[include file size and mtime]' \
   '--jsonl[JSON Lines output]' \
   '--ndjson[alias for --jsonl]' \
   '--stdin[read newline-delimited paths]' \

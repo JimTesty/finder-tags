@@ -151,6 +151,11 @@ Emit newline-delimited JSON. --ndjson is an alias.
 .TP
 .B --tagged-only
 List or export only items having at least one tag.
+.TP
+.B --file-info
+Include each listed or exported item's byte size and content modification time.
+JSONL uses numeric size and mtime fields; plaintext archives use @metadata
+records. Restore validates but ignores these fields.
 .SH PATH INPUT AND TRAVERSAL
 .TP
 .B --stdin

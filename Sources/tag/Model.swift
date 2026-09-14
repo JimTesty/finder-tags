@@ -33,6 +33,11 @@ enum ColorMode {
     case never
 }
 
+struct FileMetadata {
+    let size: Int64
+    let modificationTime: Double
+}
+
 struct Options {
     var operation: Operation = .list
     var operationWasSet = false
@@ -52,6 +57,7 @@ struct Options {
     var jsonLines = false
     var dryRun = false
     var taggedOnly = false
+    var fileInfo = false
     var archivePath: String? = nil
     var restoreRoot: String? = nil
     var backupEnabled = true

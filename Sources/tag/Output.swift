@@ -13,7 +13,11 @@ final class Output {
         self.colors = colors
     }
 
-    func emitFile(_ target: Target, tags storedTags: [String]) throws {
+    func emitFile(
+        _ target: Target,
+        tags storedTags: [String],
+        metadata: FileMetadata? = nil
+    ) throws {
         var tags = options.sortedTags ? sortedTagArray(storedTags) : storedTags
         if options.reverse { tags.reverse() }
 
@@ -21,22 +25,32 @@ final class Output {
             try emitJSONState(for: target)
             var object = pathObject(target)
             object["tags"] = tags
+            if let metadata = metadata {
+                object["size"] = metadata.size
+                object["mtime"] = metadata.modificationTime
+            }
             try jsonRecord(object)
             return
         }
 
         let renderedTags = options.showTags ? tags.map(colors.render) : []
         let name = options.showNames ? try displayPath(target) : nil
+        let decoratedName: String?
+       if let name = name, let metadata = metadata {
+            decoratedName = "[\(fileInfoSizeText(metadata.size)) \(fileInfoDateText(metadata.modificationTime))] \(name)"
+       } else {
+            decoratedName = name
+        }
 
         if options.oneTagPerLine {
-            if let value = name { record(value) }
+            if let value = decoratedName { record(value) }
             for tag in renderedTags {
-                record((name == nil ? "" : "    ") + tag)
+                record((decoratedName == nil ? "" : "    ") + tag)
             }
             return
         }
 
-        if let value = name {
+        if let value = decoratedName {
             if renderedTags.isEmpty {
                 record(value)
             } else {
@@ -124,8 +138,23 @@ final class Output {
         record("[dry-run] \(operation) \(target.displayPath)\t\(before) \(marker) \(after)")
     }
 
-    private func pathObject(_ target: Target) -> [String: Any] {
-        return ["path": target.displayPath]
+   private func pathObject(_ target: Target) -> [String: Any] {
+       return ["path": target.displayPath]
+   }
+
+    private func fileInfoSizeText(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "0MB" }
+        let megabytes = Double(bytes) / 1_048_576.0
+        let rounded = Int(megabytes.rounded())
+        return rounded == 0 ? "~0MB" : "\(rounded)MB"
+    }
+
+    private func fileInfoDateText(_ seconds: Double) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyyMMdd"
+        return formatter.string(from: Date(timeIntervalSince1970: seconds))
     }
 
     private func emitJSONState(for target: Target) throws {

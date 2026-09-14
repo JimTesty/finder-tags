@@ -155,6 +155,7 @@ func parseArguments() -> Options {
             case "jsonl", "ndjson": options.jsonLines = true
             case "dry-run", "dryrun": options.dryRun = true
             case "tagged-only": options.taggedOnly = true
+            case "file-info": options.fileInfo = true
             case "root": options.restoreRoot = operand()
             case "backup":
                 options.backupPath = operand()
@@ -243,6 +244,13 @@ func parseArguments() -> Options {
     case .add, .remove, .set, .move:
         if options.paths.isEmpty {
             fail("this operation requires at least one explicit path")
+        }
+    }
+
+    if options.fileInfo {
+        switch options.operation {
+        case .list, .export: break
+        default: fail("--file-info is only valid with --list or --export")
         }
     }
 

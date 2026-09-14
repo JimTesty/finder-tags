@@ -214,7 +214,10 @@ final class App {
                 case .list:
                     let tags = try store.read(target.url)
                     if !options.taggedOnly || !tags.isEmpty {
-                        try output.emitFile(target, tags: tags)
+                        let metadata = options.fileInfo
+                            ? try fileMetadata(for: target.url)
+                            : nil
+                        try output.emitFile(target, tags: tags, metadata: metadata)
                     }
 
                 case .match(let query):

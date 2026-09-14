@@ -129,6 +129,15 @@ before parsing. This validation prevents malformed or lexically escaping input
 from being discovered halfway through a restore; it does not make filesystem
 changes transactional if a later metadata write fails.
 
+`--file-info` adds each tagged item's byte size and content modification time
+(`mtime`, as Unix seconds) to list and export output. JSONL stores them as
+`size` and `mtime`; plaintext archives use `@metadata` records. Restore
+validates these fields but ignores them, so they are available for later
+change-detection tooling without affecting tag restoration.
+Human-readable `--file-info` listings render metadata as `[SIZE DATE]`: SIZE is
+rounded binary megabytes (`~0MB` means a nonempty file below 0.5 MiB), and
+DATE is `yyyyMMdd`. JSONL and the archive retain exact numeric values.
+
 Symlinks are followed by default. If a symlink resolves to a different target
 than the one recorded during export, restore warns once to stderr and follows
 the current target. `--no-follow-symlinks` retains the general defensive mode.
@@ -339,6 +348,9 @@ Example:
 {"type":"root","path":"/tmp/tree"}
 {"path":"file","tags":["First","Second"]}
 ```
+
+With `--file-info`, file records also contain numeric `size` and `mtime`
+fields.
 
 For `--usage`, records contain `tag` and `count`. Mutations emit before/after
 records after a successful write; dry runs emit the same shape with

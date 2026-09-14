@@ -32,6 +32,7 @@ ln -s .. "$work/tree/real/back-to-tree"
 "$bin" --help | grep -q -- '--export'
 "$bin" --help | grep -q -- '--restore ARCHIVE'
 "$bin" --help | grep -q -- '--tagged-only'
+"$bin" --help | grep -q -- '--file-info'
 "$bin" --help | grep -q -- '--no-backup'
 [ "$("$bin" --version)" = "tag 8.0" ]
 
@@ -99,6 +100,12 @@ printf '%s\n' "$stdin_nul" | grep -Fxq "$work/space name"
 [ "$("$bin" --match '' "$work/a")" = "$work/a" ]
 "$bin" --jsonl "$work/a" | grep -q '"tags"'
 "$bin" --ndjson "$work/a" | grep -q '"path"'
+file_info_json=$("$bin" --file-info --jsonl "$work/a")
+printf '%s\n' "$file_info_json" | grep -q '"size"'
+printf '%s\n' "$file_info_json" | grep -q '"mtime"'
+file_info_text=$("$bin" --file-info "$work/a")
+printf '%s\n' "$file_info_text" | grep -q '\['
+printf '%s\n' "$file_info_text" | grep -Eq '\[[^]]*MB [0-9]{8}\]'
 
 quoted=$("$bin" --set '"Orange","Project, Alpha","Needs review"' --dry-run --jsonl "$work/a")
 printf '%s\n' "$quoted" | grep -Fq '"after":["Orange","Project, Alpha","Needs review"]'
@@ -317,6 +324,13 @@ if [ "$(uname -s)" = Darwin ]; then
     grep -Fq '"Project, Alpha"' "$export_archive"
     grep -Fq '@symlink' "$export_archive"
     grep -q 'exported 4 tagged items' "$work/export.err"
+
+    metadata_archive="$work/export-metadata.archive"
+    "$bin" --export --file-info "$export_root" >"$metadata_archive" 2>"$work/export-metadata.err"
+    grep -q '^@metadata ' "$metadata_archive"
+    grep -q 'exported 4 tagged items' "$work/export-metadata.err"
+    "$bin" --restore "$metadata_archive" --root "$restore_root" --dry-run --no-backup \
+        >"$work/metadata-restore.out" 2>"$work/metadata-restore.err"
 
     restore_dry_output="$work/restore-dry.out"
     restore_dry_error="$work/restore-dry.err"

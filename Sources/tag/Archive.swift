@@ -8,6 +8,7 @@ import Glibc
 struct ArchiveEntry {
     let path: String
     let tags: [String]
+    let metadata: FileMetadata?
 }
 
 struct ArchiveSymlink {
@@ -42,6 +43,7 @@ enum ArchiveError: LocalizedError {
     case duplicatePath(String)
     case duplicateSymlink(String)
     case invalidTags(String)
+    case invalidMetadata(String)
     case unsupportedRecord(String)
 
     var errorDescription: String? {
@@ -62,6 +64,8 @@ enum ArchiveError: LocalizedError {
             return "duplicate archive symlink: \(path)"
         case let .invalidTags(value):
             return "invalid archive tag list: \(value)"
+        case let .invalidMetadata(value):
+            return "invalid archive file metadata: \(value)"
         case let .unsupportedRecord(type):
             return "unsupported archive record type: \(type)"
         }
@@ -74,6 +78,7 @@ private struct ArchiveBuilder {
     var symlinks: [ArchiveSymlink] = []
     var entryIndexes: [String: Int] = [:]
     var symlinkIndexes: [String: Int] = [:]
+    var metadataByPath: [String: FileMetadata] = [:]
 
     mutating func setRoot(_ rawPath: String) throws {
         guard rawPath.hasPrefix("/"), !rawPath.unicodeScalars.contains("\0") else {
@@ -84,7 +89,18 @@ private struct ArchiveBuilder {
         rootPath = path
     }
 
-    mutating func addEntry(path: String, tags: [String]) throws {
+    mutating func addMetadata(path: String, metadata: FileMetadata) throws {
+        try validateRelativeArchivePath(path)
+        guard metadata.size >= 0, metadata.modificationTime.isFinite else {
+            throw ArchiveError.invalidMetadata(path)
+        }
+        guard metadataByPath[path] == nil else {
+            throw ArchiveError.invalidMetadata("duplicate metadata for \(path)")
+        }
+        metadataByPath[path] = metadata
+    }
+
+    mutating func addEntry(path: String, tags: [String], metadata: FileMetadata? = nil) throws {
         try validateRelativeArchivePath(path)
         for tag in tags {
             if tag.isEmpty || tag.contains("\n") || tag.contains("\r") || tag.unicodeScalars.contains("\0") {
@@ -96,7 +112,11 @@ private struct ArchiveBuilder {
             throw ArchiveError.duplicatePath(path)
         }
         entryIndexes[path] = entries.count
-        entries.append(ArchiveEntry(path: path, tags: tags))
+        entries.append(ArchiveEntry(
+            path: path,
+            tags: tags,
+            metadata: metadata ?? metadataByPath.removeValue(forKey: path)
+        ))
     }
 
     mutating func addSymlink(path: String, resolvedPath: String) throws {
@@ -183,7 +203,11 @@ struct ArchiveReader {
                 }
                 try builder.addSymlink(path: path, resolvedPath: resolvedPath)
                 if let tags = object["tags"] {
-                    try builder.addEntry(path: path, tags: try jsonTags(tags, line: lineNumber))
+                    try builder.addEntry(
+                        path: path,
+                        tags: try jsonTags(tags, line: lineNumber),
+                        metadata: try jsonMetadata(object, line: lineNumber)
+                    )
                 }
                 continue
             }
@@ -196,7 +220,11 @@ struct ArchiveReader {
             else {
                 throw ArchiveError.invalidLine(line: lineNumber, message: "file record needs string path and tags array")
             }
-            try builder.addEntry(path: path, tags: try jsonTags(rawTags, line: lineNumber))
+            try builder.addEntry(
+                path: path,
+                tags: try jsonTags(rawTags, line: lineNumber),
+                metadata: try jsonMetadata(object, line: lineNumber)
+            )
         }
 
         return try builder.document()
@@ -214,6 +242,19 @@ struct ArchiveReader {
             result.append(tag)
         }
         return result
+    }
+
+    private func jsonMetadata(_ object: [String: Any], line: Int) throws -> FileMetadata? {
+        guard object["size"] != nil || object["mtime"] != nil else { return nil }
+        guard let size = object["size"] as? NSNumber,
+              let mtime = object["mtime"] as? NSNumber else {
+            throw ArchiveError.invalidLine(line: line, message: "size and mtime must be numbers")
+        }
+        let metadata = FileMetadata(size: size.int64Value, modificationTime: mtime.doubleValue)
+        guard metadata.size >= 0, metadata.modificationTime.isFinite else {
+            throw ArchiveError.invalidLine(line: line, message: "invalid size or mtime")
+        }
+        return metadata
     }
 
     private func readPlaintext(_ text: String) throws -> ArchiveDocument {
@@ -261,6 +302,21 @@ struct ArchiveReader {
                 } catch {
                     throw ArchiveError.invalidLine(line: lineNumber, message: error.localizedDescription)
                 }
+                continue
+            }
+
+            if line == "@metadata" || line.hasPrefix("@metadata ") || line.hasPrefix("@metadata\t") {
+                let rest = String(line.dropFirst(9)).trimmingCharacters(in: .whitespaces)
+                let fields = rest.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+                guard fields.count == 3,
+                      let size = Int64(fields[1]),
+                      let mtime = Double(fields[2]) else {
+                    throw ArchiveError.invalidLine(line: lineNumber, message: "@metadata needs path, size, and mtime")
+                }
+                try builder.addMetadata(
+                    path: parseArchiveField(fields[0]),
+                    metadata: FileMetadata(size: size, modificationTime: mtime)
+                )
                 continue
             }
 
@@ -334,9 +390,18 @@ final class ArchiveWriter {
 
         guard !tags.isEmpty else { return }
         stats.tagged += 1
+        let metadata = options.fileInfo ? try fileMetadata(for: target.url) : nil
         if options.jsonLines {
-            try writeJSON(["path": path, "tags": tags])
+            var object: [String: Any] = ["path": path, "tags": tags]
+            if let metadata = metadata {
+                object["size"] = metadata.size
+                object["mtime"] = metadata.modificationTime
+            }
+            try writeJSON(object)
         } else {
+            if let metadata = metadata {
+                writeText("@metadata \(archiveQuote(path))\t\(metadata.size)\t\(metadata.modificationTime)")
+            }
             let renderedTags = tags.map(colors.render).map(archiveQuote).joined(separator: ", ")
             writeText("\(archiveQuote(path))\t\(renderedTags)")
         }
