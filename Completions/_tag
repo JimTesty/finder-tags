@@ -1,0 +1,44 @@
+#compdef tag
+
+_arguments \
+  '(-l --list)'{-l,--list}'[list tags]' \
+  '(-a --add)'{-a,--add}'[add tags]:tags:' \
+  '--append[add tags at end]:tags:' \
+  '--prepend[add tags at beginning]:tags:' \
+  '(-r --remove)'{-r,--remove}'[remove tags]:tags:' \
+  '(-s --set)'{-s,--set}'[replace tags]:tags:' \
+  '--copy[copy ordered tags]:source:_files:destination:_files' \
+  '(-m --match)'{-m,--match}'[match tags]:tags:' \
+  '(-u --usage)'{-u,--usage}'[count usage]:tags:' \
+  '(-f --find)'{-f,--find}'[Spotlight find]:tags:' \
+  '--move[move tag]:tag::position:' \
+  '--at[insertion position]:position:' \
+  '--before[place before tag]:tag:' \
+  '--after[place after tag]:tag:' \
+  '--sorted-tags[sort tag output/final mutations]' \
+  '--sort-tags[alias for --sorted-tags]' \
+  '(-V --reverse)'{-V,--reverse}'[reverse display order]' \
+  '(-C --case-sensitive)'{-C,--case-sensitive}'[case-sensitive matching]' \
+  '(-c --color)'{-c,--color}'[color tags]' \
+  '(-n --filename)'{-n,--filename}'[show filenames]' \
+  '(-N --no-filename)'{-N,--no-filename}'[hide filenames]' \
+  '(-t --tags)'{-t,--tags}'[show tags]' \
+  '(-T --no-tags)'{-T,--no-tags}'[hide tags]' \
+  '(-g --one-per-line)'{-g,--one-per-line}'[one tag per line]' \
+  '(-G --comma-separated)'{-G,--comma-separated}'[comma-separated tags]' \
+  '(-p --slash)'{-p,--slash}'[append slash to directories]' \
+  '(-0 --null)'{-0,--null}'[NUL-terminate records]' \
+  '--absolute[absolute paths]' \
+  '--jsonl[JSON Lines output]' \
+  '--ndjson[alias for --jsonl]' \
+  '--stdin[read newline-delimited paths]' \
+  '--stdin0[read NUL-delimited paths]' \
+  '(-A --all)'{-A,--all}'[include hidden files]' \
+  '(-e --enter)'{-e,--enter}'[enter directories]' \
+  '(-R -d --recursive)'{-R,-d,--recursive}'[recursive]' \
+  '--no-follow-symlinks[do not recurse through symlinked directories]' \
+  '--follow-symlinks[follow symlinks (default)]' \
+  '--dry-run[preview mutations]' \
+  '(-h --help)'{-h,--help}'[help]' \
+  '(-v --version)'{-v,--version}'[version]' \
+  '*:path:_files'

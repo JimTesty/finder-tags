@@ -5,16 +5,18 @@ func usage(code: Int32 = 0) -> Never {
     \(programName) - manipulate macOS Finder tags while preserving tag order
 
     finder-tags executable: tag
-    Usage-compatible with the non-Spotlight parts of jdberry/tag where noted.
+    Usage-compatible with jdberry/tag where noted.
 
     usage:
       \(programName) [-l | --list] [options] [path ...]
-      \(programName) -a | --add TAGS [--at POSITION] [options] path ...
+      \(programName) -a | --add TAGS [placement] [options] path ...
       \(programName) -r | --remove TAGS [options] path ...
       \(programName) -s | --set TAGS [options] path ...
       \(programName) -m | --match TAGS [options] [path ...]
       \(programName) -u | --usage TAGS [options] [path ...]
+      \(programName) -f | --find TAGS [options] [path ...]
       \(programName) --move TAG POSITION [options] path ...
+      \(programName) --move TAG --before|--after TAG [options] path ...
       \(programName) --copy SOURCE DESTINATION [--dry-run]
 
     TAGS uses a CSV-like comma-separated grammar. Shell quoting still works as
@@ -31,13 +33,16 @@ func usage(code: Int32 = 0) -> Never {
           --copy SRC DST         Replace DST's tags with SRC's ordered tags
       -m, --match TAGS           List traversed files matching all TAGS
       -u, --usage TAGS           Count tags on traversed files matching TAGS
+      -f, --find TAGS            Spotlight search for files matching TAGS
           --move TAG POSITION    Move one existing tag to POSITION
 
     ordering/editing:
-          --at POSITION          Where --add inserts new tags (default: last)
-                                POSITION is a zero-based index or one of:
+          --at POSITION          Placement for --add/--move; zero-based index or
                                 first/left/bottom, last/right/top
-                                (Finder draws the last/rightmost tag on top.)
+          --before TAG           Place added/moved tag(s) before TAG
+          --after TAG            Place added/moved tag(s) after TAG
+          --sorted-tags          Sort displayed tags; mutating operations also
+                                store their resulting tag arrays sorted
       -V, --reverse              Reverse display order only; do not rewrite
       -C, --case-sensitive       Make tag matching case-sensitive
                                 (default matching is case-insensitive)
@@ -56,17 +61,24 @@ func usage(code: Int32 = 0) -> Never {
       -p, --slash                Append '/' to directory names
       -0, --null                 Terminate text records with NUL
           --nul                  Backward-compatible alias for --null
+          --absolute             Display absolute logical paths
           --jsonl                Emit one JSON object per line (NDJSON)
           --ndjson               Alias for --jsonl
+
+    path input / enumeration:
+          --stdin                Read additional newline-delimited paths on stdin
+          --stdin0               Read additional NUL-delimited paths on stdin
+          --files-from-stdin     Alias for --stdin
+          --files0-from-stdin    Alias for --stdin0
+      -A, --all                  Include hidden files while enumerating
+      -e, --enter                Enumerate contents of explicit directories
+      -R, -d, --recursive        Recursively enumerate directories
+          --no-follow-symlinks   Do not resolve/follow symlinked directories
+          --follow-symlinks      Restore the default follow behavior
 
     mutation safety:
           --dry-run              Show intended changes without writing
           --dryrun               Alias for --dry-run
-
-    enumeration:
-      -A, --all                  Include hidden files while enumerating
-      -e, --enter                Enumerate contents of explicit directories
-      -R, -d, --recursive        Recursively enumerate directories
 
     other:
       -h, --help                 Show this help
@@ -77,27 +89,37 @@ func usage(code: Int32 = 0) -> Never {
     existing red,orange,yellow re-cases the unique match in place to
     red,Orange,yellow. Use --case-sensitive to append a distinct Orange instead.
 
-    '*' means any tag for --match/--usage and all tags for --remove. An empty
-    TAGS expression matches files with no tags. --usage requires TAGS; use '*'
-    to count tags on all tagged files in the traversal scope.
+    '*' means any tag for --match/--usage/--find and all tags for --remove. An
+    empty TAGS expression matches files with no tags. --usage requires TAGS.
 
-    Symbolic links are followed deliberately: Finder shows the target's tags and
-    does not meaningfully tag the symlink itself. Recursive traversal follows
-    symlinked directories while suppressing directory cycles.
+    Placement names map to Finder's visual stack: first/left/bottom = index 0,
+    last/right/top = the end, because Finder draws the last/rightmost color on
+    top. --before/--after use the same case-matching rules as other operations.
+
+    --sorted-tags is opt-in. Read-only commands only sort their output; they do
+    not rewrite metadata. Mutating commands sort the final stored array after
+    applying the requested edit. Default behavior always preserves tag order.
+
+    Symbolic links are followed by default. --no-follow-symlinks prevents
+    recursive traversal through symlinked directories and avoids explicitly
+    resolving symlink paths before Foundation tag I/O.
 
     Defaults match jdberry/tag where practical: list shows filename+tags;
-    match shows filenames only. With no paths, list/match/usage enumerate the
-    current directory. Mutating operations require explicit paths.
+    match/find show filenames only. With no paths, list/match/usage enumerate the
+    current directory; find uses Spotlight's default search scope. Mutating
+    operations require explicit paths.
 
     Important differences from jdberry/tag:
-      * Stored tag order is preserved; tags are never sorted for display.
+      * Stored tag order is preserved by default. --sorted-tags opts into sorted
+        display/results and sorted mutation output.
       * --usage traverses paths directly; it does NOT use Spotlight.
       * --usage requires TAGS instead of making it optional.
-      * --find and --home/--local/--network are not implemented.
-      * --copy, --move, --at, --prepend/--append, --reverse,
-        --case-sensitive, --jsonl, and --dry-run are additions.
+      * --home/--local/--network are not implemented for --find.
+      * --copy, --move, placement controls, --reverse, --case-sensitive,
+        --sorted-tags, --absolute, stdin path input, --jsonl, and --dry-run are
+        additions.
       * Quoted TAGS can contain commas; jdberry/tag's grammar cannot.
-      * Symlinked targets/directories are followed intentionally.
+      * Symlinked targets/directories are followed intentionally by default.
 
     Use -- before a path beginning with '-'.
     """
@@ -117,6 +139,13 @@ private func setOperation(_ operation: Operation, options: inout Options) {
     }
     options.operation = operation
     options.operationWasSet = true
+}
+
+private func setPosition(_ position: PositionSpec, options: inout Options, option: String) {
+    if options.position != nil {
+        fail("placement may be specified only once (conflict at \(option))")
+    }
+    options.position = position
 }
 
 private func requireValue(_ option: String, args: [String], index: inout Int) -> String {
@@ -157,7 +186,9 @@ func parseArguments() -> Options {
         let arg = args[i]
 
         if arg == "--" {
-            options.paths.append(contentsOf: args.dropFirst(i + 1))
+            let rest = Array(args.dropFirst(i + 1))
+            if !rest.isEmpty { options.pathInputExplicit = true }
+            options.paths.append(contentsOf: rest)
             break
         }
 
@@ -177,11 +208,14 @@ func parseArguments() -> Options {
             case "list":
                 if inlineValue != nil { fail("--list does not take an argument") }
                 setOperation(.list, options: &options)
-            case "add", "append":
+            case "add":
                 setOperation(.add(parseTagList(operand())), options: &options)
+            case "append":
+                setOperation(.add(parseTagList(operand())), options: &options)
+                setPosition(.last, options: &options, option: "--append")
             case "prepend":
                 setOperation(.add(parseTagList(operand())), options: &options)
-                options.addPosition = .first
+                setPosition(.first, options: &options, option: "--prepend")
             case "remove":
                 setOperation(.remove(parseTagList(operand())), options: &options)
             case "set":
@@ -190,6 +224,8 @@ func parseArguments() -> Options {
                 setOperation(.match(parseTagList(operand())), options: &options)
             case "usage":
                 setOperation(.usage(parseTagList(operand())), options: &options)
+            case "find":
+                setOperation(.find(parseTagList(operand())), options: &options)
             case "copy":
                 if inlineValue != nil {
                     fail("--copy does not take '=...'; use --copy SOURCE DESTINATION")
@@ -200,10 +236,18 @@ func parseArguments() -> Options {
                     fail("--move does not take '=...'; use --move TAG POSITION")
                 }
                 let tag = requireValue("--move", args: args, index: &i)
-                let position = requireValue("--move", args: args, index: &i)
-                setOperation(.move(tag, parsePosition(position)), options: &options)
+                var position: PositionSpec? = nil
+                if i + 1 < args.count && !args[i + 1].hasPrefix("-") {
+                    position = parsePosition(requireValue("--move", args: args, index: &i))
+                }
+                setOperation(.move(tag, position), options: &options)
             case "at":
-                options.addPosition = parsePosition(operand())
+                setPosition(parsePosition(operand()), options: &options, option: "--at")
+            case "before":
+                setPosition(.before(operand()), options: &options, option: "--before")
+            case "after":
+                setPosition(.after(operand()), options: &options, option: "--after")
+            case "sorted-tags", "sort-tags": options.sortedTags = true
             case "color": options.color = true
             case "reverse": options.reverse = true
             case "case-sensitive": options.caseSensitive = true
@@ -218,8 +262,19 @@ func parseArguments() -> Options {
             case "recursive", "descend": options.recursive = true
             case "slash": options.slashDirectories = true
             case "null", "nul": options.nulTerminate = true
+            case "absolute": options.absolutePaths = true
             case "jsonl", "ndjson": options.jsonLines = true
             case "dry-run", "dryrun": options.dryRun = true
+            case "no-follow-symlinks": options.followSymlinks = false
+            case "follow-symlinks": options.followSymlinks = true
+            case "stdin", "files-from-stdin":
+                if options.stdinPathMode != nil { fail("stdin path mode may be specified only once") }
+                options.stdinPathMode = .lines
+                options.pathInputExplicit = true
+            case "stdin0", "files0-from-stdin":
+                if options.stdinPathMode != nil { fail("stdin path mode may be specified only once") }
+                options.stdinPathMode = .nul
+                options.pathInputExplicit = true
             case "help": usage()
             case "version": version()
             default: fail("unknown option: --\(name)")
@@ -236,7 +291,7 @@ func parseArguments() -> Options {
             while j < chars.count {
                 let ch = chars[j]
 
-                if ch == "a" || ch == "r" || ch == "s" || ch == "m" || ch == "u" {
+                if ch == "a" || ch == "r" || ch == "s" || ch == "m" || ch == "u" || ch == "f" {
                     let remainder = String(chars.dropFirst(j + 1))
                     let raw = remainder.isEmpty
                         ? requireValue("-\(ch)", args: args, index: &i)
@@ -248,7 +303,8 @@ func parseArguments() -> Options {
                     case "r": setOperation(.remove(tags), options: &options)
                     case "s": setOperation(.set(tags), options: &options)
                     case "m": setOperation(.match(tags), options: &options)
-                    default: setOperation(.usage(tags), options: &options)
+                    case "u": setOperation(.usage(tags), options: &options)
+                    default: setOperation(.find(tags), options: &options)
                     }
                     break
                 }
@@ -262,11 +318,16 @@ func parseArguments() -> Options {
         }
 
         options.paths.append(arg)
+        options.pathInputExplicit = true
         i += 1
     }
 
+    if let mode = options.stdinPathMode {
+        options.paths.append(contentsOf: readPathsFromStdin(mode))
+    }
+
     switch options.operation {
-    case .list, .match, .usage:
+    case .list, .match, .usage, .find:
         break
     case .copy:
         if options.paths.count != 2 {
@@ -278,11 +339,19 @@ func parseArguments() -> Options {
         }
     }
 
-    if options.addPosition != nil {
-        if case .add = options.operation {
-            // valid
-        } else {
-            fail("--at is only valid with --add")
+    switch options.operation {
+    case .add:
+        break
+    case .move(_, let explicitPosition):
+        if explicitPosition != nil && options.position != nil {
+            fail("--move POSITION cannot be combined with --at/--before/--after")
+        }
+        if explicitPosition == nil && options.position == nil {
+            fail("--move requires POSITION or --at/--before/--after")
+        }
+    default:
+        if options.position != nil {
+            fail("--at/--before/--after are only valid with --add or --move")
         }
     }
 

@@ -10,14 +10,13 @@ final class Output {
     }
 
     func emitFile(_ target: Target, tags storedTags: [String]) throws {
-        var tags = storedTags
+        var tags = options.sortedTags ? sortedTagArray(storedTags) : storedTags
         if options.reverse { tags.reverse() }
 
         if options.jsonLines {
-            try jsonRecord([
-                "path": target.displayPath,
-                "tags": tags
-            ])
+            var object = pathObject(target)
+            object["tags"] = tags
+            try jsonRecord(object)
             return
         }
 
@@ -63,19 +62,21 @@ final class Output {
         operation: String,
         target: Target,
         change: TagChange,
-        sourcePath: String? = nil,
+        source: Target? = nil,
         dryRun: Bool
     ) throws {
         if options.jsonLines {
-            var object: [String: Any] = [
-                "operation": operation,
-                "path": target.displayPath,
-                "before": change.before,
-                "after": change.after,
-                "changed": change.before != change.after,
-                "dryRun": dryRun
-            ]
-            if let source = sourcePath { object["source"] = source }
+            var object = pathObject(target)
+            object["operation"] = operation
+            object["before"] = change.before
+            object["after"] = change.after
+            object["changed"] = change.before != change.after
+            object["dryRun"] = dryRun
+            if let source = source {
+                object["source"] = source.displayPath
+                object["sourceAbsolutePath"] = source.absolutePath
+                object["sourceResolvedPath"] = source.resolvedPath
+            }
             try jsonRecord(object)
             return
         }
@@ -92,6 +93,16 @@ final class Output {
 
     func finish() throws {
         // JSONL is streamed one object at a time; there is nothing to flush.
+    }
+
+    private func pathObject(_ target: Target) -> [String: Any] {
+        var object: [String: Any] = [
+            "path": target.displayPath,
+            "absolutePath": target.absolutePath,
+            "resolvedPath": target.resolvedPath
+        ]
+        if let root = target.rootPath { object["root"] = root }
+        return object
     }
 
     private func displayPath(_ target: Target) throws -> String {

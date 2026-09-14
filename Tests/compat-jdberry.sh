@@ -147,6 +147,34 @@ else
     failures=$((failures + 1))
 fi
 
+# Opt-in sorted display should reproduce jdberry/tag's normal display order
+# without changing finder-tags' default stored order.
+(cd "$left" && "$ours" --sorted-tags -N a) >"$work/sorted-ours"
+(cd "$right" && "$ref" -N a) >"$work/sorted-ref"
+if cmp -s "$work/sorted-ours" "$work/sorted-ref"; then
+    echo "PASS  --sorted-tags display matches jdberry/tag"
+    pass=$((pass + 1))
+else
+    echo "FAIL  --sorted-tags display differs from jdberry/tag"
+    diff -u "$work/sorted-ref" "$work/sorted-ours" || true
+    failures=$((failures + 1))
+fi
+
+# Sorted mutation result should also display compatibly afterward.
+(cd "$left" && "$ours" --set 'B,A' --sorted-tags empty)
+(cd "$right" && "$ref" --set 'B,A' empty)
+lo="$work/sorted-mutation-ours"; ro="$work/sorted-mutation-ref"
+(cd "$left" && "$ours" -N empty) >"$lo"
+(cd "$right" && "$ref" -N empty) >"$ro"
+if cmp -s "$lo" "$ro"; then
+    echo "PASS  sorted mutation display matches jdberry/tag"
+    pass=$((pass + 1))
+else
+    echo "FAIL  sorted mutation display differs from jdberry/tag"
+    diff -u "$ro" "$lo" || true
+    failures=$((failures + 1))
+fi
+
 # --usage is intentionally not a strict compatibility test: jdberry/tag uses
 # Spotlight and finder-tags directly traverses the supplied scope. Fresh test
 # files may not be indexed by Spotlight yet. Run both and show normalized data.
@@ -157,9 +185,20 @@ echo "  finder-tags:"; sed 's/^/    /' "$work/usage-ours"
 echo "  jdberry/tag:"; sed 's/^/    /' "$work/usage-ref"
 soft=$((soft + 1))
 
+# --find is also Spotlight-backed in both programs, but fresh fixture indexing
+# can lag. Exercise both implementations without making timing a strict test.
+echo "INFO  --find sample outputs (fresh Spotlight indexing may differ):"
+(cd "$left" && "$ours" --find Red .) >"$work/find-ours" 2>"$work/find-ours.err" || true
+(cd "$right" && "$ref" --find Red .) >"$work/find-ref" 2>"$work/find-ref.err" || true
+echo "  finder-tags:"; sed 's/^/    /' "$work/find-ours"
+echo "  jdberry/tag:"; sed 's/^/    /' "$work/find-ref"
+soft=$((soft + 1))
+
 # Upstream does not understand the new quoted-comma grammar, --case-sensitive,
-# --copy, --move/--at, --reverse, --jsonl, or --dry-run; those are covered by
-# Tests/cli.sh rather than differential tests.
+# --copy, ordered placement/move controls, --reverse, --absolute, stdin path
+# input, --jsonl, --no-follow-symlinks, or --dry-run; those are covered by
+# Tests/cli.sh rather than differential tests. --find is also not strict here
+# because fresh fixtures may not be indexed yet.
 
 echo
 echo "$pass strict compatibility checks passed; $soft informational difference(s); $failures failure(s)."

@@ -4,6 +4,7 @@ enum TagStoreError: LocalizedError {
     case verificationFailed(path: String, expected: [String], actual: [String])
     case ambiguousCaseMatch(tag: String, matches: [String])
     case tagNotFound(tag: String)
+    case anchorNotFound(tag: String)
     case invalidIndex(value: Int, count: Int)
 
     var errorDescription: String? {
@@ -14,6 +15,8 @@ enum TagStoreError: LocalizedError {
             return "case-insensitive tag '\(tag)' is ambiguous among \(matches); use --case-sensitive or exact casing"
         case let .tagNotFound(tag):
             return "tag not found: \(tag)"
+        case let .anchorNotFound(tag):
+            return "placement anchor tag not found: \(tag)"
         case let .invalidIndex(value, count):
             return "index \(value) is out of range; valid insertion indexes are 0...\(count)"
         }
@@ -89,7 +92,11 @@ struct TagStore {
         }
 
         if !missing.isEmpty {
-            let insertion = try (position ?? .last).insertionIndex(count: revised.count)
+            let insertion = try insertionIndex(
+                for: position ?? .last,
+                in: revised,
+                caseSensitive: caseSensitive
+            )
             revised.insert(contentsOf: missing, at: insertion)
         }
         return TagChange(before: existing, after: revised)
@@ -129,29 +136,20 @@ struct TagStore {
         caseSensitive: Bool
     ) throws -> TagChange {
         let existing = try read(url)
-        let matches: [Int]
-
-        if caseSensitive {
-            matches = existing.indices.filter { existing[$0] == tag }
-        } else {
-            let exact = existing.indices.filter { existing[$0] == tag }
-            if exact.count == 1 {
-                matches = exact
-            } else if exact.count > 1 {
-                throw TagStoreError.ambiguousCaseMatch(tag: tag, matches: exact.map { existing[$0] })
-            } else {
-                matches = existing.indices.filter { foldedTag(existing[$0]) == foldedTag(tag) }
-            }
-        }
-
-        if matches.isEmpty { throw TagStoreError.tagNotFound(tag: tag) }
-        if matches.count > 1 {
-            throw TagStoreError.ambiguousCaseMatch(tag: tag, matches: matches.map { existing[$0] })
-        }
+        let index = try uniqueMatchingIndex(
+            tag: tag,
+            in: existing,
+            caseSensitive: caseSensitive,
+            missingAsAnchor: false
+        )
 
         var revised = existing
-        let moved = revised.remove(at: matches[0])
-        let insertion = try position.insertionIndex(count: revised.count)
+        let moved = revised.remove(at: index)
+        let insertion = try insertionIndex(
+            for: position,
+            in: revised,
+            caseSensitive: caseSensitive
+        )
         revised.insert(moved, at: insertion)
         return TagChange(before: existing, after: revised)
     }
@@ -167,5 +165,68 @@ struct TagStore {
         if change.before != change.after {
             try write(change.after, to: url)
         }
+    }
+
+    private func insertionIndex(
+        for position: PositionSpec,
+        in tags: [String],
+        caseSensitive: Bool
+    ) throws -> Int {
+        switch position {
+        case .first:
+            return 0
+        case .last:
+            return tags.count
+        case .index(let value):
+            if value < 0 || value > tags.count {
+                throw TagStoreError.invalidIndex(value: value, count: tags.count)
+            }
+            return value
+        case .before(let anchor):
+            return try uniqueMatchingIndex(
+                tag: anchor,
+                in: tags,
+                caseSensitive: caseSensitive,
+                missingAsAnchor: true
+            )
+        case .after(let anchor):
+            return try uniqueMatchingIndex(
+                tag: anchor,
+                in: tags,
+                caseSensitive: caseSensitive,
+                missingAsAnchor: true
+            ) + 1
+        }
+    }
+
+    private func uniqueMatchingIndex(
+        tag: String,
+        in tags: [String],
+        caseSensitive: Bool,
+        missingAsAnchor: Bool
+    ) throws -> Int {
+        let matches: [Int]
+
+        if caseSensitive {
+            matches = tags.indices.filter { tags[$0] == tag }
+        } else {
+            let exact = tags.indices.filter { tags[$0] == tag }
+            if exact.count == 1 {
+                matches = exact
+            } else if exact.count > 1 {
+                throw TagStoreError.ambiguousCaseMatch(tag: tag, matches: exact.map { tags[$0] })
+            } else {
+                matches = tags.indices.filter { foldedTag(tags[$0]) == foldedTag(tag) }
+            }
+        }
+
+        if matches.isEmpty {
+            if missingAsAnchor { throw TagStoreError.anchorNotFound(tag: tag) }
+            throw TagStoreError.tagNotFound(tag: tag)
+        }
+        if matches.count > 1 {
+            throw TagStoreError.ambiguousCaseMatch(tag: tag, matches: matches.map { tags[$0] })
+        }
+        return matches[0]
     }
 }

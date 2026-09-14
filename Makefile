@@ -29,6 +29,14 @@ compat: build
 install: build
 	install -d "$(PREFIX)/bin"
 	install -m 755 "$(BINARY)" "$(PREFIX)/bin/tag"
+	install -d "$(PREFIX)/share/man/man1"
+	install -m 644 Docs/tag.1 "$(PREFIX)/share/man/man1/tag.1"
+	install -d "$(PREFIX)/share/bash-completion/completions"
+	install -m 644 Completions/tag.bash "$(PREFIX)/share/bash-completion/completions/tag"
+	install -d "$(PREFIX)/share/zsh/site-functions"
+	install -m 644 Completions/_tag "$(PREFIX)/share/zsh/site-functions/_tag"
+	install -d "$(PREFIX)/share/fish/vendor_completions.d"
+	install -m 644 Completions/tag.fish "$(PREFIX)/share/fish/vendor_completions.d/tag.fish"
 
 clean:
 	rm -rf "$(BUILD_DIR)"

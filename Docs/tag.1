@@ -1,0 +1,172 @@
+.TH TAG 1 "September 2026" "finder-tags 6.0" "User Commands"
+.SH NAME
+tag \- manipulate macOS Finder tags while preserving tag order
+.SH SYNOPSIS
+.B tag
+.RI [ options ]
+.RI [ path ...]
+.br
+.B tag --add
+.I TAGS
+.RI [ placement ]
+.I path ...
+.br
+.B tag --remove
+.I TAGS path ...
+.br
+.B tag --set
+.I TAGS path ...
+.br
+.B tag --match
+.I TAGS
+.RI [ path ...]
+.br
+.B tag --usage
+.I TAGS
+.RI [ path ...]
+.br
+.B tag --find
+.I TAGS
+.RI [ path ...]
+.br
+.B tag --copy
+.I SOURCE DESTINATION
+.br
+.B tag --move
+.I TAG POSITION path ...
+.SH DESCRIPTION
+.B finder-tags
+installs an executable named
+.B tag
+for listing and modifying Finder tags. Stored tag order is preserved by default.
+The interface is compatible with jdberry/tag where practical.
+.SH OPERATIONS
+.TP
+.BR -l , " --list"
+List tags. This is the default operation.
+.TP
+.BR -a , " --add " TAGS
+Add or re-case tags without disturbing unrelated tag order.
+.TP
+.B --append TAGS
+Alias for --add with last/right/top placement.
+.TP
+.B --prepend TAGS
+Alias for --add with first/left/bottom placement.
+.TP
+.BR -r , " --remove " TAGS
+Remove matching tags. A TAGS value of * removes all tags.
+.TP
+.BR -s , " --set " TAGS
+Replace the complete tag array.
+.TP
+.B --copy SOURCE DESTINATION
+Replace DESTINATION's tags with SOURCE's tags.
+.TP
+.BR -m , " --match " TAGS
+List traversed files containing all requested tags.
+.TP
+.BR -u , " --usage " TAGS
+Count all tags on traversed files matching TAGS.
+.TP
+.BR -f , " --find " TAGS
+Use Spotlight to find matching files, optionally scoped to supplied paths.
+.TP
+.B --move TAG POSITION
+Move one tag to a new position.
+.SH ORDERING
+.TP
+.B --at POSITION
+Insertion position for --add or --move. POSITION may be a zero-based index,
+first/left/bottom, or last/right/top.
+.TP
+.B --before TAG
+Place added or moved tags immediately before TAG.
+.TP
+.B --after TAG
+Place added or moved tags immediately after TAG.
+.TP
+.B --sorted-tags
+Sort tags for display. Mutating operations also sort the final stored array.
+Read-only operations never write merely because this option is present.
+.TP
+.BR -V , " --reverse"
+Reverse display order only.
+.TP
+.BR -C , " --case-sensitive"
+Use exact-case matching instead of the default case-insensitive matching.
+.SH OUTPUT
+.TP
+.BR -c , " --color"
+Display known Finder tag colors when stdout is a terminal.
+.TP
+.BR -n , " --filename"
+Show filenames. --name is an alias.
+.TP
+.BR -N , " --no-filename"
+Hide filenames. --no-name is an alias.
+.TP
+.BR -t , " --tags"
+Show tags.
+.TP
+.BR -T , " --no-tags"
+Hide tags.
+.TP
+.BR -g , " --one-per-line"
+Display each tag on its own line. --garrulous is an alias.
+.TP
+.BR -G , " --comma-separated"
+Display comma-separated tags. --no-garrulous is an alias.
+.TP
+.BR -p , " --slash"
+Append / to directory names.
+.TP
+.BR -0 , " --null"
+Terminate text records with NUL. --nul is an alias.
+.TP
+.B --absolute
+Display absolute logical paths.
+.TP
+.B --jsonl
+Emit newline-delimited JSON. --ndjson is an alias.
+.SH PATH INPUT AND TRAVERSAL
+.TP
+.B --stdin
+Read newline-delimited paths from standard input.
+.TP
+.B --stdin0
+Read NUL-delimited paths from standard input.
+.TP
+.BR -A , " --all"
+Include hidden files while enumerating.
+.TP
+.BR -e , " --enter"
+Enumerate immediate contents of explicit directories.
+.TP
+.BR -R , " -d ," " --recursive"
+Recursively enumerate directories.
+.TP
+.B --no-follow-symlinks
+Do not recursively follow symlinked directories or explicitly resolve paths
+before Foundation tag I/O.
+.TP
+.B --follow-symlinks
+Restore default symlink following.
+.SH SAFETY
+.TP
+.B --dry-run
+Compute and display intended mutations without writing. --dryrun is an alias.
+.SH TAG SYNTAX
+TAGS is comma separated. Quoted CSV-style components permit literal commas,
+for example:
+.PP
+.nf
+tag --set 'Red,"Project, Alpha","Needs review"' file
+.fi
+.PP
+Matching is case-insensitive by default while stored spelling is preserved.
+.SH FILES
+See the finder-tags README and REVIEW.md for detailed behavior, reliability
+notes, compatibility differences, and JSONL fields.
+.SH LICENSE
+MIT.

@@ -13,35 +13,44 @@ func report(_ message: String) {
     hadError = true
 }
 
+func targetForExplicitPath(_ path: String) -> Target {
+    let logical = expandedFileURL(path)
+    let display = options.absolutePaths ? logical.path : path
+    return Target(
+        url: tagIOURL(logical, followSymlinks: options.followSymlinks),
+        logicalURL: logical,
+        displayPath: display,
+        rootPath: logical.path
+    )
+}
+
 switch options.operation {
 case .copy:
     let sourcePath = options.paths[0]
     let destinationPath = options.paths[1]
-    let sourceLogical = expandedFileURL(sourcePath)
-    let destinationLogical = expandedFileURL(destinationPath)
+    let source = targetForExplicitPath(sourcePath)
+    let destination = targetForExplicitPath(destinationPath)
 
     do {
-        if try !sourceLogical.checkResourceIsReachable() {
+        if try !source.logicalURL.checkResourceIsReachable() {
             fail("source is not reachable: \(sourcePath)", code: ExitCode.noInput)
         }
-        if try !destinationLogical.checkResourceIsReachable() {
+        if try !destination.logicalURL.checkResourceIsReachable() {
             fail("destination is not reachable: \(destinationPath)", code: ExitCode.noInput)
         }
 
-        let source = resolvedTagURL(sourceLogical)
-        let destination = resolvedTagURL(destinationLogical)
-        let change = try store.copyChange(from: source, to: destination)
-        let target = Target(url: destination, displayPath: destinationPath)
+        var change = try store.copyChange(from: source.url, to: destination.url)
+        change = sortedChangeIfRequested(change, options: options)
         if options.dryRun {
             try output.emitChange(
-                operation: "copy", target: target, change: change,
-                sourcePath: sourcePath, dryRun: true
+                operation: "copy", target: destination, change: change,
+                source: source, dryRun: true
             )
         } else {
-            try store.apply(change, to: destination)
+            try store.apply(change, to: destination.url)
             try output.emitChange(
-                operation: "copy", target: target, change: change,
-                sourcePath: sourcePath, dryRun: false
+                operation: "copy", target: destination, change: change,
+                source: source, dryRun: false
             )
         }
     } catch {
@@ -59,13 +68,31 @@ case .usage(let query):
                 counter.add(tags)
             }
         } catch {
-            report("\(target.url.path): \(error.localizedDescription)")
+            report("\(target.absolutePath): \(error.localizedDescription)")
         }
     }
     do {
-        try output.emitUsage(counter.entries(reverse: options.reverse))
+        try output.emitUsage(counter.entries(sorted: options.sortedTags, reverse: options.reverse))
     } catch {
         report("writing output: \(error.localizedDescription)")
+    }
+
+case .find(let query):
+    do {
+        try SpotlightSearch(options: options).forEachTarget(query: query) { target in
+            do {
+                // Re-read the live Foundation value rather than trusting the
+                // metadata index for displayed order or a just-changed file.
+                let tags = try store.read(target.url)
+                if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
+                    try output.emitFile(target, tags: tags)
+                }
+            } catch {
+                report("\(target.absolutePath): \(error.localizedDescription)")
+            }
+        }
+    } catch {
+        report(error.localizedDescription)
     }
 
 case .list, .match, .add, .remove, .set, .move:
@@ -84,12 +111,13 @@ case .list, .match, .add, .remove, .set, .move:
                 }
 
             case .add(let tags):
-                let change = try store.addChange(
+                var change = try store.addChange(
                     tags,
                     to: target.url,
                     caseSensitive: options.caseSensitive,
-                    position: options.addPosition
+                    position: options.position
                 )
+                change = sortedChangeIfRequested(change, options: options)
                 if options.dryRun {
                     try output.emitChange(operation: "add", target: target, change: change, dryRun: true)
                 } else {
@@ -98,11 +126,12 @@ case .list, .match, .add, .remove, .set, .move:
                 }
 
             case .remove(let tags):
-                let change = try store.removeChange(
+                var change = try store.removeChange(
                     tags,
                     from: target.url,
                     caseSensitive: options.caseSensitive
                 )
+                change = sortedChangeIfRequested(change, options: options)
                 if options.dryRun {
                     try output.emitChange(operation: "remove", target: target, change: change, dryRun: true)
                 } else {
@@ -111,7 +140,8 @@ case .list, .match, .add, .remove, .set, .move:
                 }
 
             case .set(let tags):
-                let change = try store.setChange(tags, on: target.url)
+                var change = try store.setChange(tags, on: target.url)
+                change = sortedChangeIfRequested(change, options: options)
                 if options.dryRun {
                     try output.emitChange(operation: "set", target: target, change: change, dryRun: true)
                 } else {
@@ -119,13 +149,17 @@ case .list, .match, .add, .remove, .set, .move:
                     try output.emitChange(operation: "set", target: target, change: change, dryRun: false)
                 }
 
-            case .move(let tag, let position):
-                let change = try store.moveChange(
+            case .move(let tag, let explicitPosition):
+                guard let position = explicitPosition ?? options.position else {
+                    preconditionFailure("move position validated by CLI")
+                }
+                var change = try store.moveChange(
                     tag: tag,
                     to: position,
                     on: target.url,
                     caseSensitive: options.caseSensitive
                 )
+                change = sortedChangeIfRequested(change, options: options)
                 if options.dryRun {
                     try output.emitChange(operation: "move", target: target, change: change, dryRun: true)
                 } else {
@@ -133,11 +167,11 @@ case .list, .match, .add, .remove, .set, .move:
                     try output.emitChange(operation: "move", target: target, change: change, dryRun: false)
                 }
 
-            case .copy, .usage:
+            case .copy, .usage, .find:
                 preconditionFailure("operation handled outside traversal")
             }
         } catch {
-            report("\(target.url.path): \(error.localizedDescription)")
+            report("\(target.absolutePath): \(error.localizedDescription)")
         }
     }
 }

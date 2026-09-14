@@ -6,10 +6,14 @@ struct Traversal {
 
     func forEachTarget(_ body: (Target) -> Void) {
         if options.paths.isEmpty {
+            if options.pathInputExplicit { return }
+
             let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+                .standardizedFileURL
             var active = Set<String>()
             enumerateDirectory(
-                resolvedTagURL(cwd),
+                cwd,
+                rootLogicalURL: cwd,
                 displayPrefix: "",
                 recursive: options.recursive,
                 activeDirectories: &active,
@@ -30,16 +34,23 @@ struct Traversal {
                 continue
             }
 
-            let targetURL = resolvedTagURL(logicalURL)
-            let target = Target(url: targetURL, displayPath: path)
+            let targetURL = tagIOURL(logicalURL, followSymlinks: options.followSymlinks)
+            let displayPath = options.absolutePaths ? logicalURL.path : path
+            let target = Target(
+                url: targetURL,
+                logicalURL: logicalURL,
+                displayPath: displayPath,
+                rootPath: logicalURL.path
+            )
             body(target)
 
             guard options.enterDirectories || options.recursive else { continue }
             do {
-                if try directoryFlag(targetURL) {
+                if try directoryFlag(logicalURL) {
                     var active = Set<String>()
                     enumerateDirectory(
-                        targetURL,
+                        logicalURL,
+                        rootLogicalURL: logicalURL,
                         displayPrefix: "",
                         recursive: options.recursive,
                         activeDirectories: &active,
@@ -52,19 +63,26 @@ struct Traversal {
         }
     }
 
-    func directoryFlag(_ url: URL) throws -> Bool {
+    func directoryFlag(_ logicalURL: URL) throws -> Bool {
+        if !options.followSymlinks && isSymbolicLink(logicalURL) {
+            return false
+        }
+        let url = tagIOURL(logicalURL, followSymlinks: options.followSymlinks)
         return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
     }
 
     private func enumerateDirectory(
-        _ directoryURL: URL,
+        _ logicalDirectoryURL: URL,
+        rootLogicalURL: URL,
         displayPrefix: String,
         recursive: Bool,
         activeDirectories: inout Set<String>,
         body: (Target) -> Void
     ) {
-        let resolvedDirectory = resolvedTagURL(directoryURL)
-        let identity = resolvedDirectory.path
+        let directoryForIdentity = options.followSymlinks
+            ? resolvedTagURL(logicalDirectoryURL)
+            : logicalDirectoryURL.standardizedFileURL
+        let identity = directoryForIdentity.path
         if !activeDirectories.insert(identity).inserted {
             return
         }
@@ -73,30 +91,43 @@ struct Traversal {
         var enumerationOptions: FileManager.DirectoryEnumerationOptions = []
         if !options.includeHidden { enumerationOptions.insert(.skipsHiddenFiles) }
 
+        let contentDirectoryURL = options.followSymlinks
+            ? resolvedTagURL(logicalDirectoryURL)
+            : logicalDirectoryURL.standardizedFileURL
+
         let children: [URL]
         do {
             children = try fileManager.contentsOfDirectory(
-                at: resolvedDirectory,
+                at: contentDirectoryURL,
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .tagNamesKey],
                 options: enumerationOptions
             )
         } catch {
-            onError("\(resolvedDirectory.path): \(error.localizedDescription)")
+            onError("\(logicalDirectoryURL.path): \(error.localizedDescription)")
             return
         }
 
-        for logicalChild in children {
-            let name = logicalChild.lastPathComponent
-            let displayPath = displayPrefix.isEmpty ? name : displayPrefix + "/" + name
-            let resolvedChild = resolvedTagURL(logicalChild)
-            body(Target(url: resolvedChild, displayPath: displayPath))
+        for rawChild in children {
+            let name = rawChild.lastPathComponent
+            let logicalChild = logicalDirectoryURL.appendingPathComponent(name).standardizedFileURL
+            let relativePath = displayPrefix.isEmpty ? name : displayPrefix + "/" + name
+            let displayPath = options.absolutePaths ? logicalChild.path : relativePath
+            let targetURL = tagIOURL(logicalChild, followSymlinks: options.followSymlinks)
+
+            body(Target(
+                url: targetURL,
+                logicalURL: logicalChild,
+                displayPath: displayPath,
+                rootPath: rootLogicalURL.path
+            ))
 
             if recursive {
                 do {
-                    if try directoryFlag(resolvedChild) {
+                    if try directoryFlag(logicalChild) {
                         enumerateDirectory(
-                            resolvedChild,
-                            displayPrefix: displayPath,
+                            logicalChild,
+                            rootLogicalURL: rootLogicalURL,
+                            displayPrefix: relativePath,
                             recursive: true,
                             activeDirectories: &activeDirectories,
                             body: body

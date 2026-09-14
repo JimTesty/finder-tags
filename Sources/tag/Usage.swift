@@ -16,8 +16,9 @@ struct UsageCounter {
         }
     }
 
-    func entries(reverse: Bool) -> [UsageEntry] {
-        let tags = reverse ? Array(order.reversed()) : order
+    func entries(sorted: Bool, reverse: Bool) -> [UsageEntry] {
+        var tags = sorted ? sortedTagArray(order) : order
+        if reverse { tags.reverse() }
         return tags.map { UsageEntry(tag: $0, count: counts[$0] ?? 0) }
     }
 }

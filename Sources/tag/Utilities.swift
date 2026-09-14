@@ -6,7 +6,7 @@ import Glibc
 #endif
 
 let programName = URL(fileURLWithPath: CommandLine.arguments[0]).lastPathComponent
-let programVersion = "5.0"
+let programVersion = "6.0"
 let fileManager = FileManager.default
 
 func eprint(_ message: String) {
@@ -28,6 +28,22 @@ func foldedTag(_ tag: String) -> String {
 
 func tagsEqual(_ lhs: String, _ rhs: String, caseSensitive: Bool) -> Bool {
     return caseSensitive ? lhs == rhs : foldedTag(lhs) == foldedTag(rhs)
+}
+
+func sortedTagArray(_ tags: [String]) -> [String] {
+    // NSString/String compare: is the closest straightforward analogue to
+    // jdberry/tag's sortedArrayUsingSelector:@selector(compare:). Include the
+    // original index as a tiebreaker so equal strings remain stable.
+    return tags.enumerated().sorted { lhs, rhs in
+        let result = lhs.element.compare(rhs.element)
+        if result == .orderedSame { return lhs.offset < rhs.offset }
+        return result == .orderedAscending
+    }.map { $0.element }
+}
+
+func sortedChangeIfRequested(_ change: TagChange, options: Options) -> TagChange {
+    if !options.sortedTags { return change }
+    return TagChange(before: change.before, after: sortedTagArray(change.after))
 }
 
 func parsePosition(_ raw: String) -> PositionSpec {
@@ -107,7 +123,6 @@ func parseTagList(_ raw: String) -> [String] {
 
         appendTag(value, quoted: quoted)
         if i < chars.count {
-            // The only remaining delimiter at this point should be a comma.
             if chars[i] != "," { fail("invalid TAGS syntax") }
             i += 1
         }
@@ -117,11 +132,22 @@ func parseTagList(_ raw: String) -> [String] {
 }
 
 func expandedFileURL(_ path: String) -> URL {
-    return URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
+    return URL(fileURLWithPath: NSString(string: path).expandingTildeInPath).standardizedFileURL
 }
 
 func resolvedTagURL(_ url: URL) -> URL {
     return url.resolvingSymlinksInPath().standardizedFileURL
+}
+
+func tagIOURL(_ logicalURL: URL, followSymlinks: Bool) -> URL {
+    return followSymlinks ? resolvedTagURL(logicalURL) : logicalURL.standardizedFileURL
+}
+
+func isSymbolicLink(_ url: URL) -> Bool {
+    // destinationOfSymbolicLink is an lstat-like question: it succeeds only
+    // when the path itself is a symbolic link, without relying on resource
+    // values that may describe the referent.
+    return (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) != nil
 }
 
 func tagsMatch(_ stored: [String], query: [String], caseSensitive: Bool) -> Bool {
@@ -134,4 +160,32 @@ func tagsMatch(_ stored: [String], query: [String], caseSensitive: Bool) -> Bool
         }
     }
     return true
+}
+
+func readPathsFromStdin(_ mode: StdinPathMode) -> [String] {
+    let data = FileHandle.standardInput.readDataToEndOfFile()
+    if data.isEmpty { return [] }
+
+    switch mode {
+    case .lines:
+        let text = String(decoding: data, as: UTF8.self)
+        return text.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).map(String.init)
+    case .nul:
+        var result: [String] = []
+        var start = data.startIndex
+        var index = start
+        while index < data.endIndex {
+            if data[index] == 0 {
+                if start < index {
+                    result.append(String(decoding: data[start..<index], as: UTF8.self))
+                }
+                start = data.index(after: index)
+            }
+            index = data.index(after: index)
+        }
+        if start < data.endIndex {
+            result.append(String(decoding: data[start..<data.endIndex], as: UTF8.self))
+        }
+        return result
+    }
 }
