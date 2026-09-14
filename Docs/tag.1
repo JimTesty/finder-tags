@@ -54,8 +54,8 @@ List tags. This is the default operation.
 .TP
 .B --export [ROOT]
 Write a tagged-only, root-relative archive for one directory. Hidden items are
-included by default. Plaintext is find-like; --jsonl selects the streaming JSON
-format.
+included by default. Both encodings begin with a JSON format header. Plaintext
+is find-like and always quotes paths; --jsonl selects the streaming JSON format.
 .TP
 .B --restore ARCHIVE
 Restore an archive from a file, or from standard input when ARCHIVE is -. Use
@@ -108,7 +108,8 @@ Sort tags for display. Mutating operations also sort the final stored array.
 Read-only operations never write merely because this option is present.
 .TP
 .BR -V , " --reverse"
-Reverse display order only.
+Reverse display order. Plaintext export records this choice so restore can
+recover the original order.
 .TP
 .BR -C , " --case-sensitive"
 Use exact-case matching instead of the default case-insensitive matching.
@@ -138,7 +139,7 @@ Display each tag on its own line. --garrulous is an alias.
 Display comma-separated tags. --no-garrulous is an alias.
 .TP
 .B --space-indent
-Use two spaces instead of a tab before tags in plain list output.
+Use two spaces instead of a tab before tags in plain list or export output.
 .TP
 .BR -p , " --slash"
 Append / to directory names.
@@ -159,6 +160,12 @@ List or export only items having at least one tag.
 Include each listed or exported item's byte size and content modification time.
 JSONL uses numeric size and mtime fields; plaintext archives use @metadata
 records. Restore validates but ignores these fields.
+.TP
+.B --separator CHAR
+Choose the one-character quote separator for plaintext export. The default is
+double quote. A Unicode escape such as '\\u{200B}' selects an invisible
+separator. The separator and plaintext display options are recorded in the
+archive header.
 .SH PATH INPUT AND TRAVERSAL
 .TP
 .B --stdin

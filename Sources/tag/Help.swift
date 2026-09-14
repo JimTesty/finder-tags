@@ -48,7 +48,7 @@ func usage(code: Int32 = 0) -> Never {
           --after TAG            Place added/moved tag(s) after TAG
           --sorted-tags          Sort displayed tags; mutating operations also
                                 store their resulting tag arrays sorted
-      -V, --reverse              Reverse display order only; do not rewrite
+      -V, --reverse              Reverse display order; export records it
       -C, --case-sensitive       Make tag matching case-sensitive
                                 (default matching is case-insensitive)
 
@@ -69,6 +69,7 @@ func usage(code: Int32 = 0) -> Never {
           --nul                  Backward-compatible alias for --null
           --absolute             Display absolute logical paths
           --file-info            Include file size and mtime in list/export output
+          --separator CHAR       Quote separator for plaintext export (default: ")
           --jsonl                Emit one JSON object per line (NDJSON)
           --ndjson               Alias for --jsonl
           --tagged-only          List/export only items with at least one tag
@@ -118,12 +119,15 @@ func usage(code: Int32 = 0) -> Never {
     resolving symlink paths before Foundation tag I/O.
 
     Export archives are tagged-only, root-relative, and preserve stored tag
-    order. Plaintext archives are suitable for reading and restore; --jsonl is
-    the streaming machine-readable form. Restore follows current symlink
-    targets and warns when they differ from the archived target. A tagged-only
-    restore changes listed items only; it does not clear tags from unlisted
-    items. --color accepts auto/yes, always/force, and never/no/none aliases;
-    JSONL is never colored.
+    order. Plaintext archives begin with a JSON format header, always quote
+    paths, and use comma-separated tags. --reverse, --slash, --space-indent,
+    and --separator are recorded in that header so restore can interpret the
+    display. Use --separator='\\u{200B}' for an invisible quote separator.
+    --jsonl remains the streaming machine-readable form. Restore follows
+    current symlink targets and warns when they differ from the archived
+    target. A tagged-only restore changes listed items only; it does not clear
+    tags from unlisted items. --color accepts auto/yes, always/force, and
+    never/no/none aliases; JSONL is never colored.
 
     Defaults match jdberry/tag where practical: list shows filename+tags;
     match/find show filenames only. With no paths, list/match/usage enumerate the

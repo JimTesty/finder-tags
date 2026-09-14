@@ -20,6 +20,13 @@ enum Operation {
     case usage([String])
     case find([String])
     case move(String, PositionSpec?)
+
+    var isListOrExport: Bool {
+        switch self {
+        case .list, .export: return true
+        default: return false
+        }
+    }
 }
 
 enum StdinPathMode {
@@ -59,6 +66,8 @@ struct Options {
     var dryRun = false
     var taggedOnly = false
     var fileInfo = false
+    var archiveSeparator: Character = "\""
+    var archiveSeparatorWasSet = false
     var archivePath: String? = nil
     var restoreRoot: String? = nil
     var backupEnabled = true

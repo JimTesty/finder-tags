@@ -34,6 +34,7 @@ _arguments \
   '(-0 --null)'{-0,--null}'[NUL-terminate records]' \
   '--absolute[absolute paths]' \
   '--file-info[include file size and mtime]' \
+  '--separator[plaintext export quote separator]:character:' \
   '--jsonl[JSON Lines output]' \
   '--ndjson[alias for --jsonl]' \
   '--stdin[read newline-delimited paths]' \

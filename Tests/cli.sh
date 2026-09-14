@@ -13,6 +13,8 @@ rm -rf "$work"
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
+archive_header='{"fileInfo":false,"format":"plain","reverse":false,"separator":"\"","slash":false,"spaceIndent":false,"type":"header","version":2}'
+
 touch "$work/a" "$work/b" "$work/c" "$work/space name"
 mkdir -p "$work/tree/sub" "$work/tree/real"
 touch "$work/tree/root-file" "$work/tree/sub/child" "$work/tree/real/linked-child"
@@ -33,6 +35,7 @@ ln -s .. "$work/tree/real/back-to-tree"
 "$bin" --help | grep -q -- '--restore ARCHIVE'
 "$bin" --help | grep -q -- '--tagged-only'
 "$bin" --help | grep -q -- '--file-info'
+"$bin" --help | grep -q -- '--separator CHAR'
 "$bin" --help | grep -q -- '--space-indent'
 "$bin" --help | grep -q -- '--no-backup'
 [ "$("$bin" --version)" = "tag 8.0" ]
@@ -332,12 +335,17 @@ if [ "$(uname -s)" = Darwin ]; then
 
     export_archive="$work/export.archive"
     "$bin" --export "$export_root" >"$export_archive" 2>"$work/export.err"
-    grep -Fq '# finder-tags archive v1' "$export_archive"
+    grep -Fq '"format":"plain"' "$export_archive"
+    grep -Fq '"version":2' "$export_archive"
     grep -Fq '.hidden' "$export_archive"
     grep -Fq 'alpha' "$export_archive"
     grep -Fq '"space name"' "$export_archive"
     grep -Fq '"Project, Alpha"' "$export_archive"
     grep -Fq '@symlink' "$export_archive"
+    if grep -Eq 'First, Second|Nested, Tag|Needs review", "' "$export_archive"; then
+        echo "export unexpectedly padded tag separators" >&2
+        exit 1
+    fi
     grep -q 'exported 4 tagged items' "$work/export.err"
 
     metadata_archive="$work/export-metadata.archive"
@@ -368,6 +376,39 @@ if [ "$(uname -s)" = Darwin ]; then
     [ "$("$bin" -N "$restore_root/space name")" = 'Project, Alpha,Needs review' ]
     [ "$("$bin" -N "$restore_root")" = 'Keep' ]
 
+    # Plaintext export records its display grammar. Exercise reverse order,
+    # directory slashes, two-space indentation, and escaping of the separator
+    # inside a filename.
+    separator=$(printf '\342\200\213')
+    zero_width_name=$(printf 'zero\342\200\213width')
+    touch "$export_root/$zero_width_name" "$restore_root/$zero_width_name"
+    "$bin" --set 'Zero,Width' --no-backup "$export_root/$zero_width_name"
+    "$bin" --set WrongZero --no-backup "$restore_root/$zero_width_name"
+    "$bin" --set DirectoryTag --no-backup "$export_root/sub"
+    "$bin" --set WrongDirectory --no-backup "$restore_root/sub"
+
+    pretty_archive="$work/export-pretty.archive"
+    "$bin" --export -p -V --space-indent --separator="$separator" "$export_root" \
+        >"$pretty_archive" 2>"$work/pretty-export.err"
+    grep -Fq '"format":"plain"' "$pretty_archive"
+    grep -Fq '"reverse":true' "$pretty_archive"
+    grep -Fq '"slash":true' "$pretty_archive"
+    grep -Fq '"spaceIndent":true' "$pretty_archive"
+    grep -Fq 'zero\u{200B}width' "$pretty_archive"
+    grep -Fq 'Width,Zero' "$pretty_archive"
+    grep -Fq 'sub/' "$pretty_archive"
+    grep -q 'exported 6 tagged items' "$work/pretty-export.err"
+
+    "$bin" --restore "$pretty_archive" --root "$restore_root" --dry-run --no-backup \
+        >"$work/pretty-restore-dry.out" 2>"$work/pretty-restore-dry.err"
+    grep -q 'would change' "$work/pretty-restore-dry.err"
+    [ "$("$bin" -N "$restore_root/$zero_width_name")" = 'WrongZero' ]
+    [ "$("$bin" -N "$restore_root/sub")" = 'WrongDirectory' ]
+    "$bin" --restore "$pretty_archive" --root "$restore_root" --no-backup \
+        >"$work/pretty-restore.out" 2>"$work/pretty-restore.err"
+    [ "$("$bin" -N "$restore_root/$zero_width_name")" = 'Zero,Width' ]
+    [ "$("$bin" -N "$restore_root/sub")" = 'DirectoryTag' ]
+
     json_archive="$work/export.jsonl"
     "$bin" --export --jsonl "$export_root" >"$json_archive"
     grep -q '"type":"summary"' "$json_archive"
@@ -380,7 +421,7 @@ if [ "$(uname -s)" = Darwin ]; then
     grep -q '"type":"summary"' "$work/json-restore.out"
 
     colored_archive="$work/colored.archive"
-    printf '%s\n' '# finder-tags archive v1' "@root $export_root" >"$colored_archive"
+    printf '%s\n' "$archive_header" "@root $export_root" >"$colored_archive"
     printf '\033[31malpha\033[0m\t\033[31mColorized\033[0m\n' >>"$colored_archive"
     "$bin" --restore "$colored_archive" --root "$restore_root" --dry-run --no-backup \
         >"$work/colored.out"
@@ -389,19 +430,19 @@ if [ "$(uname -s)" = Darwin ]; then
 
     # The complete archive is validated before any listed item is changed.
     malformed_archive="$work/malformed.archive"
-    printf '%s\n' '# finder-tags archive v1' "@root $export_root" >"$malformed_archive"
-    printf '%s\t%s\n' alpha Rejected >>"$malformed_archive"
+    printf '%s\n' "$archive_header" "@root $export_root" >"$malformed_archive"
+    printf '%s\t%s\n' '"unterminated' Rejected >>"$malformed_archive"
     printf '%s\n' 'not an archive record' >>"$malformed_archive"
     if "$bin" --restore "$malformed_archive" --root "$restore_root" --no-backup \
         >"$work/malformed.out" 2>"$work/malformed.err"; then
         echo "malformed archive unexpectedly restored" >&2
         exit 1
     fi
-    grep -q 'archive line' "$work/malformed.err"
+    grep -q 'invalid archive item path' "$work/malformed.err"
     [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
 
     duplicate_archive="$work/duplicate.archive"
-    printf '%s\n' '# finder-tags archive v1' "@root $export_root" >"$duplicate_archive"
+    printf '%s\n' "$archive_header" "@root $export_root" >"$duplicate_archive"
     printf '%s\t%s\n' alpha First >>"$duplicate_archive"
     printf '%s\t%s\n' alpha Second >>"$duplicate_archive"
     if "$bin" --restore "$duplicate_archive" --root "$restore_root" --no-backup \
@@ -413,7 +454,7 @@ if [ "$(uname -s)" = Darwin ]; then
     [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
 
     escape_archive="$work/escape.archive"
-    printf '%s\n' '# finder-tags archive v1' "@root $export_root" >"$escape_archive"
+    printf '%s\n' "$archive_header" "@root $export_root" >"$escape_archive"
     printf '%s\t%s\n' ../alpha Hacked >>"$escape_archive"
     if "$bin" --restore "$escape_archive" --root "$restore_root" --no-backup \
         >"$work/escape.out" 2>"$work/escape.err"; then
