@@ -3,7 +3,7 @@ PREFIX ?= $(HOME)/.local
 BUILD_DIR ?= build
 BINARY := $(BUILD_DIR)/tag
 SOURCES := $(wildcard Sources/tag/*.swift)
-SWIFTFLAGS ?= -O
+SWIFTFLAGS ?= -O -swift-version 5
 
 .PHONY: all build debug test install clean
 
@@ -11,13 +11,13 @@ all: build
 
 build: $(BINARY)
 
-$(BINARY): $(SOURCES)
+$(BINARY): $(SOURCES) Makefile
 	@mkdir -p "$(BUILD_DIR)"
 	$(SWIFTC) $(SWIFTFLAGS) $(SOURCES) -o "$(BINARY)"
 
 debug:
 	@mkdir -p "$(BUILD_DIR)"
-	$(SWIFTC) -Onone -g $(SOURCES) -o "$(BINARY)"
+	$(SWIFTC) -Onone -g -swift-version 5 $(SOURCES) -o "$(BINARY)"
 
 test: build
 	sh Tests/cli.sh "$(BINARY)"

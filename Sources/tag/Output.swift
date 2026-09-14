@@ -37,7 +37,7 @@ final class Output {
             if renderedTags.isEmpty {
                 record(value)
             } else {
-                let padding = max(1, 31 - value.count)
+                let padding = max(0, 31 - (value as NSString).length)
                 record(
                     value
                     + String(repeating: " ", count: padding)
@@ -63,11 +63,12 @@ final class Output {
         }
     }
 
-    func emitDryRun(
+    func emitChange(
         operation: String,
         target: Target,
         change: TagChange,
-        sourcePath: String? = nil
+        sourcePath: String? = nil,
+        dryRun: Bool
     ) {
         if options.json {
             var object: [String: Any] = [
@@ -75,12 +76,17 @@ final class Output {
                 "path": target.displayPath,
                 "before": change.before,
                 "after": change.after,
-                "changed": change.before != change.after
+                "changed": change.before != change.after,
+                "dryRun": dryRun
             ]
             if let source = sourcePath { object["source"] = source }
             jsonRecords.append(object)
             return
         }
+
+        // Mutations are quiet by default, matching jdberry/tag. Dry-run is
+        // intentionally visible because its purpose is to preview changes.
+        if !dryRun { return }
 
         let before = change.before.map(colors.render).joined(separator: ",")
         let after = change.after.map(colors.render).joined(separator: ",")

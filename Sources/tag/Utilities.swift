@@ -6,10 +6,15 @@ import Glibc
 #endif
 
 let programName = URL(fileURLWithPath: CommandLine.arguments[0]).lastPathComponent
+let programVersion = "4.1"
 let fileManager = FileManager.default
 
 func eprint(_ message: String) {
     FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
+func stdoutIsTerminal() -> Bool {
+    return isatty(STDOUT_FILENO) == 1
 }
 
 func fail(_ message: String, code: Int32 = ExitCode.usage) -> Never {

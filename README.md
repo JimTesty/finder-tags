@@ -1,21 +1,37 @@
-# tag
+# finder-tags
 
-A small Swift command-line tool for macOS Finder tags. Its main design goal is
-**preserving Finder tag order** while remaining usage-compatible with the useful
-non-Spotlight parts of [`jdberry/tag`](https://github.com/jdberry/tag).
+`finder-tags` is a small Swift command-line tool for macOS Finder tags. It
+installs/builds an executable named **`tag`** for practical compatibility with
+[`jdberry/tag`](https://github.com/jdberry/tag).
 
-This is currently named `tag` for command-line compatibility.
+Its main difference is intentional: **Finder tag order is preserved** on reads
+and writes instead of sorting tags or passing them through unordered sets.
+
+## Development status
+
+This project is new and **barely tested so far**. It has shell smoke tests and a
+small macOS integration test path, but it has not been exercised broadly across
+macOS releases, filesystems, network volumes, unusual filenames, or large data
+sets.
+
+Most of the source code was written by **OpenAI GPT-5.6 Sol**, under the
+maintainer's direction and with iterative human testing/review. That provenance
+is documented here so users can judge the project's maturity appropriately.
+
+See [`REVIEW.md`](REVIEW.md) for the latest source review, known limitations,
+and possible improvements.
 
 ## Requirements and build
 
 The build intentionally uses **plain `swiftc` only**. It does not require Swift
 Package Manager, XCTest, Xcode, or a `Package.swift` file.
 
-Tested for Swift 5 language compatibility; the intended minimum is Swift 5.5.
+The intended minimum compiler is Swift 5.5. The Makefile explicitly selects
+Swift 5 language mode.
 
 ```sh
-make                 # build/tag
-make test            # shell/CLI smoke tests, no XCTest
+make                  # build/tag
+make test             # shell tests; macOS also exercises real Finder tags
 make install          # installs to ~/.local/bin/tag by default
 ```
 
@@ -31,8 +47,8 @@ For development without installing:
 ./tag --help
 ```
 
-The top-level `./tag` wrapper simply runs `make build` and then executes
-`build/tag`; unchanged sources are not recompiled.
+The top-level `./tag` wrapper runs `make build` and then executes `build/tag`.
+Unchanged sources are not recompiled.
 
 ## Common examples
 
@@ -40,25 +56,25 @@ The top-level `./tag` wrapper simply runs `make build` and then executes
 tag                                # list current directory
 tag file1 file2                    # list explicit files and ordered tags
 tag -c file                        # approximate Finder tag colors
-tag -V file                        # display stored tags in reverse order
+tag -V file                        # display tags in reverse order
 
-tag -a 'Work,Important' file      # append missing tags, in this order
-tag -r 'Work,Old' file            # remove tags without reordering survivors
-tag -r '*' file                   # remove all tags
-tag -s 'First,Second' file        # replace tags in exactly this order
+tag -a 'Work,Important' file       # append missing tags in this order
+tag -r 'Work,Old' file             # remove without reordering survivors
+tag -r '*' file                    # remove all tags
+tag -s 'First,Second' file         # replace tags in exactly this order
 tag --copy src dst                 # destructively copy tag array/order
-tag --copy src dst --dry-run       # show the intended copy, do not write
+tag --copy src dst --dry-run       # preview the copy, do not write
 
 tag -m 'Work,Important' file1 file2
 tag --match '*' -R directory       # files with any tag
 tag --match '' .                   # explicit path with no tags
 
 tag --usage                       # tag counts in current directory
-tag --usage '*' -R directory       # counts recursively under directory
-tag --usage Work -R directory      # files having Work; count all their tags
+tag --usage='*' -R directory       # counts recursively under directory
+tag --usage=Work -R directory      # matching files; count all their tags
 
-tag --json file1 file2            # structured, order-preserving output
-tag -R directory                   # recursively process directory + contents
+tag --json file1 file2             # structured, order-preserving output
+tag -R directory                   # directory, then descendants
 ```
 
 ## Ordering guarantees
@@ -85,24 +101,41 @@ A successful Foundation read with no tag value means "no tags". A failed
 resource-value read throws and is **never** interpreted as an empty tag list.
 
 Every destructive operation reads the target metadata before writing.
-`--copy` completes both the source and destination reads before any destination
+`--copy` completes both source and destination reads before any destination
 write. Every actual write is then read back and compared, including array
 ordering. A mismatch is reported as an error.
 
-This is intentionally best-effort rather than transactional. If another process
-changes tags between our read and write, or a later file in a multi-file command
-fails, earlier successful writes are not rolled back. Finder-tag metadata does
-not justify a locking/transaction layer here.
+This is intentionally best-effort rather than transactional. A concurrent tag
+change between read and write can still be lost, and a multi-file operation can
+partially complete if a later file fails. See `REVIEW.md` for details.
+
+## Directory output and jdberry/tag compatibility
+
+With `-e` or `-R`, explicit directory arguments are formatted like
+`jdberry/tag`: the directory argument itself is printed first, then descendants
+are printed **relative to that directory**.
+
+For example:
+
+```text
+tag -R some/dir
+some/dir
+child.txt
+subdir
+subdir/grandchild.txt
+```
+
+This is deliberately different from printing `some/dir/child.txt` for each
+child.
 
 ## `--dry-run` / `--dryrun`
 
-Valid with `--add`, `--remove`, `--set`, and `--copy`. It performs all normal
-reachability and metadata reads and computes the exact before/after arrays, but
-does not write.
+Valid with `--add`, `--remove`, `--set`, and `--copy`. It performs the normal
+metadata reads and computes the exact before/after arrays, but does not write.
 
 Text output shows the before/after arrays. With `--json`, each record contains
-`operation`, `path`, `before`, `after`, and `changed`; copy records also contain
-`source`.
+`operation`, `path`, `before`, `after`, `changed`, and `dryRun`; copy records
+also contain `source`.
 
 ## JSON
 
@@ -117,13 +150,13 @@ Text output shows the before/after arrays. With `--json`, each record contains
 ]
 ```
 
-For `--usage`, records contain `tag` and `count`. For dry runs, records contain
-before/after arrays. `--reverse` affects displayed list/match arrays and usage
-record order.
+For `--usage`, records contain `tag` and `count`. Mutations emit before/after
+records after a successful write; dry runs emit the same shape with
+`"dryRun": true`.
 
-JSON is structural output, so text-only presentation switches such as color,
-filename suppression, one-per-line, slash decoration, and NUL termination do
-not change its schema.
+JSON is structural output, so text-only switches such as color, filename
+suppression, one-per-line, slash decoration, and NUL termination do not alter
+its schema.
 
 ## Match semantics
 
@@ -140,26 +173,31 @@ Match output defaults to filenames only. Use `-t/--tags` to include tags.
 
 ## Usage semantics
 
-`--usage [TAGS]` / `-u [TAGS]` counts **all tags on files matching TAGS**, like
+`--usage [TAGS]` / `-u[TAGS]` counts **all tags on files matching TAGS**, like
 `jdberry/tag`. The important difference is scope: this implementation does not
-use Spotlight. It traverses the supplied paths directly and honors `-A`, `-e`,
-and `-R`.
+use Spotlight. It traverses supplied paths directly and honors `-A`, `-e`, and
+`-R`.
 
-With no paths, it enumerates the current directory. With no TAGS, TAGS defaults
+With no paths it enumerates the current directory. With no TAGS, TAGS defaults
 to `'*'`.
 
-Because the tag expression is optional, an explicit path immediately after
-`--usage` would be ambiguous. To count all tags under a path, write:
+Because the tag expression is optional, a bare next argument can be ambiguous
+between a tag expression and a path. Prefer an unambiguous form when paths are
+also present:
 
 ```sh
-tag --usage '*' PATH
-tag -u '*' PATH
+tag --usage='*' PATH
+tag --usage=Work PATH
+tag -uWork PATH
+tag --usage -- PATH             # all tags; PATH begins after --
 ```
+
+`tag --usage '*' PATH` remains accepted for compatibility/readability.
 
 ## Option names and backward compatibility
 
-The clearer long names are preferred, while the corresponding `jdberry/tag`
-names remain aliases:
+The clearer long names are preferred, while corresponding `jdberry/tag` names
+remain aliases:
 
 | Preferred | Compatible alias | Short |
 |---|---|---|
@@ -184,6 +222,7 @@ Commands/options intentionally compatible where implemented:
 * `-n/-N`, `-t/-T`, `-g/-G`, `-c`, `-p`, `-0`
 * comma-separated tag operands, case-insensitive matching, `'*'` wildcard
 * current-directory default for list/match
+* `-e/-R` display paths relative to each explicit directory argument
 
 Important differences:
 
@@ -193,17 +232,25 @@ Important differences:
    not implemented.
 3. **`--usage` is traversal-based**, not a filesystem-wide Spotlight query.
 4. New features are `--copy`, `--reverse`, `--json`, and `--dry-run`.
-5. Some long option names have clearer preferred spellings, but old spellings
+5. Some long option names have clearer preferred spellings, while old spellings
    remain accepted.
+6. Tag lists still use `jdberry/tag`'s simple comma-separated grammar, so commas
+   inside tag names are not supported.
 
 ## Colors
 
 `-c/--color` uses the same general best-effort technique as `jdberry/tag`: it
 reads Finder's private preference data to map tag names to Finder color codes,
-then emits approximate ANSI backgrounds. Failure to read that private color map
-only disables coloring; it never affects tag reads/writes.
+then emits approximate ANSI backgrounds. Like `jdberry/tag`, color is emitted
+only when stdout is a terminal.
 
-## Attribution
+Failure to read the private color map only disables coloring; it never affects
+tag reads/writes.
+
+## License and attribution
+
+`finder-tags` is MIT licensed. See [`LICENSE.txt`](LICENSE.txt).
 
 The CLI shape and Finder-color approach are inspired by `jdberry/tag`, which is
-MIT licensed. Its license is included as `jdberry-tag-LICENSE.txt`.
+also MIT licensed. Its license is retained separately as
+[`jdberry-tag-LICENSE.txt`](jdberry-tag-LICENSE.txt).

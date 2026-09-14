@@ -69,11 +69,11 @@ struct Traversal {
         }
 
         for case let url as URL in enumerator {
+            // Match jdberry/tag: after printing an explicit directory itself,
+            // enumerate its children relative to that directory rather than
+            // repeating the directory argument as a prefix.
             let relative = relativePath(of: url, under: directory.url)
-            body(Target(
-                url: url,
-                displayPath: joinedDisplayPath(directory.displayPath, relative)
-            ))
+            body(Target(url: url, displayPath: relative))
         }
     }
 
@@ -89,10 +89,4 @@ struct Traversal {
         return String(full.dropFirst(base.count + 1))
     }
 
-    private func joinedDisplayPath(_ base: String, _ relative: String) -> String {
-        guard !base.isEmpty else { return relative }
-        guard !relative.isEmpty else { return base }
-        if base == "/" { return "/" + relative }
-        return base.hasSuffix("/") ? base + relative : base + "/" + relative
-    }
 }

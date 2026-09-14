@@ -4,6 +4,7 @@ func usage(code: Int32 = 0) -> Never {
     let text = """
     \(programName) - manipulate macOS Finder tags while preserving tag order
 
+    finder-tags executable: tag
     Usage-compatible with the non-Spotlight parts of jdberry/tag.
 
     usage:
@@ -67,10 +68,13 @@ func usage(code: Int32 = 0) -> Never {
       * --usage traverses paths directly; it does NOT use Spotlight and does
         not search the whole system. Use -R to recurse.
       * --find and --home/--local/--network are not implemented.
+      * With -e/-R, explicit directory arguments are printed once, then their
+        descendants are displayed relative to that directory, like jdberry/tag.
       * --copy, --reverse, --json, and --dry-run are additions.
 
-    For --usage, no TAGS means '*'. Because TAGS is optional, use
-    "--usage '*' PATH" when you want all tags under an explicit PATH.
+    For --usage, no TAGS means '*'. Because TAGS is optional, prefer
+    "--usage='*' PATH", "--usage=Work PATH", or "-uWork PATH" when paths
+    are also present. "--usage '*' PATH" remains accepted.
     Use -- before a path beginning with '-'.
     """
 
@@ -79,7 +83,7 @@ func usage(code: Int32 = 0) -> Never {
 }
 
 func version() -> Never {
-    print("\(programName) 4.0")
+    print("\(programName) \(programVersion)")
     exit(0)
 }
 

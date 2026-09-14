@@ -2,24 +2,12 @@ import Foundation
 
 let options = parseArguments()
 let store = TagStore()
-let output = Output(options: options, colors: FinderColors(enabled: options.color && !options.json))
+let output = Output(options: options, colors: FinderColors(enabled: options.color && !options.json && stdoutIsTerminal()))
 var hadError = false
 
 func report(_ message: String) {
     eprint("\(programName): \(message)")
     hadError = true
-}
-
-func operationName(_ operation: Operation) -> String {
-    switch operation {
-    case .add: return "add"
-    case .remove: return "remove"
-    case .set: return "set"
-    case .copy: return "copy"
-    case .list: return "list"
-    case .match: return "match"
-    case .usage: return "usage"
-    }
 }
 
 switch options.operation {
@@ -38,15 +26,18 @@ case .copy:
         }
 
         let change = try store.copyChange(from: source, to: destination)
+        let target = Target(url: destination, displayPath: destinationPath)
         if options.dryRun {
-            output.emitDryRun(
-                operation: "copy",
-                target: Target(url: destination, displayPath: destinationPath),
-                change: change,
-                sourcePath: sourcePath
+            output.emitChange(
+                operation: "copy", target: target, change: change,
+                sourcePath: sourcePath, dryRun: true
             )
         } else {
             try store.apply(change, to: destination)
+            output.emitChange(
+                operation: "copy", target: target, change: change,
+                sourcePath: sourcePath, dryRun: false
+            )
         }
     } catch {
         report("copying tags from \(sourcePath) to \(destinationPath): \(error.localizedDescription)")
@@ -63,7 +54,7 @@ case .usage(let query):
                 counter.add(tags)
             }
         } catch {
-            report("\(target.displayPath): \(error.localizedDescription)")
+            report("\(target.url.path): \(error.localizedDescription)")
         }
     }
     output.emitUsage(counter.entries(reverse: options.reverse))
@@ -86,32 +77,35 @@ case .list, .match, .add, .remove, .set:
             case .add(let tags):
                 let change = try store.addChange(tags, to: target.url)
                 if options.dryRun {
-                    output.emitDryRun(operation: "add", target: target, change: change)
+                    output.emitChange(operation: "add", target: target, change: change, dryRun: true)
                 } else {
                     try store.apply(change, to: target.url)
+                    output.emitChange(operation: "add", target: target, change: change, dryRun: false)
                 }
 
             case .remove(let tags):
                 let change = try store.removeChange(tags, from: target.url)
                 if options.dryRun {
-                    output.emitDryRun(operation: "remove", target: target, change: change)
+                    output.emitChange(operation: "remove", target: target, change: change, dryRun: true)
                 } else {
                     try store.apply(change, to: target.url)
+                    output.emitChange(operation: "remove", target: target, change: change, dryRun: false)
                 }
 
             case .set(let tags):
                 let change = try store.setChange(tags, on: target.url)
                 if options.dryRun {
-                    output.emitDryRun(operation: "set", target: target, change: change)
+                    output.emitChange(operation: "set", target: target, change: change, dryRun: true)
                 } else {
                     try store.apply(change, to: target.url)
+                    output.emitChange(operation: "set", target: target, change: change, dryRun: false)
                 }
 
             case .copy, .usage:
                 preconditionFailure("operation handled outside traversal")
             }
         } catch {
-            report("\(target.displayPath): \(error.localizedDescription)")
+            report("\(target.url.path): \(error.localizedDescription)")
         }
     }
 }
