@@ -45,6 +45,7 @@ _arguments \
   '(-R -d --recursive)'{-R,-d,--recursive}'[recursive]' \
   '--no-follow-symlinks[do not follow symlinks (default)]' \
   '{-L,--follow-symlinks}[follow symlinks and symlinked directories]' \
+  '--exclude[exclude path/subtree during traversal]:path:_files' \
   '--print-symlinks[print symlink destinations]' \
   '--dry-run[preview mutations]' \
   '--root[relocate restore root]:directory:_files' \

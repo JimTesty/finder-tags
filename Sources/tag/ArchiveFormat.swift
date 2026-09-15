@@ -9,6 +9,7 @@ struct ArchiveHeader {
     let followSymlinks: Bool
     let fileInfo: Bool
     let taggedOnly: Bool
+    let excludePatterns: [String]
     let tagColors: [TagColorInfo]
 }
 
@@ -30,13 +31,30 @@ func archiveHeader(from object: [String: Any], line: Int) throws -> ArchiveHeade
     }
 
     let tagColors = try archiveTagColors(object["tagColors"], line: line)
+    let excludePatterns = try archiveExcludePatterns(object["exclude"], line: line)
     return ArchiveHeader(
         purpose: purpose,
         followSymlinks: object["followSymlinks"] as? Bool ?? false,
         fileInfo: object["fileInfo"] as? Bool ?? false,
         taggedOnly: object["taggedOnly"] as? Bool ?? false,
+        excludePatterns: excludePatterns,
         tagColors: tagColors
     )
+}
+
+private func archiveExcludePatterns(_ value: Any?, line: Int) throws -> [String] {
+    guard let value = value else { return [] }
+    guard let values = value as? [Any] else {
+        throw ArchiveError.invalidLine(line: line, message: "exclude must be an array")
+    }
+    var result: [String] = []
+    for value in values {
+        guard let pattern = value as? String, !pattern.isEmpty else {
+            throw ArchiveError.invalidLine(line: line, message: "exclude must contain non-empty strings")
+        }
+        result.append(pattern)
+    }
+    return result
 }
 
 private func archiveTagColors(_ value: Any?, line: Int) throws -> [TagColorInfo] {
@@ -64,6 +82,7 @@ func archiveHeaderObject(
     followSymlinks: Bool,
     fileInfo: Bool,
     taggedOnly: Bool,
+    excludePatterns: [String],
     tagColors: [TagColorInfo]
 ) -> [String: Any] {
     return [
@@ -74,6 +93,7 @@ func archiveHeaderObject(
         "followSymlinks": followSymlinks,
         "fileInfo": fileInfo,
         "taggedOnly": taggedOnly,
+        "exclude": excludePatterns,
         "tagColors": tagColors.map { ["name": $0.name, "color": $0.color] }
     ]
 }

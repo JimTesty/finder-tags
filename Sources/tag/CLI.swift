@@ -31,6 +31,24 @@ private func parseColorMode(_ raw: String) -> ColorMode {
     }
 }
 
+private func parseExcludePattern(_ raw: String) -> String {
+    var value = raw
+    while value.hasPrefix("./") { value.removeFirst(2) }
+    while value.hasSuffix("/") { value.removeLast() }
+
+    guard !value.isEmpty, !value.hasPrefix("/") else {
+        fail("--exclude requires a non-empty relative path")
+    }
+    let components = value.split(separator: "/", omittingEmptySubsequences: false)
+    guard !components.contains(where: {
+        let component = String($0)
+        return component.isEmpty || component == "." || component == ".."
+    }) else {
+        fail("--exclude path may not contain empty, '.', or '..' components")
+    }
+    return value
+}
+
 private func applyShortFlag(_ ch: Character, options: inout Options) {
     switch ch {
     case "l": setOperation(.list, options: &options)
@@ -156,6 +174,7 @@ func parseArguments() -> Options {
             case "recursive", "descend": options.recursive = true
             case "slash": options.slashDirectories = true
             case "print-symlinks": options.printSymlinks = true
+            case "exclude": options.excludePatterns.append(parseExcludePattern(operand()))
             case "null", "nul": options.nulTerminate = true
             case "absolute": options.absolutePaths = true
             case "jsonl", "ndjson": options.jsonLines = true
@@ -266,6 +285,15 @@ func parseArguments() -> Options {
         switch options.operation {
         case .list, .export: break
         default: fail("--file-info is only valid with --list or --export")
+        }
+    }
+
+    if !options.excludePatterns.isEmpty {
+        switch options.operation {
+        case .list, .export, .match, .usage, .add, .remove, .set, .move:
+            break
+        default:
+            fail("--exclude is only valid with filesystem traversal operations")
         }
     }
 

@@ -202,6 +202,13 @@ before Foundation tag I/O. This is the default.
 .B -L, --follow-symlinks
 Follow symlinks and symlinked directories. Archive items may record structural
 target information, but target tags are never nested inside symlink metadata.
+.TP
+.B --exclude PATH
+Skip PATH and its descendants during filesystem traversal. The option may be
+repeated. A single component, such as .git or .git/, matches that component at
+any depth; a path containing / is interpreted relative to each traversal root.
+The normalized exclusions are recorded in an export archive header. This option
+does not affect restore or Spotlight --find.
 .SH SAFETY
 .TP
 .B --dry-run

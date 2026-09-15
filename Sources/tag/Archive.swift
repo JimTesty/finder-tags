@@ -329,6 +329,7 @@ final class ArchiveWriter {
             followSymlinks: options.followSymlinks,
             fileInfo: options.fileInfo,
             taggedOnly: options.taggedOnly,
+            excludePatterns: options.excludePatterns,
             tagColors: colors.archiveTagColors
         ))
         try writeJSON(["type": "root", "path": rootURL!.path])
@@ -466,6 +467,7 @@ final class UndoWriter {
             followSymlinks: followSymlinks,
             fileInfo: false,
             taggedOnly: false,
+            excludePatterns: [],
             tagColors: tagColors
         )
         let headerData = try JSONSerialization.data(withJSONObject: header, options: [.sortedKeys])

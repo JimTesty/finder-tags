@@ -112,6 +112,7 @@ struct Traversal {
             let name = rawChild.lastPathComponent
             let logicalChild = logicalDirectoryURL.appendingPathComponent(name).standardizedFileURL
             let relativePath = displayPrefix.isEmpty ? name : displayPrefix + "/" + name
+            if isExcluded(relativePath) { continue }
             let displayPath = options.absolutePaths ? logicalChild.path : relativePath
             let targetURL = tagIOURL(logicalChild, followSymlinks: options.followSymlinks)
 
@@ -139,5 +140,19 @@ struct Traversal {
                 }
             }
         }
+    }
+
+    private func isExcluded(_ relativePath: String) -> Bool {
+        let components = relativePath.split(separator: "/").map(String.init)
+        for pattern in options.excludePatterns {
+            let patternComponents = pattern.split(separator: "/").map(String.init)
+            if patternComponents.count == 1 {
+                if components.contains(patternComponents[0]) { return true }
+            } else if components.count >= patternComponents.count,
+                      Array(components.prefix(patternComponents.count)) == patternComponents {
+                return true
+            }
+        }
+        return false
     }
 }

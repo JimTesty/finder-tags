@@ -96,7 +96,7 @@ tag --absolute -R directory          # absolute logical output paths
 tag --jsonl file1 file2              # streaming structured output
 find files -print0 | tag --stdin0 -T # read NUL-delimited paths
 
-tag --export directory > tags.archive
+tag --export --exclude .git/ directory > tags.archive
 tag --convert tags.archive --slash --space-indent
 tag --export directory | gzip > tags.archive.gz
 tag --restore tags.archive --root restored-directory --dry-run
@@ -122,8 +122,8 @@ comparisons without changing tags.
 
 Before a real restore writes anything, the complete JSONL archive is read and
 validated. The header records the archive version, symlink following mode,
-file-info setting, tagged-only setting, and a copy of Finder's tag-color
-definitions. Item paths are relative and must not escape the selected root.
+file-info setting, tagged-only setting, exclusions, and a copy of Finder's
+tag-color definitions. Item paths are relative and must not escape the selected root.
 Duplicate logical paths and malformed records are rejected before any tag is
 changed. This does not make filesystem changes transactional if a later
 metadata write fails.
@@ -141,6 +141,13 @@ human formatter as ordinary listings; `--space-indent` separates a filename
 and its tags with two spaces instead of the usual tab/alignment separator.
 The human date is for display only; use JSONL/archive values for stable
 change detection.
+
+`--exclude PATH` skips matching items and their descendants during filesystem
+traversal. It may be repeated. A single component such as `.git/` matches that
+name at any depth; a path containing `/` is relative to each traversal root.
+Trailing slashes are accepted and omitted from the normalized patterns stored
+in an export header. Exclusions do not delete anything, and restore never
+modifies items that are absent from the archive.
 
 Symlinks are not followed by default. `--follow-symlinks`/`-L` resolves and
 follows symlinks, including symlinked directories during recursion. With `-L`,
@@ -364,7 +371,7 @@ item records, and a final `summary` record.
 Example:
 
 ```json
-{"fileInfo":true,"followSymlinks":false,"format":"jsonl","purpose":"export","taggedOnly":false,"type":"header","version":3}
+{"exclude":[],"fileInfo":true,"followSymlinks":false,"format":"jsonl","purpose":"export","taggedOnly":false,"type":"header","version":3}
 {"type":"root","path":"/tmp/tree"}
 {"kind":"file","mtime":1780000000,"path":"file","size":1234,"tags":["First","Second"],"type":"item"}
 ```

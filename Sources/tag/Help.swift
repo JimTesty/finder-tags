@@ -88,6 +88,7 @@ func usage(code: Int32 = 0) -> Never {
       -R, -d, --recursive        Recursively enumerate directories
       -L, --follow-symlinks      Resolve/follow symlinks and symlinked directories
           --no-follow-symlinks   Do not resolve/follow symlinks (default)
+          --exclude PATH         Skip matching paths/subtrees during traversal
 
     mutation safety:
           --dry-run              Show intended changes without writing; restore
@@ -127,7 +128,9 @@ func usage(code: Int32 = 0) -> Never {
     Export archives are always JSONL, include untagged items by default, and
     preserve stored tag order. --reverse is ignored during export. --file-info
     is enabled by default for export and can be disabled with --no-file-info.
-    --tagged-only is an opt-in filter. Use --convert ARCHIVE for human-readable
+    --tagged-only is an opt-in filter. --exclude can be repeated; a single
+    component such as .git matches at any depth, while a slash-containing path
+    is relative to the traversal root. Use --convert ARCHIVE for human-readable
     output; its --reverse, --slash, --space-indent, and --color options affect
     only that display. Restore follows symlink targets only with the same
     --follow-symlinks setting recorded in the archive. --color accepts

@@ -72,6 +72,7 @@ struct Options {
     var absolutePaths = false
     var followSymlinks = false
     var printSymlinks = false
+    var excludePatterns: [String] = []
     var stdinPathMode: StdinPathMode? = nil
     var pathInputExplicit = false
 

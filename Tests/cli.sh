@@ -30,6 +30,7 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- '--no-follow-symlinks'
 "$bin" --help | grep -q -- '-L, --follow-symlinks'
 "$bin" --help | grep -q -- '--print-symlinks'
+"$bin" --help | grep -q -- '--exclude PATH'
 "$bin" --help | grep -q -- '--find TAGS'
 "$bin" --help | grep -q -- '--jsonl'
 "$bin" --help | grep -q -- '--export'
@@ -62,6 +63,16 @@ if printf '%s\n' "$recursive_output" | grep -q '^link/'; then
 fi
 printf '%s\n' "$recursive_output" | grep -qx 'real/back-to-tree'
 [ "$(printf '%s\n' "$recursive_output" | wc -l | tr -d ' ')" -lt 30 ]
+
+# Exclusions skip the matching item and its subtree. A single component is
+# useful for names such as .git regardless of their depth.
+excluded_output=$("$bin" -R --exclude real/ "$work/tree")
+if printf '%s\n' "$excluded_output" | grep -Eq '^real(/|$)'; then
+    echo "--exclude failed to skip real subtree" >&2
+    exit 1
+fi
+printf '%s\n' "$excluded_output" | grep -qx 'sub/child'
+printf '%s\n' "$excluded_output" | grep -qx 'link'
 
 follow_output=$("$bin" -L -R "$work/tree")
 printf '%s\n' "$follow_output" | grep -qx 'link/linked-child'
@@ -352,11 +363,13 @@ if [ "$(uname -s)" = Darwin ]; then
     # preserves the exact stored tag order.
     export_root="$work/export-root"
     restore_root="$work/restore-root"
-    mkdir -p "$export_root/sub" "$export_root/real" "$restore_root/sub" "$restore_root/real"
+    mkdir -p "$export_root/sub" "$export_root/real" "$export_root/.git" "$restore_root/sub" "$restore_root/real" "$restore_root/.git"
     touch "$export_root/alpha" "$export_root/.hidden" "$export_root/space name" "$export_root/sub/beta"
     touch "$export_root/real/linked-child"
+    touch "$export_root/.git/config"
     touch "$restore_root/alpha" "$restore_root/.hidden" "$restore_root/space name" "$restore_root/sub/beta"
     touch "$restore_root/real/linked-child"
+    touch "$restore_root/.git/config"
     ln -s real "$export_root/alias"
     ln -s missing "$export_root/dangling"
     ln -s real "$restore_root/alias"
@@ -392,6 +405,16 @@ if [ "$(uname -s)" = Darwin ]; then
         exit 1
     fi
     grep -Fq '"type":"summary"' "$default_export_archive"
+
+    excluded_archive="$work/export-excluded.jsonl"
+    "$bin" --export --exclude '.git/' "$export_root" >"$excluded_archive" 2>"$work/export-excluded.err"
+    grep -Fq '"exclude":[".git"]' "$excluded_archive"
+    if grep -Fq '"path":".git"' "$excluded_archive" || \
+       grep -Fq '"path":".git\\/config"' "$excluded_archive"; then
+        echo "--exclude failed to omit .git subtree from export" >&2
+        exit 1
+    fi
+    grep -Fq '"path":"alpha"' "$excluded_archive"
 
     # Canonical archives remain usable through ordinary compression pipelines.
     compressed_archive="$work/export-default.jsonl.gz"
