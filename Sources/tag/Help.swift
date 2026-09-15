@@ -64,7 +64,8 @@ func usage(code: Int32 = 0) -> Never {
           --space-indent         Use two spaces instead of tab before tags
           --garrulous            Alias for --one-per-line
           --no-garrulous         Alias for --comma-separated
-      -p, --slash                Append '/' to directory names
+      -p, --slash                Append '/' to directories and '@' to symlinks
+          --print-symlinks       Show each symlink's destination (text output)
       -0, --null                 Terminate text records with NUL
           --nul                  Backward-compatible alias for --null
           --absolute             Display absolute logical paths
@@ -83,8 +84,8 @@ func usage(code: Int32 = 0) -> Never {
                                 includes them by default)
       -e, --enter                Enumerate contents of explicit directories
       -R, -d, --recursive        Recursively enumerate directories
-          --no-follow-symlinks   Do not resolve/follow symlinked directories
-          --follow-symlinks      Restore the default follow behavior
+      -L, --follow-symlinks      Resolve/follow symlinks and symlinked directories
+          --no-follow-symlinks   Do not resolve/follow symlinks (default)
 
     mutation safety:
           --dry-run              Show intended changes without writing; restore
@@ -114,9 +115,10 @@ func usage(code: Int32 = 0) -> Never {
     not rewrite metadata. Mutating commands sort the final stored array after
     applying the requested edit. Default behavior always preserves tag order.
 
-    Symbolic links are followed by default. --no-follow-symlinks prevents
-    recursive traversal through symlinked directories and avoids explicitly
-    resolving symlink paths before Foundation tag I/O.
+    Symbolic links are not followed by default. --follow-symlinks (or -L)
+    resolves symlinks, follows symlinked directories, and records target
+    provenance in archive output. --print-symlinks displays link destinations
+    without changing traversal; dangling targets are marked NOT FOUND.
 
     Export archives are tagged-only, root-relative, and preserve stored tag
     order. Plaintext archives begin with a JSON format header, always quote
@@ -124,10 +126,10 @@ func usage(code: Int32 = 0) -> Never {
     and --separator are recorded in that header so restore can interpret the
     display. Use --separator='\\u{200B}' for an invisible quote separator.
     --jsonl remains the streaming machine-readable form. Restore follows
-    current symlink targets and warns when they differ from the archived
-    target. A tagged-only restore changes listed items only; it does not clear
-    tags from unlisted items. --color accepts auto/yes, always/force, and
-    never/no/none aliases; JSONL is never colored.
+    symlink targets only with --follow-symlinks and warns when they differ
+    from an archived target. A tagged-only restore changes listed items only;
+    it does not clear tags from unlisted items. --color accepts auto/yes,
+    always/force, and never/no/none aliases; JSONL is never colored.
 
     Defaults match jdberry/tag where practical: list shows filename+tags;
     match/find show filenames only. With no paths, list/match/usage enumerate the
@@ -144,7 +146,7 @@ func usage(code: Int32 = 0) -> Never {
         --sorted-tags, --absolute, stdin path input, --jsonl, and --dry-run are
         additions.
       * Quoted TAGS can contain commas; jdberry/tag's grammar cannot.
-      * Symlinked targets/directories are followed intentionally by default.
+      * Symlinked targets/directories are followed only with --follow-symlinks.
 
     Use -- before a path beginning with '-'.
     """

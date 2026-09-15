@@ -109,8 +109,9 @@ gzip -dc tags.archive.gz | tag --restore - --root restored-directory
 hidden items by default and emits tagged items only, preserving each stored tag
 array exactly. Plaintext output is find-like and can be read back by
 `--restore`; `--jsonl` provides the streaming machine-readable form. JSONL uses
-explicit `root` and one-per-symlink records, and never repeats an
-`absolutePath` field. A final export summary is written to stderr for
+explicit `root` records and emits symlink provenance with `--follow-symlinks`
+or explicit plaintext `--print-symlinks`; it never repeats an `absolutePath`
+field. A final export summary is written to stderr for
 plaintext, or as a JSONL `summary` record.
 
 `--restore ARCHIVE` accepts an archive path or `-` for stdin. `--root DEST`
@@ -153,9 +154,17 @@ with two spaces instead of the usual tab/alignment separator.
 The human date is for display only; use JSONL/archive values for stable
 change detection.
 
-Symlinks are followed by default. If a symlink resolves to a different target
-than the one recorded during export, restore warns once to stderr and follows
-the current target. `--no-follow-symlinks` retains the general defensive mode.
+Symlinks are not followed by default. `--follow-symlinks`/`-L` resolves and
+follows symlinks, including symlinked directories during recursion. If a
+followed symlink resolves to a different target than the one recorded during
+export, restore warns once to stderr and follows the current target.
+`--no-follow-symlinks` is retained as an explicit defensive spelling.
+
+`--slash` appends `/` to directories and `@` to symlinks, like `ls -F`.
+`--print-symlinks` additionally prints the link's stored destination, for
+example `link@ -> ../target/`; the target slash follows `--slash`, and missing
+targets are marked `(NOT FOUND)` in red when color is enabled. Printing a
+symlink target does not cause traversal or tag I/O to follow it.
 Archive paths are validated before writes, including rejection of absolute
 paths, lexical `..` escapes, malformed records, and conflicting duplicates.
 
@@ -331,14 +340,14 @@ arbitrary filenames. Command-line and stdin paths are combined. Explicitly
 requesting stdin and providing no paths processes zero files instead of falling
 back to the current directory.
 
-Symbolic links are **followed by default**. Finder generally presents the target
-file's tags, and recursive traversal follows symlinked directories while
-suppressing directory cycles.
+Symbolic links are **not followed by default**. `--follow-symlinks`/`-L` makes
+Finder generally present the target file's tags and makes recursive traversal
+follow symlinked directories while suppressing directory cycles.
 
-`--no-follow-symlinks` is the defensive alternative for recursive work: it does
-not descend into symlinked directories and does not explicitly resolve symlink
-paths before Foundation tag I/O. This is particularly useful to prevent a
-recursive mutation from escaping its starting tree through a directory symlink.
+`--no-follow-symlinks` is the default for recursive work: it does not descend
+into symlinked directories and does not explicitly resolve symlink paths before
+Foundation tag I/O. This prevents a recursive mutation from escaping its
+starting tree through a directory symlink.
 
 ## `--dry-run`
 
@@ -358,10 +367,11 @@ without buffering an entire recursive traversal.
 The first record is a `header` object containing `format`, `version`, and the
 display configuration. Normal file records contain `path` and `tags`.
 Recursive output emits a
-`{"type":"root","path":"..."}` record once per traversal root, and emits
-one `{"type":"symlink",...}` record per symlink when path-resolution
-provenance is needed. It never emits `absolutePath`; root plus logical path is
-the authoritative identity. Export adds a final `summary` record with counts.
+`{"type":"root","path":"..."}` record once per traversal root. With
+`--follow-symlinks`, it also emits one `{"type":"symlink",...}` record per
+symlink for path-resolution provenance. It never emits `absolutePath`; root
+plus logical path is the authoritative identity. Export adds a final
+`summary` record with counts.
 
 Example:
 

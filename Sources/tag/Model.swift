@@ -75,7 +75,8 @@ struct Options {
     var syncBackup = false
     var position: PositionSpec? = nil
     var absolutePaths = false
-    var followSymlinks = true
+    var followSymlinks = false
+    var printSymlinks = false
     var stdinPathMode: StdinPathMode? = nil
     var pathInputExplicit = false
 
@@ -107,7 +108,7 @@ struct Options {
 }
 
 struct Target {
-    // url is the URL used for tag I/O. By default it is symlink-resolved.
+    // url is the URL used for tag I/O. It is symlink-resolved only with -L.
     // logicalURL preserves the user's filesystem path for output/provenance.
     let url: URL
     let logicalURL: URL

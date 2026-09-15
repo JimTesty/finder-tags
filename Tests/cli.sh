@@ -21,6 +21,7 @@ touch "$work/tree/root-file" "$work/tree/sub/child" "$work/tree/real/linked-chil
 touch "$work/tree/.hidden"
 ln -s real "$work/tree/link"
 ln -s .. "$work/tree/real/back-to-tree"
+ln -s missing "$work/tree/dangling"
 
 "$bin" --help | grep -q -- 'finder-tags executable: tag'
 "$bin" --help | grep -q -- '--case-sensitive'
@@ -29,6 +30,8 @@ ln -s .. "$work/tree/real/back-to-tree"
 "$bin" --help | grep -q -- '--absolute'
 "$bin" --help | grep -q -- '--stdin0'
 "$bin" --help | grep -q -- '--no-follow-symlinks'
+"$bin" --help | grep -q -- '-L, --follow-symlinks'
+"$bin" --help | grep -q -- '--print-symlinks'
 "$bin" --help | grep -q -- '--find TAGS'
 "$bin" --help | grep -q -- '--jsonl'
 "$bin" --help | grep -q -- '--export'
@@ -53,9 +56,16 @@ fi
 recursive_output=$("$bin" -R "$work/tree")
 [ "$(printf '%s\n' "$recursive_output" | sed -n '1p')" = "$work/tree" ]
 printf '%s\n' "$recursive_output" | grep -qx 'sub/child'
-printf '%s\n' "$recursive_output" | grep -qx 'link/linked-child'
+printf '%s\n' "$recursive_output" | grep -qx 'link'
+if printf '%s\n' "$recursive_output" | grep -q '^link/'; then
+    echo "recursive traversal followed a symlink by default" >&2
+    exit 1
+fi
 printf '%s\n' "$recursive_output" | grep -qx 'real/back-to-tree'
 [ "$(printf '%s\n' "$recursive_output" | wc -l | tr -d ' ')" -lt 30 ]
+
+follow_output=$("$bin" -L -R "$work/tree")
+printf '%s\n' "$follow_output" | grep -qx 'link/linked-child'
 
 # --no-follow-symlinks still lists the symlink but does not recurse through it.
 nofollow_output=$("$bin" -R --no-follow-symlinks "$work/tree")
@@ -64,6 +74,25 @@ if printf '%s\n' "$nofollow_output" | grep -q '^link/'; then
     echo "--no-follow-symlinks unexpectedly traversed link/" >&2
     exit 1
 fi
+
+# Symlink decorations follow ls -F-like rules. Printing a target does not
+# enable traversal, and a dangling explicit symlink remains displayable.
+[ "$(cd "$work/tree" && "$bin" --slash link)" = 'link@' ]
+[ "$(cd "$work/tree" && "$bin" --print-symlinks link)" = 'link -> real' ]
+[ "$(cd "$work/tree" && "$bin" --slash --print-symlinks link)" = 'link@ -> real/' ]
+[ "$(cd "$work/tree" && "$bin" --slash --print-symlinks dangling)" = 'dangling@ -> missing (NOT FOUND)' ]
+print_recursive=$("$bin" -R --print-symlinks "$work/tree")
+printf '%s\n' "$print_recursive" | grep -qx 'link -> real'
+if printf '%s\n' "$print_recursive" | grep -q '^link/'; then
+    echo "--print-symlinks unexpectedly enabled traversal" >&2
+    exit 1
+fi
+esc=$(printf '\033')
+colored_symlink=$(cd "$work/tree" && "$bin" --color=force --slash --print-symlinks dangling)
+case "$colored_symlink" in
+    *"$esc[31m(NOT FOUND)$esc[m"*) ;;
+    *) echo "missing symlink target was not colored red" >&2; exit 1 ;;
+esac
 
 # Hidden files are skipped unless -A is present.
 if "$bin" -e "$work/tree" | grep -q '^\.hidden$'; then
@@ -84,10 +113,16 @@ fi
 printf '%s\n' "$json_path" | grep -Fq '"path":"a"'
 json_recursive=$("$bin" --jsonl -R "$work/tree")
 [ "$(printf '%s\n' "$json_recursive" | grep -c '"type":"root"')" -eq 1 ]
+if printf '%s\n' "$json_recursive" | grep -q '"type":"symlink"'; then
+    echo "default JSONL unexpectedly recorded symlink targets" >&2
+    exit 1
+fi
 if printf '%s\n' "$json_recursive" | grep -q '"absolutePath"'; then
     echo "recursive JSONL unexpectedly repeated absolutePath" >&2
     exit 1
 fi
+json_follow=$("$bin" --jsonl -L -R "$work/tree")
+printf '%s\n' "$json_follow" | grep -q '"type":"symlink"'
 
 # Paths from stdin, including NUL-delimited input. Explicit empty stdin means
 # zero files rather than silently falling back to current-directory traversal.
@@ -303,10 +338,10 @@ if [ "$(uname -s)" = Darwin ]; then
     [ "$("$bin" -N "$work/a")" = 'ViaStdin' ]
     [ "$("$bin" -N "$work/b")" = 'ViaStdin' ]
 
-    # Symlink operations target the referent by default.
+    # Symlink operations target the referent only when explicitly requested.
     touch "$work/target-file"
     ln -s target-file "$work/file-link"
-    "$bin" --set 'ViaLink' --no-backup "$work/file-link"
+    "$bin" -L --set 'ViaLink' --no-backup "$work/file-link"
     [ "$("$bin" -N "$work/target-file")" = 'ViaLink' ]
     [ "$("$bin" -N "$work/file-link")" = 'ViaLink' ]
 
@@ -333,8 +368,15 @@ if [ "$(uname -s)" = Darwin ]; then
     "$bin" --set WrongSpace --no-backup "$restore_root/space name"
     "$bin" --set Keep --no-backup "$restore_root"
 
+    default_export_archive="$work/export-default.archive"
+    "$bin" --export "$export_root" >"$default_export_archive" 2>"$work/export-default.err"
+    if grep -Fq '@symlink' "$default_export_archive"; then
+        echo "default export unexpectedly recorded symlink targets" >&2
+        exit 1
+    fi
+
     export_archive="$work/export.archive"
-    "$bin" --export "$export_root" >"$export_archive" 2>"$work/export.err"
+    "$bin" --export -L "$export_root" >"$export_archive" 2>"$work/export.err"
     grep -Fq '"format":"plain"' "$export_archive"
     grep -Fq '"version":2' "$export_archive"
     grep -Fq '.hidden' "$export_archive"
@@ -349,7 +391,7 @@ if [ "$(uname -s)" = Darwin ]; then
     grep -q 'exported 4 tagged items' "$work/export.err"
 
     metadata_archive="$work/export-metadata.archive"
-    "$bin" --export --file-info "$export_root" >"$metadata_archive" 2>"$work/export-metadata.err"
+    "$bin" --export -L --file-info "$export_root" >"$metadata_archive" 2>"$work/export-metadata.err"
     grep -q '^@metadata ' "$metadata_archive"
     grep -q 'exported 4 tagged items' "$work/export-metadata.err"
     "$bin" --restore "$metadata_archive" --root "$restore_root" --dry-run --no-backup \
@@ -357,7 +399,7 @@ if [ "$(uname -s)" = Darwin ]; then
 
     restore_dry_output="$work/restore-dry.out"
     restore_dry_error="$work/restore-dry.err"
-    "$bin" --restore "$export_archive" --root "$restore_root" --dry-run --no-backup \
+    "$bin" --restore "$export_archive" --root "$restore_root" --follow-symlinks --dry-run --no-backup \
         >"$restore_dry_output" 2>"$restore_dry_error"
     grep -q 'would change' "$restore_dry_error"
     grep -q 'warnings' "$restore_dry_error"
@@ -366,7 +408,7 @@ if [ "$(uname -s)" = Darwin ]; then
     [ "$("$bin" -N "$restore_root/.hidden")" = 'WrongHidden' ]
     [ "$("$bin" -N "$restore_root/sub/beta")" = 'WrongNested' ]
 
-    "$bin" --restore "$export_archive" --root "$restore_root" --no-backup \
+    "$bin" --restore "$export_archive" --root "$restore_root" --follow-symlinks --no-backup \
         >"$work/restore.out" 2>"$work/restore.err"
     grep -q 'restored 4 files' "$work/restore.err"
     grep -q 'following the current target' "$work/restore.err"
@@ -408,6 +450,30 @@ if [ "$(uname -s)" = Darwin ]; then
         >"$work/pretty-restore.out" 2>"$work/pretty-restore.err"
     [ "$("$bin" -N "$restore_root/$zero_width_name")" = 'Zero,Width' ]
     [ "$("$bin" -N "$restore_root/sub")" = 'DirectoryTag' ]
+
+    # A slash-decorated symlink item must still restore as the undecorated
+    # path. The provenance record precedes the item record in this format.
+    symlink_export_root="$work/symlink-export-root"
+    symlink_restore_root="$work/symlink-restore-root"
+    mkdir -p "$symlink_export_root" "$symlink_restore_root"
+    touch "$symlink_export_root/target" "$symlink_restore_root/target"
+    ln -s target "$symlink_export_root/link"
+    ln -s target "$symlink_restore_root/link"
+    "$bin" -L --set LinkTag --no-backup "$symlink_export_root/link"
+    symlink_slash_header='{"fileInfo":false,"format":"plain","reverse":false,"separator":"\"","slash":true,"spaceIndent":false,"type":"header","version":2}'
+    printf '%s\n' "$symlink_slash_header" '@root /' '@symlink "link"' >"$work/symlink-marker.archive"
+    printf '%s\t%s\n' '"link@"' LinkTag >>"$work/symlink-marker.archive"
+    "$bin" --set Wrong --no-backup "$symlink_restore_root/target"
+    "$bin" --restore "$work/symlink-marker.archive" --root "$symlink_restore_root" \
+        -L --no-backup
+    [ "$("$bin" -N "$symlink_restore_root/target")" = 'LinkTag' ]
+    "$bin" --export -L -p "$symlink_export_root" \
+        >"$work/symlink.archive" 2>"$work/symlink-export.err"
+    grep -q 'link@' "$work/symlink.archive"
+    "$bin" --set Wrong --no-backup "$symlink_restore_root/target"
+    "$bin" --restore "$work/symlink.archive" --root "$symlink_restore_root" \
+        -L --no-backup
+    [ "$("$bin" -N "$symlink_restore_root/target")" = 'LinkTag' ]
 
     json_archive="$work/export.jsonl"
     "$bin" --export --jsonl "$export_root" >"$json_archive"

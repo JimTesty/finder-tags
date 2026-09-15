@@ -76,6 +76,15 @@ final class App {
                 do {
                     tags = try self.store.read(target.url)
                 } catch {
+                    if let link = symbolicLinkInfo(for: target.logicalURL), !link.targetExists {
+                        do {
+                            try writer.emitTarget(target, tags: [])
+                        } catch {
+                            writer.stats.errors += 1
+                            self.report("\(target.absolutePath): \(error.localizedDescription)")
+                        }
+                        return
+                    }
                     writer.stats.errors += 1
                     writer.stats.visited += 1
                     self.report("\(target.absolutePath): \(error.localizedDescription)")
@@ -212,7 +221,16 @@ final class App {
             do {
                 switch options.operation {
                 case .list:
-                    let tags = try store.read(target.url)
+                    let tags: [String]
+                    do {
+                        tags = try store.read(target.url)
+                    } catch {
+                        if let link = symbolicLinkInfo(for: target.logicalURL), !link.targetExists {
+                            tags = []
+                        } else {
+                            throw error
+                        }
+                    }
                     if !options.taggedOnly || !tags.isEmpty {
                         let metadata = options.fileInfo
                             ? try fileMetadata(for: target.url)

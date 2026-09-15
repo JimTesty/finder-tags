@@ -42,8 +42,9 @@ _arguments \
   '(-A --all)'{-A,--all}'[include hidden files]' \
   '(-e --enter)'{-e,--enter}'[enter directories]' \
   '(-R -d --recursive)'{-R,-d,--recursive}'[recursive]' \
-  '--no-follow-symlinks[do not recurse through symlinked directories]' \
-  '--follow-symlinks[follow symlinks (default)]' \
+  '--no-follow-symlinks[do not follow symlinks (default)]' \
+  '{-L,--follow-symlinks}[follow symlinks and symlinked directories]' \
+  '--print-symlinks[print symlink destinations]' \
   '--dry-run[preview mutations]' \
   '--root[relocate restore root]:directory:_files' \
   '--backup[write undo archive]:archive:_files' \

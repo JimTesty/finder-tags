@@ -70,6 +70,7 @@ private func applyShortFlag(_ ch: Character, options: inout Options) {
     case "e": options.enterDirectories = true
     case "R", "d": options.recursive = true
     case "p": options.slashDirectories = true
+    case "L": options.followSymlinks = true
     case "0": options.nulTerminate = true
     case "h": usage()
     case "v": version()
@@ -174,6 +175,7 @@ func parseArguments() -> Options {
             case "enter": options.enterDirectories = true
             case "recursive", "descend": options.recursive = true
             case "slash": options.slashDirectories = true
+            case "print-symlinks": options.printSymlinks = true
             case "null", "nul": options.nulTerminate = true
             case "absolute": options.absolutePaths = true
             case "jsonl", "ndjson": options.jsonLines = true
@@ -291,6 +293,10 @@ func parseArguments() -> Options {
         guard case .export = options.operation, !options.jsonLines else {
             fail("--separator is only valid with plain --export output")
         }
+    }
+
+    if options.printSymlinks && options.jsonLines {
+        fail("--print-symlinks is only valid with text output")
     }
 
     switch options.operation {

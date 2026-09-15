@@ -60,11 +60,73 @@ func tagIOURL(_ logicalURL: URL, followSymlinks: Bool) -> URL {
     return followSymlinks ? resolvedTagURL(logicalURL) : logicalURL.standardizedFileURL
 }
 
+struct SymbolicLinkInfo {
+    let destination: String
+    let targetURL: URL
+    let targetExists: Bool
+    let targetIsDirectory: Bool
+}
+
+func symbolicLinkInfo(for url: URL) -> SymbolicLinkInfo? {
+    guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: url.path) else {
+        return nil
+    }
+
+    let targetURL: URL
+    if destination.hasPrefix("/") {
+        targetURL = URL(fileURLWithPath: destination).standardizedFileURL
+    } else {
+        targetURL = url.deletingLastPathComponent()
+            .appendingPathComponent(destination)
+            .standardizedFileURL
+    }
+
+    let exists = fileManager.fileExists(atPath: targetURL.path)
+    let isDirectory = (try? targetURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    return SymbolicLinkInfo(
+        destination: destination,
+        targetURL: targetURL,
+        targetExists: exists,
+        targetIsDirectory: isDirectory
+    )
+}
+
 func isSymbolicLink(_ url: URL) -> Bool {
     // destinationOfSymbolicLink is an lstat-like question: it succeeds only
     // when the path itself is a symbolic link, without relying on resource
     // values that may describe the referent.
     return (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) != nil
+}
+
+func formattedPath(
+    for target: Target,
+    slash: Bool,
+    printSymlink: Bool,
+    colors: FinderColors
+) throws -> String {
+    var path = target.displayPath
+
+    if isSymbolicLink(target.logicalURL) {
+        if slash { path += "@" }
+        if printSymlink, let link = symbolicLinkInfo(for: target.logicalURL) {
+            var destination = link.destination
+            if slash && link.targetExists && link.targetIsDirectory && !destination.hasSuffix("/") {
+                destination += "/"
+            }
+            path += " -> " + destination
+            if !link.targetExists {
+                path += " " + colors.renderMissing("(NOT FOUND)")
+            }
+        }
+        return path
+    }
+
+    guard slash else { return path }
+    let values = try target.url.resourceValues(forKeys: [.isDirectoryKey])
+    if values.isDirectory == true && !path.hasSuffix("/") {
+        path += "/"
+    }
+    return path
 }
 
 func readPathsFromStdin(_ mode: StdinPathMode) -> [String] {

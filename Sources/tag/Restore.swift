@@ -119,13 +119,14 @@ struct RestoreEngine {
     private func warnAboutRedirectedSymlinks(_ stats: inout ArchiveStats) {
         guard options.followSymlinks else { return }
         for mapping in document.symlinks {
+            guard let archivedPath = mapping.resolvedPath else { continue }
             let logicalURL = destinationRoot.appendingPathComponent(mapping.path)
             let current = resolvedTagURL(logicalURL).path
-            if current != mapping.resolvedPath {
+            if current != archivedPath {
                 stats.warnings += 1
                 onWarning(
                     "symlink \(mapping.path) resolved to \(current), "
-                    + "but the archive recorded \(mapping.resolvedPath); following the current target"
+                    + "but the archive recorded \(archivedPath); following the current target"
                 )
             }
         }

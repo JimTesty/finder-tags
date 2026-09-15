@@ -14,6 +14,11 @@ struct FinderColors {
         return escape + tag + "\u{001B}[m"
     }
 
+    func renderMissing(_ text: String) -> String {
+        guard isEnabled else { return text }
+        return "\u{001B}[31m\(text)\u{001B}[m"
+    }
+
     private static let ansiByCode: [Int: String] = [
         1: "\u{001B}[48;5;241m", // gray
         2: "\u{001B}[42m",       // green

@@ -34,7 +34,14 @@ final class Output {
         }
 
         let renderedTags = options.showTags ? tags.map(colors.render) : []
-        let name = options.showNames ? try displayPath(target) : nil
+        let name = options.showNames
+            ? try formattedPath(
+                for: target,
+                slash: options.slashDirectories,
+                printSymlink: options.printSymlinks,
+                colors: colors
+            )
+            : nil
         let decoratedName: String?
        if let name = name, let metadata = metadata {
             let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(fileInfoSizeText(metadata.size))]"
@@ -143,7 +150,13 @@ final class Output {
         let before = change.before.map(colors.render).joined(separator: ",")
         let after = change.after.map(colors.render).joined(separator: ",")
         let marker = change.before == change.after ? "=" : "->"
-        record("[dry-run] \(operation) \(target.displayPath)\t\(before) \(marker) \(after)")
+        let path = try formattedPath(
+            for: target,
+            slash: options.slashDirectories,
+            printSymlink: options.printSymlinks,
+            colors: colors
+        )
+        record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)")
     }
 
    private func pathObject(_ target: Target) -> [String: Any] {
@@ -177,7 +190,9 @@ final class Output {
             emittedJSONSymlinks.removeAll()
         }
 
-        guard isSymbolicLink(target.logicalURL) else { return }
+        guard isSymbolicLink(target.logicalURL),
+              options.followSymlinks || options.printSymlinks
+        else { return }
         let key = (target.rootPath ?? "") + "\n" + target.logicalURL.path
         guard emittedJSONSymlinks.insert(key).inserted else { return }
         try jsonRecord([
@@ -185,13 +200,6 @@ final class Output {
             "path": target.displayPath,
             "resolvedPath": target.resolvedPath
         ])
-    }
-
-    private func displayPath(_ target: Target) throws -> String {
-        if !options.slashDirectories { return target.displayPath }
-        let values = try target.url.resourceValues(forKeys: [.isDirectoryKey])
-        if values.isDirectory != true { return target.displayPath }
-        return target.displayPath.hasSuffix("/") ? target.displayPath : target.displayPath + "/"
     }
 
     private func jsonRecord(_ object: [String: Any]) throws {

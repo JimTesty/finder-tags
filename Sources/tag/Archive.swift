@@ -13,7 +13,7 @@ struct ArchiveEntry {
 
 struct ArchiveSymlink {
     let path: String
-    let resolvedPath: String
+    let resolvedPath: String?
 }
 
 struct ArchiveDocument {
@@ -135,10 +135,12 @@ private struct ArchiveBuilder {
         header = newHeader
     }
 
-    mutating func addSymlink(path: String, resolvedPath: String) throws {
+    mutating func addSymlink(path: String, resolvedPath: String?) throws {
         try validateRelativeArchivePath(path)
-        guard resolvedPath.hasPrefix("/"), !resolvedPath.unicodeScalars.contains("\0") else {
-            throw ArchiveError.invalidPath(resolvedPath)
+        if let resolvedPath = resolvedPath {
+            guard resolvedPath.hasPrefix("/"), !resolvedPath.unicodeScalars.contains("\0") else {
+                throw ArchiveError.invalidPath(resolvedPath)
+            }
         }
 
         if symlinkIndexes[path] != nil {
@@ -233,12 +235,22 @@ struct ArchiveReader {
             }
 
             if type == "symlink" {
-                guard let path = object["path"] as? String,
-                      let resolvedPath = object["resolvedPath"] as? String
-                else {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "symlink record lacks path or resolvedPath")
+                guard let path = object["path"] as? String else {
+                    throw ArchiveError.invalidLine(line: lineNumber, message: "symlink record lacks path")
                 }
-                try builder.addSymlink(path: path, resolvedPath: resolvedPath)
+                let resolvedPath: String?
+                if let value = object["resolvedPath"] {
+                    guard let string = value as? String else {
+                        throw ArchiveError.invalidLine(line: lineNumber, message: "symlink resolvedPath must be a string")
+                    }
+                    resolvedPath = string
+                } else {
+                    resolvedPath = nil
+                }
+                try builder.addSymlink(
+                    path: path,
+                    resolvedPath: resolvedPath
+                )
                 if let tags = object["tags"] {
                     try builder.addEntry(
                         path: path,
@@ -353,13 +365,15 @@ struct ArchiveReader {
             if line == "@symlink" || line.hasPrefix("@symlink ") || line.hasPrefix("@symlink\t") {
                 let rest = String(line.dropFirst(8)).trimmingCharacters(in: .whitespaces)
                 let fields = rest.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-                guard fields.count == 2 else {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "@symlink needs path and resolved target separated by a tab")
+                guard fields.count == 1 || fields.count == 2 else {
+                    throw ArchiveError.invalidLine(line: lineNumber, message: "@symlink needs a path and optional resolved target separated by a tab")
                 }
                 do {
                     try builder.addSymlink(
                         path: parseArchiveField(fields[0], separator: format.separator),
-                        resolvedPath: parseArchiveField(fields[1], separator: format.separator)
+                        resolvedPath: fields.count == 2
+                            ? parseArchiveField(fields[1], separator: format.separator)
+                            : nil
                     )
                 } catch let error as ArchiveError {
                     throw error
@@ -387,8 +401,15 @@ struct ArchiveReader {
             do {
                 let (rawPath, tagStart) = try parseArchiveFieldPrefix(line, separator: format.separator)
                 var path = rawPath
-                if format.slashDirectories && path != "." && path.hasSuffix("/") {
-                    path.removeLast()
+                if format.slashDirectories && path != "." {
+                    if path.hasSuffix("/") {
+                        path.removeLast()
+                    } else if path.hasSuffix("@") {
+                        let undecorated = String(path.dropLast())
+                        if builder.symlinkIndexes[undecorated] != nil {
+                            path = undecorated
+                        }
+                    }
                 }
                 let rawTags = String(line[line.index(line.startIndex, offsetBy: tagStart)...])
                 let tags = try parseArchiveTagList(rawTags, separator: format.separator)
@@ -448,15 +469,30 @@ final class ArchiveWriter {
         let rawPath = try relativePath(target.logicalURL, to: rootURL)
         let path = try archiveDisplayPath(rawPath, target: target)
 
-        if isSymbolicLink(target.logicalURL) && emittedSymlinks.insert(rawPath).inserted {
+        let isSymlink = isSymbolicLink(target.logicalURL)
+        let recordsSymlinkType = isSymlink
+            && options.slashDirectories
+            && !options.followSymlinks
+            && !options.printSymlinks
+        if isSymlink,
+           (options.followSymlinks || options.printSymlinks || recordsSymlinkType),
+           emittedSymlinks.insert(rawPath).inserted {
             if options.jsonLines {
-                try writeJSON([
+                var object: [String: Any] = [
                     "type": "symlink",
                     "path": rawPath,
-                    "resolvedPath": target.resolvedPath
-                ])
+                ]
+                if options.followSymlinks || options.printSymlinks {
+                    object["resolvedPath"] = target.resolvedPath
+                }
+                try writeJSON(object)
             } else {
-                writeText("@symlink \(archiveQuote(rawPath, separator: options.archiveSeparator))\t\(archiveQuote(target.resolvedPath, separator: options.archiveSeparator))")
+                let pathField = archiveQuote(rawPath, separator: options.archiveSeparator)
+                if options.followSymlinks || options.printSymlinks {
+                    writeText("@symlink \(pathField)\t\(archiveQuote(target.resolvedPath, separator: options.archiveSeparator))")
+                } else {
+                    writeText("@symlink \(pathField)")
+                }
             }
             stats.emitted += 1
         }
@@ -515,6 +551,9 @@ final class ArchiveWriter {
 
     private func archiveDisplayPath(_ path: String, target: Target) throws -> String {
         guard options.slashDirectories, path != "." else { return path }
+        if isSymbolicLink(target.logicalURL) {
+            return path.hasSuffix("@") ? path : path + "@"
+        }
         let values = try target.url.resourceValues(forKeys: [.isDirectoryKey])
         guard values.isDirectory == true else { return path }
         return path.hasSuffix("/") ? path : path + "/"
