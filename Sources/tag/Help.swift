@@ -13,6 +13,7 @@ func usage(code: Int32 = 0) -> Never {
       \(programName) -r | --remove TAGS [options] path ...
       \(programName) -s | --set TAGS [options] path ...
       \(programName) -m | --match TAGS [options] [path ...]
+      \(programName) --filter TAGS [options] [path ...]
       \(programName) -u | --usage TAGS [options] [path ...]
       \(programName) -f | --find TAGS [options] [path ...]
       \(programName) --move TAG POSITION [options] path ...
@@ -39,6 +40,7 @@ func usage(code: Int32 = 0) -> Never {
       -s, --set TAGS             Replace all tags in the specified order
           --copy SRC DST         Replace DST's tags with SRC's ordered tags
       -m, --match TAGS           List traversed files matching all TAGS
+          --filter TAGS          Match tags with list-style output
       -u, --usage TAGS           Count tags on traversed files matching TAGS
       -f, --find TAGS            Spotlight search for files matching TAGS
           --move TAG POSITION    Move one existing tag to POSITION
@@ -107,7 +109,9 @@ func usage(code: Int32 = 0) -> Never {
     existing red,orange,yellow re-cases the unique match in place to
     red,Orange,yellow. Use --case-sensitive to append a distinct Orange instead.
 
-    '*' means any tag for --match/--usage/--find and all tags for --remove. An
+    --filter uses comma-separated AND terms; prefix a term with '-' to require
+    its absence. '*' requires at least one tag and '-*' requires no tags.
+    '*' means any tag for --match/--filter/--usage/--find and all tags for --remove. An
     empty TAGS expression matches files with no tags. --usage requires TAGS.
 
     Placement names map to Finder's visual stack: first/left/bottom = index 0,
@@ -136,10 +140,10 @@ func usage(code: Int32 = 0) -> Never {
     --follow-symlinks setting recorded in the archive. --color accepts
     auto/yes, always/force, and never/no/none aliases; JSONL is never colored.
 
-    Defaults match jdberry/tag where practical: list shows filename+tags;
-    match/find show filenames only. With no paths, list/match/usage enumerate the
-    current directory; find uses Spotlight's default search scope. Mutating
-    operations require explicit paths.
+    Defaults match jdberry/tag where practical: list/filter show filename+tags;
+    match/find show filenames only. With no paths, list/match/filter/usage
+    enumerate the current directory; find uses Spotlight's default search scope.
+    Mutating operations require explicit paths.
 
     Important differences from jdberry/tag:
       * Stored tag order is preserved by default. --sorted-tags opts into sorted
@@ -147,7 +151,7 @@ func usage(code: Int32 = 0) -> Never {
       * --usage traverses paths directly; it does NOT use Spotlight.
       * --usage requires TAGS instead of making it optional.
       * --home/--local/--network are not implemented for --find.
-      * --copy, --move, placement controls, --reverse, --case-sensitive,
+      * --filter, --copy, --move, placement controls, --reverse, --case-sensitive,
         --sorted-tags, --absolute, stdin path input, --jsonl, and --dry-run are
         additions.
       * Quoted TAGS can contain commas; jdberry/tag's grammar cannot.

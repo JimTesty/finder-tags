@@ -18,6 +18,7 @@ enum Operation {
     case set([String])
     case copy
     case match([String])
+    case filter([FilterTerm])
     case usage([String])
     case find([String])
     case move(String, PositionSpec?)
@@ -81,7 +82,7 @@ struct Options {
     var showNames: Bool {
         if let value = showNamesOverride { return value }
         switch operation {
-        case .list, .match, .find, .convert: return true
+        case .list, .match, .filter, .find, .convert: return true
         default: return false
         }
     }
@@ -89,7 +90,7 @@ struct Options {
     var showTags: Bool {
         if let value = showTagsOverride { return value }
         switch operation {
-        case .list, .convert: return true
+        case .list, .filter, .convert: return true
         case .match, .find: return false
         default: return false
         }
@@ -117,6 +118,11 @@ struct Target {
 struct TagChange {
     let before: [String]
     let after: [String]
+}
+
+struct FilterTerm {
+    let tag: String
+    let negated: Bool
 }
 
 struct UsageEntry {

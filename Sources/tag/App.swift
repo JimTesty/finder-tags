@@ -39,7 +39,7 @@ final class App {
             runUsage(query)
         case .find(let query):
             runFind(query)
-        case .list, .match, .add, .remove, .set, .move:
+        case .list, .match, .filter, .add, .remove, .set, .move:
             runTraversal()
         }
 
@@ -296,6 +296,16 @@ final class App {
                 case .match(let query):
                     let tags = try store.read(target.url)
                     if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
+                        let metadata = options.fileInfo
+                            ? try fileMetadata(for: target)
+                            : nil
+                        try output.emitFile(target, tags: tags, metadata: metadata)
+                    }
+
+                case .filter(let query):
+                    let tags = try store.read(target.url)
+                    if filterMatches(tags, query: query, caseSensitive: options.caseSensitive)
+                        && (!options.taggedOnly || !tags.isEmpty) {
                         let metadata = options.fileInfo
                             ? try fileMetadata(for: target)
                             : nil

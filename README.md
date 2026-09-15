@@ -90,6 +90,7 @@ tag --copy src dst --dry-run         # preview copy, do not write
 
 tag -m 'Work,Important' file1 file2
 tag --match '*' -R directory         # files with any tag
+tag --filter 'Work,-Archive' -R directory # list-style filtered output
 tag --usage '*' -R directory         # count tags on tagged files
 tag --find Work ~/Documents          # Spotlight-backed search
 
@@ -206,7 +207,7 @@ By default, no operation intentionally sorts the stored tag array:
 * **set:** writes tags in command-line order.
 * **move:** removes one matched tag and reinserts it at the chosen position.
 * **copy:** writes the source array to the destination unchanged.
-* **match/find:** display each matching file's stored order when tags are shown.
+* **match/filter/find:** display each matching file's stored order when tags are shown.
 * **usage:** aggregate output is in first-seen exact-tag order.
 * **reverse:** reverses display. During export it is ignored so archives always
   store the natural order. It never rewrites live metadata merely because it is
@@ -274,7 +275,7 @@ operations that need one specific tag report ambiguity rather than arbitrarily
 choosing one. An add expression that explicitly requests case-distinct variants,
 for example `orange,Orange`, preserves both.
 
-`--case-sensitive` affects add/remove/move/placement/match/usage/find matching.
+`--case-sensitive` affects add/remove/move/placement/match/filter/usage/find matching.
 `--set` always stores the exact spellings supplied. Usage counts keep `orange`
 and `Orange` as separate entries even in the default matching mode.
 
@@ -307,10 +308,10 @@ names contain commas. Use `--jsonl` for machine consumption or
 paths and tags as proper JSON strings and arrays. `--convert` is intended for
 human-readable output rather than round-tripping.
 
-`*` remains reserved for wildcard behavior in `--match`, `--usage`, `--find`,
-and `--remove`.
+`*` remains reserved for wildcard behavior in `--match`, `--filter`, `--usage`,
+`--find`, and `--remove`.
 
-## Match, usage, and find
+## Match, filter, usage, and find
 
 `--match TAGS` / `-m TAGS` follows `jdberry/tag` semantics where applicable:
 
@@ -321,6 +322,14 @@ and `--remove`.
 * with no paths, the current directory is enumerated.
 
 Match output defaults to filenames only. Use `-t/--tags` to include tags.
+
+`--filter TAGS` is the list-style counterpart to `--match`: it directly
+traverses the same way, but defaults to printing filenames and their stored
+tags and accepts the normal list output controls. Comma-separated terms are
+ANDed. Prefix a term with `-` to require that the file does not have that tag,
+for example `--filter 'Work,-Archive'`. `*` requires at least one tag and
+`-*` requires no tags. Use `--filter ''` for the same no-tags query as
+`--match ''`.
 
 `--usage TAGS` / `-u TAGS` counts **all tags on files matching TAGS**. Unlike
 `jdberry/tag`, it does not use Spotlight; it directly traverses supplied paths
@@ -450,7 +459,7 @@ Commands/options intentionally compatible where implemented:
 
 * default list and `-l/--list`
 * `-a/--add`, `-r/--remove`, `-s/--set`
-* `-m/--match`, `-u/--usage`, `-f/--find`
+* `-m/--match`, `--filter`, `-u/--usage`, `-f/--find`
 * `-A`, `-e`, `-R`, `-d`
 * `-n/-N`, `-t/-T`, `-g/-G`, `-c`, `-p`, `-0`
 * ordinary comma-separated tag operands, default case-insensitive matching, and

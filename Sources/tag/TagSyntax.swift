@@ -119,6 +119,18 @@ func parseTagList(_ raw: String) -> [String] {
     return result
 }
 
+func parseFilterList(_ raw: String) -> [FilterTerm] {
+    return parseTagList(raw).map { rawTag in
+        guard rawTag != "-" else {
+            fail("filter term '-' must name a tag to exclude")
+        }
+        if rawTag.hasPrefix("-") {
+            return FilterTerm(tag: String(rawTag.dropFirst()), negated: true)
+        }
+        return FilterTerm(tag: rawTag, negated: false)
+    }
+}
+
 func validateSingleTagOperand(_ tag: String) {
     if tag.isEmpty { fail("tag name must not be empty") }
     validateTagName(tag)
@@ -132,6 +144,24 @@ func tagsMatch(_ stored: [String], query: [String], caseSensitive: Bool) -> Bool
         if !stored.contains(where: { tagsEqual($0, wanted, caseSensitive: caseSensitive) }) {
             return false
         }
+    }
+    return true
+}
+
+func filterMatches(_ stored: [String], query: [FilterTerm], caseSensitive: Bool) -> Bool {
+    if query.isEmpty { return stored.isEmpty }
+
+    for term in query {
+        let present: Bool
+        if term.tag == "*" {
+            present = !stored.isEmpty
+        } else {
+            present = stored.contains(where: {
+                tagsEqual($0, term.tag, caseSensitive: caseSensitive)
+            })
+        }
+
+        if term.negated ? present : !present { return false }
     }
     return true
 }

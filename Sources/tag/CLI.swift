@@ -127,6 +127,8 @@ func parseArguments() -> Options {
                 setOperation(.set(parseTagList(operand())), options: &options)
             case "match":
                 setOperation(.match(parseTagList(operand())), options: &options)
+            case "filter":
+                setOperation(.filter(parseFilterList(operand())), options: &options)
             case "usage":
                 setOperation(.usage(parseTagList(operand())), options: &options)
             case "find":
@@ -254,7 +256,7 @@ func parseArguments() -> Options {
     }
 
     switch options.operation {
-    case .list, .match, .usage, .find:
+    case .list, .match, .filter, .usage, .find:
         break
     case .export:
         if options.paths.count > 1 {
@@ -283,14 +285,14 @@ func parseArguments() -> Options {
 
     if options.fileInfoWasSet {
         switch options.operation {
-        case .list, .match, .find, .export: break
-        default: fail("--file-info is only valid with --list, --match, --find, or --export")
+        case .list, .match, .filter, .find, .export: break
+        default: fail("--file-info is only valid with --list, --match, --filter, --find, or --export")
         }
     }
 
     if !options.excludePatterns.isEmpty {
         switch options.operation {
-        case .list, .export, .match, .usage, .add, .remove, .set, .move:
+        case .list, .export, .match, .filter, .usage, .add, .remove, .set, .move:
             break
         default:
             fail("--exclude is only valid with filesystem traversal operations")
@@ -299,7 +301,7 @@ func parseArguments() -> Options {
 
     if options.spaceIndent {
         switch options.operation {
-        case .list, .match, .find, .usage, .convert:
+        case .list, .match, .filter, .find, .usage, .convert:
             if options.jsonLines { fail("--space-indent is only valid with text output") }
         default:
             fail("--space-indent is only valid with text output")
@@ -307,11 +309,11 @@ func parseArguments() -> Options {
     }
 
     switch options.operation {
-    case .list, .export, .convert:
+    case .list, .filter, .export, .convert:
         break
     default:
         if options.taggedOnly {
-            fail("--tagged-only is only valid with --list, --export, or --convert")
+            fail("--tagged-only is only valid with --list, --filter, --export, or --convert")
         }
     }
 

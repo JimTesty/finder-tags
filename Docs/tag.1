@@ -21,6 +21,10 @@ tag \- manipulate macOS Finder tags while preserving tag order
 .I TAGS
 .RI [ path ...]
 .br
+.B tag --filter
+.I TAGS
+.RI [ path ...]
+.br
 .B tag --usage
 .I TAGS
 .RI [ path ...]
@@ -95,6 +99,12 @@ Replace DESTINATION's tags with SOURCE's tags.
 .TP
 .BR -m , " --match " TAGS
 List traversed files containing all requested tags.
+.TP
+.B --filter TAGS
+List traversed files using list-style output, but only when they match TAGS.
+Comma-separated terms are ANDed; prefix a term with - to require that the tag
+is absent. For example, --filter 'Work,-Archive'. The * term requires at least
+one tag and -* requires no tags.
 .TP
 .BR -u , " --usage " TAGS
 Count all tags on traversed files matching TAGS.

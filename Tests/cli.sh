@@ -27,6 +27,7 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- '--case-sensitive'
 "$bin" --help | grep -q -- '--sorted-tags'
 "$bin" --help | grep -q -- '--before TAG'
+"$bin" --help | grep -q -- '--filter TAGS'
 "$bin" --help | grep -q -- '--absolute'
 "$bin" --help | grep -q -- '--stdin0'
 "$bin" --help | grep -q -- '--no-follow-symlinks'
@@ -165,6 +166,9 @@ printf '%s\n' "$stdin_nul" | grep -Fxq "$work/space name"
 # Generic parser/output behavior. On non-macOS filesystems Foundation normally
 # reports no Finder tags, so mutation parsing is exercised with --dry-run.
 [ "$("$bin" --match '' "$work/a")" = "$work/a" ]
+[ "$("$bin" --filter '' "$work/a")" = "$work/a" ]
+[ "$("$bin" --filter '-*' "$work/a")" = "$work/a" ]
+[ -z "$("$bin" --filter '*' "$work/a")" ]
 "$bin" --jsonl "$work/a" | grep -q '"tags"'
 "$bin" --ndjson "$work/a" | grep -q '"path"'
 file_info_json=$("$bin" --file-info --jsonl "$work/a")
@@ -286,6 +290,13 @@ if [ "$(uname -s)" = Darwin ]; then
 
     match_space_indent=$("$bin" --match First --tags --space-indent "$work/a")
     printf '%s\n' "$match_space_indent" | grep -Fq '  First,Second'
+
+    filter_output=$("$bin" --filter 'First,Second,-Third' "$work/a")
+    printf '%s\n' "$filter_output" | grep -Fq 'First,Second'
+    if "$bin" --filter 'First,-Second' "$work/a" | grep -q .; then
+        echo "--filter failed to exclude a negated tag" >&2
+        exit 1
+    fi
 
     usage_space_indent=$("$bin" --usage First --space-indent "$work/a")
     printf '%s\n' "$usage_space_indent" | grep -Fq '  First'

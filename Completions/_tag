@@ -12,6 +12,7 @@ _arguments \
   '(-s --set)'{-s,--set}'[replace tags]:tags:' \
   '--copy[copy ordered tags]:source:_files:destination:_files' \
   '(-m --match)'{-m,--match}'[match tags]:tags:' \
+  '--filter[match tags with list-style output]:tags:' \
   '(-u --usage)'{-u,--usage}'[count usage]:tags:' \
   '(-f --find)'{-f,--find}'[Spotlight find]:tags:' \
   '--move[move tag]:tag::position:' \
