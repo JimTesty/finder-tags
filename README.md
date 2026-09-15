@@ -142,6 +142,10 @@ Human-readable `--file-info` listings render metadata as `[DATE SIZE]`: DATE is
 JSONL and the archive retain exact numeric values. `--convert` uses the same
 human formatter as ordinary listings; `--space-indent` separates a filename
 and its tags with two spaces instead of the usual tab/alignment separator.
+For an existing symlink, size and mtime come from its target even without
+`--follow-symlinks`, matching the target tags that Foundation commonly returns.
+`--follow-symlinks` still controls recursive traversal and structural symlink
+metadata in archives. A dangling symlink has unavailable target metadata.
 The human date is for display only; use JSONL/archive values for stable
 change detection.
 
@@ -354,9 +358,10 @@ Finder generally present the target file's tags and makes recursive traversal
 follow symlinked directories while suppressing directory cycles.
 
 `--no-follow-symlinks` is the default for recursive work: it does not descend
-into symlinked directories and does not explicitly resolve symlink paths before
-Foundation tag I/O. This prevents a recursive mutation from escaping its
-starting tree through a directory symlink.
+into symlinked directories or resolve them for traversal. Foundation may still
+follow an existing symlink for Finder tag and file-info lookup. This prevents
+a recursive mutation from escaping its starting tree through a directory
+symlink.
 
 ## `--dry-run`
 

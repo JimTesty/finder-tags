@@ -177,7 +177,9 @@ List or export only items having at least one tag.
 .B --file-info
 Include each listed or exported item's byte size and content modification time.
 Export enables this by default. JSONL uses numeric size and mtime fields;
-restore ignores these fields.
+restore ignores these fields. For an existing symlink, size and mtime come
+from its target even without -L, matching Finder's usual tag lookup; -L still
+controls traversal and structural archive symlink metadata.
 .TP
 .B --no-file-info
 Omit size and modification-time fields from export output.

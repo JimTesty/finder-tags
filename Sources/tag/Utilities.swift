@@ -43,6 +43,17 @@ func fileMetadata(for url: URL) throws -> FileMetadata {
     return FileMetadata(size: Int64(size), modificationTime: date.timeIntervalSince1970)
 }
 
+func fileMetadata(for target: Target) throws -> FileMetadata {
+    // Foundation's Finder-tag lookup may follow an existing symlink even
+    // without -L. Use the same referent for displayed and archived file-info,
+    // so a symlink's tags are not paired with the link's own byte length and
+    // timestamp. -L still controls traversal and structural symlink metadata.
+    let url = isSymbolicLink(target.logicalURL)
+        ? resolvedTagURL(target.logicalURL)
+        : target.url
+    return try fileMetadata(for: url)
+}
+
 func fail(_ message: String, code: Int32 = ExitCode.usage) -> Never {
     eprint("\(programName): \(message)")
     exit(code)

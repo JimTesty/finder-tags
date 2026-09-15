@@ -104,7 +104,7 @@ final class App {
                 let metadata: FileMetadata?
                 if options.fileInfo {
                     do {
-                        metadata = try fileMetadata(for: target.url)
+                        metadata = try fileMetadata(for: target)
                     } catch {
                         metadata = nil
                         writer.noteWarning()
@@ -285,7 +285,7 @@ final class App {
                     }
                     if !options.taggedOnly || !tags.isEmpty {
                         let metadata = options.fileInfo
-                            ? try fileMetadata(for: target.url)
+                            ? try fileMetadata(for: target)
                             : nil
                         try output.emitFile(target, tags: tags, metadata: metadata)
                     }

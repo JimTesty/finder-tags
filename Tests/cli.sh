@@ -17,7 +17,9 @@ touch "$work/a" "$work/b" "$work/c" "$work/space name"
 mkdir -p "$work/tree/sub" "$work/tree/real"
 touch "$work/tree/root-file" "$work/tree/sub/child" "$work/tree/real/linked-child"
 touch "$work/tree/.hidden"
+dd if=/dev/zero of="$work/tree/large-target" bs=1048576 count=2 2>/dev/null
 ln -s real "$work/tree/link"
+ln -s large-target "$work/tree/file-link"
 ln -s .. "$work/tree/real/back-to-tree"
 ln -s missing "$work/tree/dangling"
 
@@ -101,6 +103,12 @@ fi
 [ "$(cd "$work/tree" && "$bin" --print-symlinks link)" = 'link -> real' ]
 [ "$(cd "$work/tree" && "$bin" --slash --print-symlinks link)" = 'link@ -> real/' ]
 [ "$(cd "$work/tree" && "$bin" --slash --print-symlinks dangling)" = 'dangling@ -> missing (NOT FOUND)' ]
+# Finder tag lookup may follow an existing symlink even without -L. File-info
+# follows the same target, rather than reporting the link text's byte length.
+nofollow_link_info=$("$bin" --file-info --no-tags "$work/tree/file-link")
+printf '%s\n' "$nofollow_link_info" | grep -Eq '\[[0-9]{8} +2MB\].*file-link'
+follow_link_info=$("$bin" --file-info --no-tags -L "$work/tree/file-link")
+printf '%s\n' "$follow_link_info" | grep -Eq '\[[0-9]{8} +2MB\].*file-link'
 print_recursive=$("$bin" -R --print-symlinks "$work/tree")
 printf '%s\n' "$print_recursive" | grep -qx 'link -> real'
 if printf '%s\n' "$print_recursive" | grep -q '^link/'; then
