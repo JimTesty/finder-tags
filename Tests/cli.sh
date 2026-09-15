@@ -182,6 +182,15 @@ case "$forced_info" in
     *) echo "forced file-info color missing" >&2; exit 1 ;;
 esac
 
+# Match/find share the normal file-list output path, so list formatting and
+# file-info options should work there too. The empty query selects this newly
+# created, untagged file on every platform.
+match_file_info=$("$bin" --match '' --file-info --space-indent --no-tags "$work/a")
+printf '%s\n' "$match_file_info" | grep -Eq '\[[0-9]{8} +~?0?MB\].*a$'
+match_file_info_json=$("$bin" --match '' --file-info --jsonl "$work/a")
+printf '%s\n' "$match_file_info_json" | grep -q '"size"'
+printf '%s\n' "$match_file_info_json" | grep -q '"mtime"'
+
 quoted=$("$bin" --set '"Orange","Project, Alpha","Needs review"' --dry-run --jsonl "$work/a")
 printf '%s\n' "$quoted" | grep -Fq '"after":["Orange","Project, Alpha","Needs review"]'
 "$bin" --set 'orange,Orange' --dry-run --jsonl "$work/a" \
@@ -272,6 +281,16 @@ if [ "$(uname -s)" = Darwin ]; then
     printf '%s\n' "$space_indent_output" | grep -Fq '  First,Second'
     if printf '%s\n' "$space_indent_output" | grep -q "$(printf '\t')"; then
         echo "--space-indent unexpectedly emitted a tab" >&2
+        exit 1
+    fi
+
+    match_space_indent=$("$bin" --match First --tags --space-indent "$work/a")
+    printf '%s\n' "$match_space_indent" | grep -Fq '  First,Second'
+
+    usage_space_indent=$("$bin" --usage First --space-indent "$work/a")
+    printf '%s\n' "$usage_space_indent" | grep -Fq '  First'
+    if printf '%s\n' "$usage_space_indent" | grep -q "$(printf '\t')"; then
+        echo "--space-indent unexpectedly emitted a tab for --usage" >&2
         exit 1
     fi
 

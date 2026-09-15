@@ -132,16 +132,17 @@ changed. This does not make filesystem changes transactional if a later
 metadata write fails.
 
 `--file-info` adds each item's byte size and content modification time (`mtime`,
-as a UTC-based Unix timestamp) to list and export output. Export enables it by
-default; `--no-file-info` disables it. JSONL stores numeric `size` and `mtime`
-fields. Restore ignores them, so they are available for later change-detection
-tooling without affecting tag restoration.
+as a UTC-based Unix timestamp) to list, match, find, and export output. Export
+enables it by default; `--no-file-info` disables it. JSONL stores numeric `size`
+and `mtime` fields. Restore ignores them, so they are available for later
+change-detection tooling without affecting tag restoration.
 Human-readable `--file-info` listings render metadata as `[DATE SIZE]`: DATE is
 `yyyyMMdd`, and SIZE is a right-aligned, rounded binary-megabyte field
 (`~0MB` means a nonempty file below 0.5 MiB). Directories are shown as `0MB`.
 JSONL and the archive retain exact numeric values. `--convert` uses the same
 human formatter as ordinary listings; `--space-indent` separates a filename
-and its tags with two spaces instead of the usual tab/alignment separator.
+and its tags with two spaces instead of the usual tab/alignment separator in
+list, match, find, and usage output too.
 For an existing symlink, size and mtime come from its target even without
 `--follow-symlinks`, matching the target tags that Foundation commonly returns.
 `--follow-symlinks` still controls recursive traversal and structural symlink

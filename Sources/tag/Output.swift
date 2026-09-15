@@ -61,7 +61,8 @@ final class Output {
             if options.jsonLines {
                 try jsonRecord(["tag": entry.tag, "count": entry.count])
             } else {
-                record("\(entry.count)\t\(colors.render(entry.tag))")
+                let separator = options.spaceIndent ? "  " : "\t"
+                record("\(entry.count)\(separator)\(colors.render(entry.tag))")
             }
         }
     }

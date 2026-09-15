@@ -283,8 +283,8 @@ func parseArguments() -> Options {
 
     if options.fileInfoWasSet {
         switch options.operation {
-        case .list, .export: break
-        default: fail("--file-info is only valid with --list or --export")
+        case .list, .match, .find, .export: break
+        default: fail("--file-info is only valid with --list, --match, --find, or --export")
         }
     }
 
@@ -299,9 +299,7 @@ func parseArguments() -> Options {
 
     if options.spaceIndent {
         switch options.operation {
-        case .convert:
-            break
-        case .list:
+        case .list, .match, .find, .usage, .convert:
             if options.jsonLines { fail("--space-indent is only valid with text output") }
         default:
             fail("--space-indent is only valid with text output")

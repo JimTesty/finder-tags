@@ -255,7 +255,10 @@ final class App {
                     // the metadata index for order or a just-changed file.
                     let tags = try store.read(target.url)
                     if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
-                        try output.emitFile(target, tags: tags)
+                        let metadata = options.fileInfo
+                            ? try fileMetadata(for: target)
+                            : nil
+                        try output.emitFile(target, tags: tags, metadata: metadata)
                     }
                 } catch {
                     report("\(target.absolutePath): \(error.localizedDescription)")
@@ -293,7 +296,10 @@ final class App {
                 case .match(let query):
                     let tags = try store.read(target.url)
                     if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
-                        try output.emitFile(target, tags: tags)
+                        let metadata = options.fileInfo
+                            ? try fileMetadata(for: target)
+                            : nil
+                        try output.emitFile(target, tags: tags, metadata: metadata)
                     }
 
                 case .add(let tags):
