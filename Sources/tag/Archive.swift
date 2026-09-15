@@ -5,21 +5,28 @@ import Darwin
 import Glibc
 #endif
 
-struct ArchiveEntry {
-    let path: String
-    let tags: [String]
-    let metadata: FileMetadata?
+enum ArchiveItemKind: String {
+    case file
+    case directory
+    case symlink
 }
 
-struct ArchiveSymlink {
+struct ArchiveItem {
     let path: String
-    let resolvedPath: String?
+    let kind: ArchiveItemKind
+    // nil means that tags were unavailable and must not be changed on restore.
+    // An empty array means that tags were explicitly observed to be absent.
+    let tags: [String]?
+    let metadata: FileMetadata?
+    let symlinkDestination: String?
+    let symlinkTargetExists: Bool?
+    let symlinkTargetKind: ArchiveItemKind?
 }
 
 struct ArchiveDocument {
     let rootPath: String
-    let entries: [ArchiveEntry]
-    let symlinks: [ArchiveSymlink]
+    let header: ArchiveHeader
+    let items: [ArchiveItem]
 }
 
 struct ArchiveStats {
@@ -30,6 +37,7 @@ struct ArchiveStats {
     var unchanged = 0
     var changed = 0
     var restored = 0
+    var cleared = 0
     var missing = 0
     var warnings = 0
 }
@@ -41,118 +49,107 @@ enum ArchiveError: LocalizedError {
     case invalidRoot(String)
     case invalidPath(String)
     case duplicatePath(String)
-    case duplicateSymlink(String)
     case invalidTags(String)
-    case invalidMetadata(String)
     case invalidHeader(String)
     case unsupportedRecord(String)
+    case invalidSymlink(String)
+    case modeMismatch(archive: Bool, requested: Bool)
 
     var errorDescription: String? {
         switch self {
         case let .invalidLine(line, message):
             return "archive line \(line): \(message)"
         case .missingRoot:
-            return "archive has no @root record"
+            return "archive has no root record"
         case .multipleRoots:
-            return "archive contains multiple roots; v2 accepts one root"
+            return "archive contains multiple roots; only one root is accepted"
         case let .invalidRoot(path):
             return "archive root is not an absolute path: \(path)"
         case let .invalidPath(path):
             return "invalid archive item path: \(path)"
         case let .duplicatePath(path):
             return "duplicate archive item: \(path)"
-        case let .duplicateSymlink(path):
-            return "duplicate archive symlink: \(path)"
         case let .invalidTags(value):
-            return "invalid archive tag list: \(value)"
-        case let .invalidMetadata(value):
-            return "invalid archive file metadata: \(value)"
+            return "invalid archive tag: \(value)"
         case let .invalidHeader(value):
             return "invalid archive header: \(value)"
         case let .unsupportedRecord(type):
             return "unsupported archive record type: \(type)"
+        case let .invalidSymlink(path):
+            return "invalid archive symlink metadata: \(path)"
+        case let .modeMismatch(archive, requested):
+            return "archive follow-symlinks mode is \(archive ? "enabled" : "disabled"), "
+                + "but restore requested \(requested ? "enabled" : "disabled"); "
+                + "use the matching -L setting"
         }
     }
 }
 
 private struct ArchiveBuilder {
     var rootPath: String?
-    var entries: [ArchiveEntry] = []
-    var symlinks: [ArchiveSymlink] = []
-    var entryIndexes: [String: Int] = [:]
-    var symlinkIndexes: [String: Int] = [:]
-    var metadataByPath: [String: FileMetadata] = [:]
     var header: ArchiveHeader?
-
-    mutating func setRoot(_ rawPath: String) throws {
-        guard rawPath.hasPrefix("/"), !rawPath.unicodeScalars.contains("\0") else {
-            throw ArchiveError.invalidRoot(rawPath)
-        }
-        let path = expandedFileURL(rawPath).path
-        guard rootPath == nil else { throw ArchiveError.multipleRoots }
-        rootPath = path
-    }
-
-    mutating func addMetadata(path: String, metadata: FileMetadata) throws {
-        try validateRelativeArchivePath(path)
-        guard metadata.size >= 0, metadata.modificationTime.isFinite else {
-            throw ArchiveError.invalidMetadata(path)
-        }
-        guard metadataByPath[path] == nil else {
-            throw ArchiveError.invalidMetadata("duplicate metadata for \(path)")
-        }
-        metadataByPath[path] = metadata
-    }
-
-    mutating func addEntry(path: String, tags: [String], metadata: FileMetadata? = nil) throws {
-        try validateRelativeArchivePath(path)
-        for tag in tags {
-            if tag.isEmpty || tag.contains("\n") || tag.contains("\r") || tag.unicodeScalars.contains("\0") {
-                throw ArchiveError.invalidTags(tag)
-            }
-        }
-
-        if entryIndexes[path] != nil {
-            throw ArchiveError.duplicatePath(path)
-        }
-        entryIndexes[path] = entries.count
-        var normalizedTags = tags
-        if header?.reverse == true { normalizedTags.reverse() }
-        entries.append(ArchiveEntry(
-            path: path,
-            tags: normalizedTags,
-            metadata: metadata ?? metadataByPath.removeValue(forKey: path)
-        ))
-    }
+    var items: [ArchiveItem] = []
+    var itemPaths = Set<String>()
 
     mutating func setHeader(_ newHeader: ArchiveHeader) throws {
         guard header == nil else {
             throw ArchiveError.invalidHeader("multiple header records")
         }
-        guard entries.isEmpty, symlinks.isEmpty, metadataByPath.isEmpty else {
+        guard items.isEmpty, rootPath == nil else {
             throw ArchiveError.invalidHeader("header must precede archive records")
         }
         header = newHeader
     }
 
-    mutating func addSymlink(path: String, resolvedPath: String?) throws {
-        try validateRelativeArchivePath(path)
-        if let resolvedPath = resolvedPath {
-            guard resolvedPath.hasPrefix("/"), !resolvedPath.unicodeScalars.contains("\0") else {
-                throw ArchiveError.invalidPath(resolvedPath)
-            }
+    mutating func setRoot(_ rawPath: String) throws {
+        guard rawPath.hasPrefix("/"), !rawPath.unicodeScalars.contains("\0") else {
+            throw ArchiveError.invalidRoot(rawPath)
         }
+        guard rootPath == nil else { throw ArchiveError.multipleRoots }
+        rootPath = expandedFileURL(rawPath).path
+    }
 
-        if symlinkIndexes[path] != nil {
-            throw ArchiveError.duplicateSymlink(path)
+    mutating func addItem(_ item: ArchiveItem) throws {
+        try validateRelativeArchivePath(item.path)
+        guard itemPaths.insert(item.path).inserted else {
+            throw ArchiveError.duplicatePath(item.path)
         }
-        symlinkIndexes[path] = symlinks.count
-        symlinks.append(ArchiveSymlink(path: path, resolvedPath: resolvedPath))
+        if let tags = item.tags {
+            for tag in tags { try validateArchiveTag(tag) }
+        }
+        if item.kind == .symlink {
+            if let destination = item.symlinkDestination,
+               destination.unicodeScalars.contains("\0") {
+                throw ArchiveError.invalidSymlink(item.path)
+            }
+            if item.symlinkTargetKind != nil && item.symlinkTargetExists != true {
+                throw ArchiveError.invalidSymlink(item.path)
+            }
+            if let targetKind = item.symlinkTargetKind,
+               targetKind == .symlink {
+                throw ArchiveError.invalidSymlink(item.path)
+            }
+        } else if item.symlinkDestination != nil
+                    || item.symlinkTargetExists != nil
+                    || item.symlinkTargetKind != nil {
+            throw ArchiveError.invalidSymlink(item.path)
+        }
+        items.append(item)
     }
 
     func document() throws -> ArchiveDocument {
         guard let rootPath = rootPath else { throw ArchiveError.missingRoot }
-        return ArchiveDocument(rootPath: rootPath, entries: entries, symlinks: symlinks)
+        guard let header = header else {
+            throw ArchiveError.invalidHeader("missing header record")
+        }
+        if !header.followSymlinks {
+            for item in items where item.symlinkDestination != nil
+                || item.symlinkTargetExists != nil
+                || item.symlinkTargetKind != nil {
+                throw ArchiveError.invalidSymlink(item.path)
+            }
+        }
+        return ArchiveDocument(rootPath: rootPath, header: header, items: items)
     }
 }
 
@@ -164,33 +161,18 @@ struct ArchiveReader {
         } else {
             data = try Data(contentsOf: expandedFileURL(path))
         }
-
         guard let text = String(data: data, encoding: .utf8) else {
             throw ArchiveError.invalidLine(line: 1, message: "archive is not valid UTF-8")
         }
-        let firstLine = text.components(separatedBy: "\n").first {
-            let line = stripANSI($0).trimmingCharacters(in: .whitespacesAndNewlines)
-            return !line.isEmpty
-        } ?? ""
 
-        guard firstLine.first == "{" else {
-            throw ArchiveError.invalidLine(line: 1, message: "missing JSON archive header")
-        }
-        let header = try archiveHeader(from: jsonObject(from: firstLine), line: 1)
-        switch header.encoding {
-        case .plain: return try readPlaintext(text)
-        case .jsonl: return try readJSONLines(text)
-        }
-    }
-
-    private func readJSONLines(_ text: String) throws -> ArchiveDocument {
         var builder = ArchiveBuilder()
-        let lines = text.components(separatedBy: "\n")
         var sawHeader = false
+        var sawSummary = false
+        let lines = text.components(separatedBy: "\n")
 
         for (offset, rawLine) in lines.enumerated() {
             let lineNumber = offset + 1
-            var line = stripANSI(rawLine)
+            var line = rawLine
             if line.hasSuffix("\r") { line.removeLast() }
             if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
 
@@ -206,74 +188,43 @@ struct ArchiveReader {
             guard let object = value as? [String: Any] else {
                 throw ArchiveError.invalidLine(line: lineNumber, message: "record is not a JSON object")
             }
-
-            let type = object["type"] as? String
-            if type == "summary" { continue }
+            guard let type = object["type"] as? String else {
+                throw ArchiveError.invalidLine(line: lineNumber, message: "record lacks type")
+            }
 
             if type == "header" {
                 guard !sawHeader else {
                     throw ArchiveError.invalidLine(line: lineNumber, message: "multiple archive headers")
                 }
                 try builder.setHeader(try archiveHeader(from: object, line: lineNumber))
-                guard builder.header?.encoding == .jsonl else {
-                    throw ArchiveError.invalidHeader("JSONL record has a non-JSONL format")
-                }
                 sawHeader = true
                 continue
             }
-
             guard sawHeader else {
                 throw ArchiveError.invalidLine(line: lineNumber, message: "archive header must be first")
             }
+            if type == "summary" {
+                guard !sawSummary else {
+                    throw ArchiveError.invalidLine(line: lineNumber, message: "multiple summary records")
+                }
+                sawSummary = true
+                continue
+            }
+            if sawSummary {
+                throw ArchiveError.invalidLine(line: lineNumber, message: "records cannot follow summary")
+            }
 
-            if type == "root" {
+            switch type {
+            case "root":
                 guard let path = object["path"] as? String else {
                     throw ArchiveError.invalidLine(line: lineNumber, message: "root record lacks string path")
                 }
                 try builder.setRoot(path)
-                continue
-            }
-
-            if type == "symlink" {
-                guard let path = object["path"] as? String else {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "symlink record lacks path")
-                }
-                let resolvedPath: String?
-                if let value = object["resolvedPath"] {
-                    guard let string = value as? String else {
-                        throw ArchiveError.invalidLine(line: lineNumber, message: "symlink resolvedPath must be a string")
-                    }
-                    resolvedPath = string
-                } else {
-                    resolvedPath = nil
-                }
-                try builder.addSymlink(
-                    path: path,
-                    resolvedPath: resolvedPath
-                )
-                if let tags = object["tags"] {
-                    try builder.addEntry(
-                        path: path,
-                        tags: try jsonTags(tags, line: lineNumber),
-                        metadata: try jsonMetadata(object, line: lineNumber)
-                    )
-                }
-                continue
-            }
-
-            if let type = type, !type.isEmpty {
+            case "item":
+                try builder.addItem(parseItem(object, line: lineNumber))
+            default:
                 throw ArchiveError.unsupportedRecord(type)
             }
-            guard let path = object["path"] as? String,
-                  let rawTags = object["tags"]
-            else {
-                throw ArchiveError.invalidLine(line: lineNumber, message: "file record needs string path and tags array")
-            }
-            try builder.addEntry(
-                path: path,
-                tags: try jsonTags(rawTags, line: lineNumber),
-                metadata: try jsonMetadata(object, line: lineNumber)
-            )
         }
 
         guard sawHeader else {
@@ -282,18 +233,64 @@ struct ArchiveReader {
         return try builder.document()
     }
 
-    private func jsonTags(_ value: Any, line: Int) throws -> [String] {
-        guard let values = value as? [Any] else {
-            throw ArchiveError.invalidLine(line: line, message: "tags is not an array")
+    private func parseItem(_ object: [String: Any], line: Int) throws -> ArchiveItem {
+        guard let path = object["path"] as? String else {
+            throw ArchiveError.invalidLine(line: line, message: "item lacks string path")
         }
-        var result: [String] = []
-        for value in values {
-            guard let tag = value as? String else {
-                throw ArchiveError.invalidLine(line: line, message: "tags must contain only strings")
+        guard let kindValue = object["kind"] as? String,
+              let kind = ArchiveItemKind(rawValue: kindValue) else {
+            throw ArchiveError.invalidLine(line: line, message: "item has an invalid kind")
+        }
+
+        let tags: [String]?
+        if let rawTags = object["tags"] {
+            guard let values = rawTags as? [Any] else {
+                throw ArchiveError.invalidLine(line: line, message: "tags is not an array")
             }
-            result.append(tag)
+            var parsed: [String] = []
+            for value in values {
+                guard let tag = value as? String else {
+                    throw ArchiveError.invalidLine(line: line, message: "tags must contain only strings")
+                }
+                parsed.append(tag)
+            }
+            tags = parsed
+        } else {
+            tags = nil
         }
-        return result
+
+        let metadata = try jsonMetadata(object, line: line)
+        let destination = object["destination"] as? String
+        let targetExists: Bool?
+        if let value = object["targetExists"] {
+            guard let bool = value as? Bool else {
+                throw ArchiveError.invalidLine(line: line, message: "targetExists must be boolean")
+            }
+            targetExists = bool
+        } else {
+            targetExists = nil
+        }
+        let targetKind: ArchiveItemKind?
+        if let value = object["targetKind"] {
+            guard let string = value as? String,
+                  let parsed = ArchiveItemKind(rawValue: string),
+                  parsed != .symlink else {
+                throw ArchiveError.invalidLine(line: line, message: "targetKind is invalid")
+            }
+            targetKind = parsed
+        } else {
+            targetKind = nil
+        }
+
+        return ArchiveItem(
+            path: path,
+            kind: kind,
+            tags: tags,
+            metadata: metadata,
+            symlinkDestination: destination,
+            symlinkTargetExists: targetExists,
+            symlinkTargetKind: targetKind
+        )
     }
 
     private func jsonMetadata(_ object: [String: Any], line: Int) throws -> FileMetadata? {
@@ -308,131 +305,12 @@ struct ArchiveReader {
         }
         return metadata
     }
-
-    private func readPlaintext(_ text: String) throws -> ArchiveDocument {
-        var builder = ArchiveBuilder()
-        let lines = text.components(separatedBy: "\n")
-        var sawHeader = false
-        var format: ArchiveHeader?
-
-        for (offset, rawLine) in lines.enumerated() {
-            let lineNumber = offset + 1
-            var line = stripANSI(rawLine)
-            if line.hasSuffix("\r") { line.removeLast() }
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if !sawHeader {
-                guard trimmed.first == "{" else {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "archive header must be first")
-                }
-                let object: [String: Any]
-                do {
-                    object = try jsonObject(from: trimmed)
-                } catch {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "invalid JSON archive header")
-                }
-                guard object["type"] as? String == "header" else {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "first record is not an archive header")
-                }
-                let header = try archiveHeader(from: object, line: lineNumber)
-                guard header.encoding == .plain else {
-                    throw ArchiveError.invalidHeader("plaintext record has a non-plaintext format")
-                }
-                try builder.setHeader(header)
-                format = header
-                sawHeader = true
-                continue
-            }
-
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            guard let format = format else {
-                throw ArchiveError.invalidHeader("missing plaintext format")
-            }
-            if line == "@root" || line.hasPrefix("@root ") || line.hasPrefix("@root\t") {
-                let rawValue = String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !rawValue.isEmpty else {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "@root lacks a path")
-                }
-                do {
-                    try builder.setRoot(parseArchiveField(rawValue, separator: format.separator))
-                } catch let error as ArchiveError {
-                    throw error
-                } catch {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: error.localizedDescription)
-                }
-                continue
-            }
-            if line == "@symlink" || line.hasPrefix("@symlink ") || line.hasPrefix("@symlink\t") {
-                let rest = String(line.dropFirst(8)).trimmingCharacters(in: .whitespaces)
-                let fields = rest.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-                guard fields.count == 1 || fields.count == 2 else {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "@symlink needs a path and optional resolved target separated by a tab")
-                }
-                do {
-                    try builder.addSymlink(
-                        path: parseArchiveField(fields[0], separator: format.separator),
-                        resolvedPath: fields.count == 2
-                            ? parseArchiveField(fields[1], separator: format.separator)
-                            : nil
-                    )
-                } catch let error as ArchiveError {
-                    throw error
-                } catch {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: error.localizedDescription)
-                }
-                continue
-            }
-
-            if line == "@metadata" || line.hasPrefix("@metadata ") || line.hasPrefix("@metadata\t") {
-                let rest = String(line.dropFirst(9)).trimmingCharacters(in: .whitespaces)
-                let fields = rest.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-                guard fields.count == 3,
-                      let size = Int64(fields[1]),
-                      let mtime = Double(fields[2]) else {
-                    throw ArchiveError.invalidLine(line: lineNumber, message: "@metadata needs path, size, and mtime")
-                }
-                try builder.addMetadata(
-                    path: parseArchiveField(fields[0], separator: format.separator),
-                    metadata: FileMetadata(size: size, modificationTime: mtime)
-                )
-                continue
-            }
-
-            do {
-                let (rawPath, tagStart) = try parseArchiveFieldPrefix(line, separator: format.separator)
-                var path = rawPath
-                if format.slashDirectories && path != "." {
-                    if path.hasSuffix("/") {
-                        path.removeLast()
-                    } else if path.hasSuffix("@") {
-                        let undecorated = String(path.dropLast())
-                        if builder.symlinkIndexes[undecorated] != nil {
-                            path = undecorated
-                        }
-                    }
-                }
-                let rawTags = String(line[line.index(line.startIndex, offsetBy: tagStart)...])
-                let tags = try parseArchiveTagList(rawTags, separator: format.separator)
-                try builder.addEntry(path: path, tags: tags)
-            } catch let error as ArchiveError {
-                throw error
-            } catch {
-                throw ArchiveError.invalidLine(line: lineNumber, message: error.localizedDescription)
-            }
-        }
-
-        guard sawHeader else {
-            throw ArchiveError.invalidLine(line: 1, message: "missing JSON archive header")
-        }
-        return try builder.document()
-    }
 }
 
 final class ArchiveWriter {
     private let options: Options
     private let colors: FinderColors
     private var rootURL: URL?
-    private var emittedSymlinks = Set<String>()
     private var didEmitRoot = false
 
     var stats = ArchiveStats()
@@ -446,96 +324,74 @@ final class ArchiveWriter {
         rootURL = root.standardizedFileURL
         guard !didEmitRoot else { return }
         didEmitRoot = true
-
         try writeJSON(archiveHeaderObject(
-            encoding: options.jsonLines ? .jsonl : .plain,
-            separator: options.archiveSeparator,
-            reverse: options.reverse,
-            slashDirectories: options.slashDirectories,
-            spaceIndent: options.spaceIndent,
-            fileInfo: options.fileInfo
+            purpose: "export",
+            followSymlinks: options.followSymlinks,
+            fileInfo: options.fileInfo,
+            taggedOnly: options.taggedOnly,
+            tagColors: colors.archiveTagColors
         ))
-
-        if options.jsonLines {
-            try writeJSON(["type": "root", "path": rootURL!.path])
-        } else {
-            writeText("@root \(archiveQuote(rootURL!.path, separator: options.archiveSeparator))")
-        }
+        try writeJSON(["type": "root", "path": rootURL!.path])
     }
 
-    func emitTarget(_ target: Target, tags: [String]) throws {
+    func emitTarget(_ target: Target, tags: [String]?, metadata: FileMetadata?) throws {
         guard let rootURL = rootURL else { throw ArchiveError.missingRoot }
         stats.visited += 1
-        let rawPath = try relativePath(target.logicalURL, to: rootURL)
-        let path = try archiveDisplayPath(rawPath, target: target)
+        let path = try relativePath(target.logicalURL, to: rootURL)
+
+        if options.taggedOnly && (tags == nil || tags!.isEmpty) { return }
 
         let isSymlink = isSymbolicLink(target.logicalURL)
-        let recordsSymlinkType = isSymlink
-            && options.slashDirectories
-            && !options.followSymlinks
-            && !options.printSymlinks
-        if isSymlink,
-           (options.followSymlinks || options.printSymlinks || recordsSymlinkType),
-           emittedSymlinks.insert(rawPath).inserted {
-            if options.jsonLines {
-                var object: [String: Any] = [
-                    "type": "symlink",
-                    "path": rawPath,
-                ]
-                if options.followSymlinks || options.printSymlinks {
-                    object["resolvedPath"] = target.resolvedPath
-                }
-                try writeJSON(object)
-            } else {
-                let pathField = archiveQuote(rawPath, separator: options.archiveSeparator)
-                if options.followSymlinks || options.printSymlinks {
-                    writeText("@symlink \(pathField)\t\(archiveQuote(target.resolvedPath, separator: options.archiveSeparator))")
-                } else {
-                    writeText("@symlink \(pathField)")
-                }
-            }
-            stats.emitted += 1
+        let kind: ArchiveItemKind
+        if isSymlink {
+            kind = .symlink
+        } else {
+            let values = try target.url.resourceValues(forKeys: [.isDirectoryKey])
+            kind = values.isDirectory == true ? .directory : .file
         }
 
-        guard !tags.isEmpty else { return }
-        stats.tagged += 1
-        var exportedTags = tags
-        if options.reverse { exportedTags.reverse() }
-        let metadata = options.fileInfo ? try fileMetadata(for: target.url) : nil
-        if options.jsonLines {
-            var object: [String: Any] = ["path": rawPath, "tags": exportedTags]
-            if let metadata = metadata {
-                object["size"] = metadata.size
-                object["mtime"] = metadata.modificationTime
-            }
-            try writeJSON(object)
-        } else {
-            if let metadata = metadata {
-                writeText("@metadata \(archiveQuote(rawPath, separator: options.archiveSeparator))\t\(metadata.size)\t\(metadata.modificationTime)")
-            }
-            let renderedTags = exportedTags
-                .map(colors.render)
-                .map { archiveQuote($0, separator: options.archiveSeparator) }
-                .joined(separator: ",")
-            let separator = options.spaceIndent ? "  " : "\t"
-            writeText("\(archiveQuote(path, separator: options.archiveSeparator, always: true))\(separator)\(renderedTags)")
+        var object: [String: Any] = [
+            "type": "item",
+            "path": path,
+            "kind": kind.rawValue
+        ]
+        if let tags = tags {
+            object["tags"] = tags
+            if !tags.isEmpty { stats.tagged += 1 }
         }
+        if let metadata = metadata {
+            object["size"] = metadata.size
+            object["mtime"] = metadata.modificationTime
+        }
+
+        if kind == .symlink && options.followSymlinks,
+           let link = symbolicLinkInfo(for: target.logicalURL) {
+            object["destination"] = link.destination
+            object["targetExists"] = link.targetExists
+            if link.targetExists {
+                object["targetKind"] = link.targetIsDirectory ? ArchiveItemKind.directory.rawValue : ArchiveItemKind.file.rawValue
+            }
+        }
+
+        try writeJSON(object)
         stats.emitted += 1
     }
 
+    func noteWarning() {
+        stats.warnings += 1
+    }
+
     func finish() throws {
-        if options.jsonLines {
-            try writeJSON([
-                "type": "summary",
-                "operation": "export",
-                "visited": stats.visited,
-                "tagged": stats.tagged,
-                "emitted": stats.emitted,
-                "errors": stats.errors
-            ])
-        } else {
-            eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors)")
-        }
+        try writeJSON([
+            "type": "summary",
+            "operation": "export",
+            "visited": stats.visited,
+            "tagged": stats.tagged,
+            "emitted": stats.emitted,
+            "errors": stats.errors,
+            "warnings": stats.warnings
+        ])
+        eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors, \(stats.warnings) warnings)")
     }
 
     private func relativePath(_ logicalURL: URL, to rootURL: URL) throws -> String {
@@ -543,20 +399,8 @@ final class ArchiveWriter {
         let logical = logicalURL.standardizedFileURL.path
         if logical == root { return "." }
         let prefix = root.hasSuffix("/") ? root : root + "/"
-        guard logical.hasPrefix(prefix) else {
-            throw ArchiveError.invalidPath(logical)
-        }
+        guard logical.hasPrefix(prefix) else { throw ArchiveError.invalidPath(logical) }
         return String(logical.dropFirst(prefix.count))
-    }
-
-    private func archiveDisplayPath(_ path: String, target: Target) throws -> String {
-        guard options.slashDirectories, path != "." else { return path }
-        if isSymbolicLink(target.logicalURL) {
-            return path.hasSuffix("@") ? path : path + "@"
-        }
-        let values = try target.url.resourceValues(forKeys: [.isDirectoryKey])
-        guard values.isDirectory == true else { return path }
-        return path.hasSuffix("/") ? path : path + "/"
     }
 
     private func writeJSON(_ object: [String: Any]) throws {
@@ -564,52 +408,39 @@ final class ArchiveWriter {
         FileHandle.standardOutput.write(data)
         FileHandle.standardOutput.write(Data([10]))
     }
-
-    private func writeText(_ line: String) {
-        FileHandle.standardOutput.write(Data((line + "\n").utf8))
-    }
-}
-
-private func archiveHeaderObject(
-    encoding: ArchiveEncoding,
-    separator: Character,
-    reverse: Bool,
-    slashDirectories: Bool,
-    spaceIndent: Bool,
-    fileInfo: Bool
-) -> [String: Any] {
-    return [
-        "type": "header",
-        "format": encoding.rawValue,
-        "version": archiveFormatVersion,
-        "separator": String(separator),
-        "reverse": reverse,
-        "slash": slashDirectories,
-        "spaceIndent": spaceIndent,
-        "fileInfo": fileInfo
-    ]
 }
 
 final class UndoWriter {
     let path: String
     private let syncEachRecord: Bool
+    private let followSymlinks: Bool
+    private let tagColors: [TagColorInfo]
     private var handle: FileHandle?
 
-    init(path: String, syncEachRecord: Bool) {
+    init(path: String, syncEachRecord: Bool, followSymlinks: Bool, tagColors: [TagColorInfo]) {
         self.path = path
         self.syncEachRecord = syncEachRecord
+        self.followSymlinks = followSymlinks
+        self.tagColors = tagColors
     }
 
     func record(target: Target, tags: [String]) throws {
         try openIfNeeded()
         let absolute = target.logicalURL.standardizedFileURL.path
-        let relative = absolute == "/" ? "." : String(absolute.dropFirst())
-        let renderedTags = tags.map(archiveQuote).joined(separator: ",")
-        let line = "\(archiveQuote(relative))\t\(renderedTags)\n"
-        guard let handle = handle else { return }
-        handle.write(Data(line.utf8))
-        if syncEachRecord && fsync(handle.fileDescriptor) != 0 {
-            throw ArchiveIOError.syncFailed(path: path, reason: String(cString: strerror(errno)))
+        let path = absolute == "/" ? "." : String(absolute.dropFirst())
+        let object: [String: Any] = [
+            "type": "item",
+            "path": path,
+            "kind": itemKind(for: target).rawValue,
+            "tags": tags
+        ]
+        if let handle = handle {
+            let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            handle.write(data)
+            handle.write(Data([10]))
+            if syncEachRecord && fsync(handle.fileDescriptor) != 0 {
+                throw ArchiveIOError.syncFailed(path: path, reason: String(cString: strerror(errno)))
+            }
         }
     }
 
@@ -625,28 +456,32 @@ final class UndoWriter {
         if fileManager.fileExists(atPath: url.path) {
             throw ArchiveIOError.alreadyExists(path: url.path)
         }
-        guard fileManager.createFile(atPath: url.path, contents: nil, attributes: nil) else {
-            throw ArchiveIOError.cannotCreate(path: url.path)
-        }
-        guard let file = FileHandle(forWritingAtPath: url.path) else {
+        guard fileManager.createFile(atPath: url.path, contents: nil, attributes: nil),
+              let file = FileHandle(forWritingAtPath: url.path) else {
             throw ArchiveIOError.cannotCreate(path: url.path)
         }
         handle = file
         let header = archiveHeaderObject(
-            encoding: .plain,
-            separator: "\"",
-            reverse: false,
-            slashDirectories: false,
-            spaceIndent: false,
-            fileInfo: false
+            purpose: "undo",
+            followSymlinks: followSymlinks,
+            fileInfo: false,
+            taggedOnly: false,
+            tagColors: tagColors
         )
         let headerData = try JSONSerialization.data(withJSONObject: header, options: [.sortedKeys])
         file.write(headerData)
-        file.write(Data("\n@root /\n".utf8))
+        file.write(Data("\n{\"path\":\"/\",\"type\":\"root\"}\n".utf8))
         if syncEachRecord && fsync(file.fileDescriptor) != 0 {
             throw ArchiveIOError.syncFailed(path: path, reason: String(cString: strerror(errno)))
         }
         eprint("\(programName): undo archive: \(url.path)")
+    }
+
+    private func itemKind(for target: Target) -> ArchiveItemKind {
+        if isSymbolicLink(target.logicalURL) { return .symlink }
+        return (try? target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            ? .directory
+            : .file
     }
 }
 
@@ -667,6 +502,6 @@ enum ArchiveIOError: LocalizedError {
 func defaultUndoArchivePath() -> String {
     let identifier = UUID().uuidString
     return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(
-        "finder-tags-undo-\(identifier).archive"
+        "finder-tags-undo-\(identifier).jsonl"
     ).path
 }

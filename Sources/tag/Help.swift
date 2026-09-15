@@ -20,6 +20,7 @@ func usage(code: Int32 = 0) -> Never {
       \(programName) --copy SOURCE DESTINATION [--dry-run]
       \(programName) --export [options] [ROOT]
       \(programName) --restore ARCHIVE [--root DEST] [--dry-run]
+      \(programName) --convert ARCHIVE [options]
 
     TAGS uses a CSV-like comma-separated grammar. Shell quoting still works as
     usual, and quotes inside TAGS allow literal commas, for example:
@@ -30,6 +31,7 @@ func usage(code: Int32 = 0) -> Never {
       -l, --list                 List tags (default)
           --export               Export ordered tags for one root
           --restore ARCHIVE      Restore an archive (use '-' for stdin)
+          --convert ARCHIVE      Convert JSONL archive to human-readable text
       -a, --add TAGS             Add/re-case tags, preserving existing order
           --append TAGS          Alias for --add (insert new tags last)
           --prepend TAGS         Add new tags at first/left/bottom
@@ -48,7 +50,7 @@ func usage(code: Int32 = 0) -> Never {
           --after TAG            Place added/moved tag(s) after TAG
           --sorted-tags          Sort displayed tags; mutating operations also
                                 store their resulting tag arrays sorted
-      -V, --reverse              Reverse display order; export records it
+      -V, --reverse              Reverse display order; export ignores it
       -C, --case-sensitive       Make tag matching case-sensitive
                                 (default matching is case-insensitive)
 
@@ -65,12 +67,12 @@ func usage(code: Int32 = 0) -> Never {
           --garrulous            Alias for --one-per-line
           --no-garrulous         Alias for --comma-separated
       -p, --slash                Append '/' to directories and '@' to symlinks
-          --print-symlinks       Show each symlink's destination (text output)
+          --print-symlinks       Show each symlink's stored destination (text)
       -0, --null                 Terminate text records with NUL
           --nul                  Backward-compatible alias for --null
           --absolute             Display absolute logical paths
           --file-info            Include file size and mtime in list/export output
-          --separator CHAR       Quote separator for plaintext export (default: ")
+          --no-file-info         Omit file size and mtime from export output
           --jsonl                Emit one JSON object per line (NDJSON)
           --ndjson               Alias for --jsonl
           --tagged-only          List/export only items with at least one tag
@@ -116,20 +118,20 @@ func usage(code: Int32 = 0) -> Never {
     applying the requested edit. Default behavior always preserves tag order.
 
     Symbolic links are not followed by default. --follow-symlinks (or -L)
-    resolves symlinks, follows symlinked directories, and records target
-    provenance in archive output. --print-symlinks displays link destinations
-    without changing traversal; dangling targets are marked NOT FOUND.
+    resolves symlinks, follows symlinked directories, and records structural
+    target information in archive output, but never embeds target tags inside
+    a symlink record. --print-symlinks displays the literal stored link
+    destination without changing traversal; dangling targets are marked NOT
+    FOUND.
 
-    Export archives are tagged-only, root-relative, and preserve stored tag
-    order. Plaintext archives begin with a JSON format header, always quote
-    paths, and use comma-separated tags. --reverse, --slash, --space-indent,
-    and --separator are recorded in that header so restore can interpret the
-    display. Use --separator='\\u{200B}' for an invisible quote separator.
-    --jsonl remains the streaming machine-readable form. Restore follows
-    symlink targets only with --follow-symlinks and warns when they differ
-    from an archived target. A tagged-only restore changes listed items only;
-    it does not clear tags from unlisted items. --color accepts auto/yes,
-    always/force, and never/no/none aliases; JSONL is never colored.
+    Export archives are always JSONL, include untagged items by default, and
+    preserve stored tag order. --reverse is ignored during export. --file-info
+    is enabled by default for export and can be disabled with --no-file-info.
+    --tagged-only is an opt-in filter. Use --convert ARCHIVE for human-readable
+    output; its --reverse, --slash, --space-indent, and --color options affect
+    only that display. Restore follows symlink targets only with the same
+    --follow-symlinks setting recorded in the archive. --color accepts
+    auto/yes, always/force, and never/no/none aliases; JSONL is never colored.
 
     Defaults match jdberry/tag where practical: list shows filename+tags;
     match/find show filenames only. With no paths, list/match/usage enumerate the

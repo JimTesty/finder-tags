@@ -2,8 +2,9 @@
 
 _arguments \
   '(-l --list)'{-l,--list}'[list tags]' \
-  '--export[export tagged ordered tags]:root:_files' \
+  '--export[export JSONL archive]:root:_files' \
   '--restore[restore archive]:archive:_files' \
+  '--convert[convert JSONL archive to text]:archive:_files' \
   '(-a --add)'{-a,--add}'[add tags]:tags:' \
   '--append[add tags at end]:tags:' \
   '--prepend[add tags at beginning]:tags:' \
@@ -34,7 +35,7 @@ _arguments \
   '(-0 --null)'{-0,--null}'[NUL-terminate records]' \
   '--absolute[absolute paths]' \
   '--file-info[include file size and mtime]' \
-  '--separator[plaintext export quote separator]:character:' \
+  '--no-file-info[omit export file information]' \
   '--jsonl[JSON Lines output]' \
   '--ndjson[alias for --jsonl]' \
   '--stdin[read newline-delimited paths]' \

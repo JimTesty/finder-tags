@@ -1,12 +1,20 @@
 import Foundation
 
+struct TagColorInfo {
+    let name: String
+    let color: Int
+}
+
 struct FinderColors {
     private let ansiByName: [String: String]
     let isEnabled: Bool
+    let archiveTagColors: [TagColorInfo]
 
     init(enabled: Bool) {
         isEnabled = enabled
-        ansiByName = enabled ? FinderColors.load() : [:]
+        let loaded = FinderColors.load()
+        ansiByName = enabled ? loaded.ansiByName : [:]
+        archiveTagColors = loaded.metadata
     }
 
     func render(_ tag: String) -> String {
@@ -29,7 +37,7 @@ struct FinderColors {
         7: "\u{001B}[48;5;208m"  // orange
     ]
 
-    private static func load() -> [String: String] {
+    private static func load() -> (ansiByName: [String: String], metadata: [TagColorInfo]) {
         let home = fileManager.homeDirectoryForCurrentUser
         let candidates = [
             home.appendingPathComponent("Library/SyncedPreferences/com.apple.finder.plist"),
@@ -45,18 +53,21 @@ struct FinderColors {
             else { continue }
 
             var result: [String: String] = [:]
+            var metadata: [TagColorInfo] = []
             for entry in entries {
                 guard let name = entry["n"] as? String,
-                      let color = entry["l"] as? NSNumber,
-                      let escape = ansiByCode[color.intValue]
+                      let color = entry["l"] as? NSNumber
                 else { continue }
 
-                result[foldedTag(name)] = escape
+                metadata.append(TagColorInfo(name: name, color: color.intValue))
+                if let escape = ansiByCode[color.intValue] {
+                    result[foldedTag(name)] = escape
+                }
             }
-            return result
+            return (result, metadata)
         }
 
-        return [:]
+        return ([:], [])
     }
 
     private static func findFinderTags(in object: Any) -> [[String: Any]]? {

@@ -12,6 +12,7 @@ enum Operation {
     case list
     case export
     case restore
+    case convert
     case add([String])
     case remove([String])
     case set([String])
@@ -21,12 +22,6 @@ enum Operation {
     case find([String])
     case move(String, PositionSpec?)
 
-    var isListOrExport: Bool {
-        switch self {
-        case .list, .export: return true
-        default: return false
-        }
-    }
 }
 
 enum StdinPathMode {
@@ -51,6 +46,7 @@ struct Options {
 
     var colorMode: ColorMode = .never
     var reverse = false
+    var reverseWasSet = false
     var sortedTags = false
     var caseSensitive = false
     var showNamesOverride: Bool? = nil
@@ -66,8 +62,7 @@ struct Options {
     var dryRun = false
     var taggedOnly = false
     var fileInfo = false
-    var archiveSeparator: Character = "\""
-    var archiveSeparatorWasSet = false
+    var fileInfoWasSet = false
     var archivePath: String? = nil
     var restoreRoot: String? = nil
     var backupEnabled = true
@@ -85,7 +80,7 @@ struct Options {
     var showNames: Bool {
         if let value = showNamesOverride { return value }
         switch operation {
-        case .list, .match, .find: return true
+        case .list, .match, .find, .convert: return true
         default: return false
         }
     }
@@ -93,7 +88,7 @@ struct Options {
     var showTags: Bool {
         if let value = showTagsOverride { return value }
         switch operation {
-        case .list: return true
+        case .list, .convert: return true
         case .match, .find: return false
         default: return false
         }
@@ -116,7 +111,6 @@ struct Target {
     let rootPath: String?
 
     var absolutePath: String { return logicalURL.standardizedFileURL.path }
-    var resolvedPath: String { return resolvedTagURL(logicalURL).path }
 }
 
 struct TagChange {

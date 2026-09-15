@@ -1,6 +1,6 @@
 # Source review and development notes
 
-Last reviewed: 2026-09-14
+Last reviewed: 2026-09-16
 
 This is a lightweight source review, not a security audit. The code has shell
 coverage and macOS integration tests, but the project is still **not thoroughly
@@ -58,16 +58,16 @@ ambiguity rather than guessing.
 
 ### 7. Symlink behavior has two layers
 
-Default traversal explicitly resolves/follows symlinks, which means recursive
-work can escape the requested tree through a directory symlink. Cycles are
-suppressed by resolved directory identity, but the same target can still be
-visited through different non-cyclic aliases.
+Default traversal does not recursively follow symlinked directories and does
+not explicitly resolve symlink paths before Foundation tag I/O. `-L` enables
+following; recursive work can then escape the requested tree through a directory
+symlink. Cycles are suppressed by resolved directory identity, but the same
+target can still be visited through different non-cyclic aliases.
 
-`--no-follow-symlinks` prevents recursive descent through symlinked directories
-and skips the program's explicit path resolution. Foundation itself ultimately
-controls how tag resource values behave when directly asked about a symlink, so
-this option should primarily be viewed as a traversal-safety control rather than
-a promise to create independent symlink metadata.
+Foundation itself ultimately controls how tag resource values behave when
+directly asked about a symlink, so the default should be viewed as a traversal
+and archive-scope policy rather than a promise that symlinks have independent
+Finder metadata.
 
 ### 8. Recursive traversal is synchronous
 
@@ -82,8 +82,8 @@ commas between tags. A tag containing a comma is therefore ambiguous in that
 text format. CR, LF, and NUL are rejected in tag-name input because Foundation
 does not reliably round-trip them as Finder tags.
 
-`--jsonl` is the recommended machine-readable format because JSON escaping
-preserves comma-containing tags and path strings structurally.
+`--jsonl` is the archival and recommended machine-readable format because JSON
+escaping preserves comma-containing tags and path strings structurally.
 
 `*` remains reserved as a wildcard for match/usage/find/remove, so those
 operations cannot target a literal tag named `*`.
@@ -144,6 +144,10 @@ per-file undo archive is written before each mutation by default, but without
 preimage unavailable. The undo archive is deliberately a local temporary file;
 compressed/journaled undo output needs a separate atomicity design.
 
+The archive reader currently buffers the input before restore so it can validate
+the complete document before the first write. This is simple and safe for v1,
+but a very large archive can use substantial memory.
+
 ## Potential improvements / features
 
 1. **CI on multiple macOS/Swift versions.** Useful once the repository is public
@@ -156,6 +160,11 @@ compressed/journaled undo output needs a separate atomicity design.
    non-cyclic symlink aliases can intentionally cause the same underlying file
    to be processed more than once. A future opt-in dedupe mode could help bulk
    mutations where path identity does not matter.
+5. **Restore comparison and change detection.** Use archive file-info fields to
+   report changed items, and eventually report existing items omitted from an
+   archive once compatible traversal ordering is designed.
+6. **Managed compressed undo journals.** Integrate compression and durable
+   flushing without weakening the per-file preimage-before-mutation guarantee.
 
 ## Deliberately not recommended yet
 

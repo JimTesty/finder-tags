@@ -4,7 +4,6 @@ final class Output {
     private let options: Options
     private let colors: FinderColors
     private var lastJSONRoot: String?
-    private var emittedJSONSymlinks = Set<String>()
 
     var colorsForArchive: FinderColors { return colors }
 
@@ -22,7 +21,7 @@ final class Output {
         if options.reverse { tags.reverse() }
 
         if options.jsonLines {
-            try emitJSONState(for: target)
+            emitJSONState(for: target)
             var object = pathObject(target)
             object["tags"] = tags
             if let metadata = metadata {
@@ -33,7 +32,6 @@ final class Output {
             return
         }
 
-        let renderedTags = options.showTags ? tags.map(colors.render) : []
         let name = options.showNames
             ? try formattedPath(
                 for: target,
@@ -42,44 +40,20 @@ final class Output {
                 colors: colors
             )
             : nil
-        let decoratedName: String?
-       if let name = name, let metadata = metadata {
-            let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(fileInfoSizeText(metadata.size))]"
-            let coloredDecoration = colors.isEnabled
-                ? "\u{001B}[32m\(decoration)\u{001B}[m"
-                : decoration
-            decoratedName = "\(coloredDecoration) \(name)"
-       } else {
-            decoratedName = name
-        }
+        try emitText(name: name, tags: tags, metadata: metadata)
+    }
 
-        if options.oneTagPerLine {
-            if let value = decoratedName { record(value) }
-            for tag in renderedTags {
-                record((decoratedName == nil ? "" : "    ") + tag)
-            }
-            return
-        }
+    func emitArchiveItem(_ item: ArchiveItem) throws {
+        var tags = item.tags ?? []
+        if options.reverse { tags.reverse() }
 
-        if let value = decoratedName {
-            if renderedTags.isEmpty {
-                record(value)
-            } else {
-                if options.spaceIndent {
-                    record(value + "  " + renderedTags.joined(separator: ","))
-                    return
-                }
-                let padding = max(0, 31 - (value as NSString).length)
-                record(
-                    value
-                    + String(repeating: " ", count: padding)
-                    + "\t"
-                    + renderedTags.joined(separator: ",")
-                )
-            }
-        } else if !renderedTags.isEmpty {
-            record(renderedTags.joined(separator: ","))
+        let name: String?
+        if options.showNames {
+            name = formattedArchivePath(item)
+        } else {
+            name = nil
         }
+        try emitText(name: name, tags: tags, metadata: item.metadata)
     }
 
     func emitUsage(_ entries: [UsageEntry]) throws {
@@ -100,6 +74,7 @@ final class Output {
                 "visited": stats.visited,
                 "changed": stats.changed,
                 "restored": stats.restored,
+                "cleared": stats.cleared,
                 "unchanged": stats.unchanged,
                 "missing": stats.missing,
                 "errors": stats.errors,
@@ -114,10 +89,11 @@ final class Output {
         }
 
         if operation == "export" {
-            eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors)")
+            eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors, \(stats.warnings) warnings)")
         } else {
             let changed = options.dryRun ? "\(stats.changed) would change" : "\(stats.changed) changed"
-            eprint("\(programName): restored \(stats.restored) files (\(changed), \(stats.visited) visited, \(stats.unchanged) unchanged, \(stats.missing) missing, \(stats.errors) errors, \(stats.warnings) warnings)")
+            let cleared = options.dryRun ? "\(stats.cleared) would clear" : "\(stats.cleared) cleared"
+            eprint("\(programName): restored \(stats.restored) files (\(changed), \(cleared), \(stats.visited) visited, \(stats.unchanged) unchanged, \(stats.missing) missing, \(stats.errors) errors, \(stats.warnings) warnings)")
         }
     }
 
@@ -129,16 +105,14 @@ final class Output {
         dryRun: Bool
     ) throws {
         if options.jsonLines {
-            try emitJSONState(for: target)
+            emitJSONState(for: target)
             var object = pathObject(target)
             object["operation"] = operation
             object["before"] = change.before
             object["after"] = change.after
             object["changed"] = change.before != change.after
             object["dryRun"] = dryRun
-            if let source = source {
-                object["source"] = source.displayPath
-            }
+            if let source = source { object["source"] = source.displayPath }
             try jsonRecord(object)
             return
         }
@@ -159,9 +133,99 @@ final class Output {
         record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)")
     }
 
-   private func pathObject(_ target: Target) -> [String: Any] {
-       return ["path": target.displayPath]
-   }
+    private func emitText(name: String?, tags: [String], metadata: FileMetadata?) throws {
+        let renderedTags = options.showTags ? tags.map(colors.render) : []
+        let decoratedName: String?
+        if let name = name, let metadata = metadata {
+            let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(fileInfoSizeText(metadata.size))]"
+            let coloredDecoration = colors.isEnabled
+                ? "\u{001B}[32m\(decoration)\u{001B}[m"
+                : decoration
+            decoratedName = "\(coloredDecoration) \(name)"
+        } else {
+            decoratedName = name
+        }
+
+        if options.oneTagPerLine {
+            if let value = decoratedName { record(value) }
+            for tag in renderedTags {
+                record((decoratedName == nil ? "" : "    ") + tag)
+            }
+            return
+        }
+
+        if let value = decoratedName {
+            if renderedTags.isEmpty {
+                record(value)
+            } else if options.spaceIndent {
+                record(value + "  " + renderedTags.joined(separator: ","))
+            } else {
+                let padding = max(0, 31 - (value as NSString).length)
+                record(
+                    value
+                    + String(repeating: " ", count: padding)
+                    + "\t"
+                    + renderedTags.joined(separator: ",")
+                )
+            }
+        } else if !renderedTags.isEmpty {
+            record(renderedTags.joined(separator: ","))
+        }
+    }
+
+    private func formattedArchivePath(_ item: ArchiveItem) -> String {
+        var path = item.path
+        if options.slashDirectories {
+            if item.kind == .symlink {
+                path += "@"
+            } else if item.kind == .directory && path != "." {
+                path += "/"
+            }
+        }
+
+        guard options.printSymlinks, item.kind == .symlink else { return path }
+        if let destination = item.symlinkDestination {
+            var displayDestination = destination
+            if options.slashDirectories,
+               item.symlinkTargetExists == true,
+               item.symlinkTargetKind == .directory,
+               !displayDestination.hasSuffix("/") {
+                displayDestination += "/"
+            }
+            path += " -> " + displayDestination
+            if item.symlinkTargetExists == false {
+                path += " " + colors.renderMissing("(NOT FOUND)")
+            }
+        } else {
+            path += " -> (target not recorded)"
+        }
+        return path
+    }
+
+    private func pathObject(_ target: Target) -> [String: Any] {
+        var object: [String: Any] = [
+            "type": "item",
+            "path": target.displayPath,
+            "kind": itemKind(for: target).rawValue
+        ]
+        if let link = symbolicLinkInfo(for: target.logicalURL), options.printSymlinks {
+            object["destination"] = link.destination
+            object["targetExists"] = link.targetExists
+            if link.targetExists {
+                object["targetKind"] = link.targetIsDirectory
+                    ? ArchiveItemKind.directory.rawValue
+                    : ArchiveItemKind.file.rawValue
+            }
+        }
+        return object
+    }
+
+    private func itemKind(for target: Target) -> ArchiveItemKind {
+        if isSymbolicLink(target.logicalURL) { return .symlink }
+        return (try? target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            ? .directory
+            : .file
+    }
 
     private func fileInfoSizeText(_ bytes: Int64) -> String {
         let value: String
@@ -179,27 +243,18 @@ final class Output {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone.current
         formatter.dateFormat = "yyyyMMdd"
         return formatter.string(from: Date(timeIntervalSince1970: seconds))
     }
 
-    private func emitJSONState(for target: Target) throws {
-        if let root = target.rootPath, root != lastJSONRoot {
-            try jsonRecord(["type": "root", "path": root])
-            lastJSONRoot = root
-            emittedJSONSymlinks.removeAll()
-        }
-
-        guard isSymbolicLink(target.logicalURL),
-              options.followSymlinks || options.printSymlinks
-        else { return }
-        let key = (target.rootPath ?? "") + "\n" + target.logicalURL.path
-        guard emittedJSONSymlinks.insert(key).inserted else { return }
-        try jsonRecord([
-            "type": "symlink",
-            "path": target.displayPath,
-            "resolvedPath": target.resolvedPath
-        ])
+    private func emitJSONState(for target: Target) {
+        guard let root = target.rootPath, root != lastJSONRoot else { return }
+        lastJSONRoot = root
+        let object: [String: Any] = ["type": "root", "path": root]
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return }
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data([10]))
     }
 
     private func jsonRecord(_ object: [String: Any]) throws {

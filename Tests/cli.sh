@@ -13,8 +13,6 @@ rm -rf "$work"
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
-archive_header='{"fileInfo":false,"format":"plain","reverse":false,"separator":"\"","slash":false,"spaceIndent":false,"type":"header","version":2}'
-
 touch "$work/a" "$work/b" "$work/c" "$work/space name"
 mkdir -p "$work/tree/sub" "$work/tree/real"
 touch "$work/tree/root-file" "$work/tree/sub/child" "$work/tree/real/linked-child"
@@ -38,7 +36,8 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- '--restore ARCHIVE'
 "$bin" --help | grep -q -- '--tagged-only'
 "$bin" --help | grep -q -- '--file-info'
-"$bin" --help | grep -q -- '--separator CHAR'
+"$bin" --help | grep -q -- '--no-file-info'
+"$bin" --help | grep -q -- '--convert ARCHIVE'
 "$bin" --help | grep -q -- '--space-indent'
 "$bin" --help | grep -q -- '--no-backup'
 [ "$("$bin" --version)" = "tag 8.0" ]
@@ -113,8 +112,8 @@ fi
 printf '%s\n' "$json_path" | grep -Fq '"path":"a"'
 json_recursive=$("$bin" --jsonl -R "$work/tree")
 [ "$(printf '%s\n' "$json_recursive" | grep -c '"type":"root"')" -eq 1 ]
-if printf '%s\n' "$json_recursive" | grep -q '"type":"symlink"'; then
-    echo "default JSONL unexpectedly recorded symlink targets" >&2
+if printf '%s\n' "$json_recursive" | grep -q '"destination"'; then
+    echo "default JSONL unexpectedly recorded symlink target metadata" >&2
     exit 1
 fi
 if printf '%s\n' "$json_recursive" | grep -q '"absolutePath"'; then
@@ -122,7 +121,7 @@ if printf '%s\n' "$json_recursive" | grep -q '"absolutePath"'; then
     exit 1
 fi
 json_follow=$("$bin" --jsonl -L -R "$work/tree")
-printf '%s\n' "$json_follow" | grep -q '"type":"symlink"'
+printf '%s\n' "$json_follow" | grep -q '"kind":"symlink"'
 
 # Paths from stdin, including NUL-delimited input. Explicit empty stdin means
 # zero files rather than silently falling back to current-directory traversal.
@@ -353,10 +352,15 @@ if [ "$(uname -s)" = Darwin ]; then
     # preserves the exact stored tag order.
     export_root="$work/export-root"
     restore_root="$work/restore-root"
-    mkdir -p "$export_root/sub" "$export_root/real" "$restore_root/sub"
+    mkdir -p "$export_root/sub" "$export_root/real" "$restore_root/sub" "$restore_root/real"
     touch "$export_root/alpha" "$export_root/.hidden" "$export_root/space name" "$export_root/sub/beta"
+    touch "$export_root/real/linked-child"
     touch "$restore_root/alpha" "$restore_root/.hidden" "$restore_root/space name" "$restore_root/sub/beta"
+    touch "$restore_root/real/linked-child"
     ln -s real "$export_root/alias"
+    ln -s missing "$export_root/dangling"
+    ln -s real "$restore_root/alias"
+    ln -s missing "$restore_root/dangling"
 
     "$bin" --set 'Second,First' --no-backup "$export_root/alpha"
     "$bin" --set HiddenTag --no-backup "$export_root/.hidden"
@@ -368,183 +372,166 @@ if [ "$(uname -s)" = Darwin ]; then
     "$bin" --set WrongSpace --no-backup "$restore_root/space name"
     "$bin" --set Keep --no-backup "$restore_root"
 
-    default_export_archive="$work/export-default.archive"
+    default_export_archive="$work/export-default.jsonl"
     "$bin" --export "$export_root" >"$default_export_archive" 2>"$work/export-default.err"
-    if grep -Fq '@symlink' "$default_export_archive"; then
-        echo "default export unexpectedly recorded symlink targets" >&2
+    grep -Fq '"format":"jsonl"' "$default_export_archive"
+    grep -Fq '"version":3' "$default_export_archive"
+    grep -Fq '"fileInfo":true' "$default_export_archive"
+    grep -Fq '"taggedOnly":false' "$default_export_archive"
+    grep -Fq '"followSymlinks":false' "$default_export_archive"
+    grep -Fq '"tagColors":' "$default_export_archive"
+    grep -Fq '"path":".hidden"' "$default_export_archive"
+    grep -Fq '"path":"space name"' "$default_export_archive"
+    grep -Fq '"tags":["Second","First"]' "$default_export_archive"
+    if grep -Fq '"destination"' "$default_export_archive"; then
+        echo "default export unexpectedly recorded symlink target metadata" >&2
+        exit 1
+    fi
+    if grep -Fq '"absolutePath"' "$default_export_archive"; then
+        echo "export unexpectedly contains absolutePath" >&2
+        exit 1
+    fi
+    grep -Fq '"type":"summary"' "$default_export_archive"
+
+    # Canonical archives remain usable through ordinary compression pipelines.
+    compressed_archive="$work/export-default.jsonl.gz"
+    "$bin" --export "$export_root" 2>"$work/export-compressed.err" | gzip >"$compressed_archive"
+    gzip -dc "$compressed_archive" | "$bin" --restore - --root "$restore_root" \
+        --dry-run --no-backup >"$work/restore-piped.out" 2>"$work/restore-piped.err"
+    grep -q 'would change' "$work/restore-piped.err"
+
+    no_info_archive="$work/export-no-info.jsonl"
+    "$bin" --export --no-file-info "$export_root" >"$no_info_archive" 2>"$work/export-no-info.err"
+    grep -Fq '"fileInfo":false' "$no_info_archive"
+    if grep -Fq '"mtime"' "$no_info_archive" || grep -Fq '"size"' "$no_info_archive"; then
+        echo "--no-file-info unexpectedly emitted metadata" >&2
         exit 1
     fi
 
-    export_archive="$work/export.archive"
-    "$bin" --export -L "$export_root" >"$export_archive" 2>"$work/export.err"
-    grep -Fq '"format":"plain"' "$export_archive"
-    grep -Fq '"version":2' "$export_archive"
-    grep -Fq '.hidden' "$export_archive"
-    grep -Fq 'alpha' "$export_archive"
-    grep -Fq '"space name"' "$export_archive"
-    grep -Fq '"Project, Alpha"' "$export_archive"
-    grep -Fq '@symlink' "$export_archive"
-    if grep -Eq 'First, Second|Nested, Tag|Needs review", "' "$export_archive"; then
-        echo "export unexpectedly padded tag separators" >&2
+    tagged_archive="$work/export-tagged.jsonl"
+    "$bin" --export --tagged-only "$export_root" >"$tagged_archive" 2>"$work/export-tagged.err"
+    grep -Fq '"taggedOnly":true' "$tagged_archive"
+    if grep -Fq '"path":"real"' "$tagged_archive"; then
+        echo "--tagged-only unexpectedly emitted an untagged item" >&2
         exit 1
     fi
-    grep -q 'exported 4 tagged items' "$work/export.err"
 
-    metadata_archive="$work/export-metadata.archive"
-    "$bin" --export -L --file-info "$export_root" >"$metadata_archive" 2>"$work/export-metadata.err"
-    grep -q '^@metadata ' "$metadata_archive"
-    grep -q 'exported 4 tagged items' "$work/export-metadata.err"
-    "$bin" --restore "$metadata_archive" --root "$restore_root" --dry-run --no-backup \
-        >"$work/metadata-restore.out" 2>"$work/metadata-restore.err"
+    reverse_archive="$work/export-reverse.jsonl"
+    "$bin" --export -V "$export_root" >"$reverse_archive" 2>"$work/export-reverse.err"
+    grep -q -- '--reverse is ignored during export' "$work/export-reverse.err"
+    grep -Fq '"tags":["Second","First"]' "$reverse_archive"
+
+    # Conversion is the human-facing view of canonical JSONL.
+    "$bin" --convert "$default_export_archive" --slash --space-indent \
+        >"$work/converted.out" 2>"$work/converted.err"
+    grep -Eq '^\[[0-9]{8} +0MB\] \.?/?$' "$work/converted.out"
+    grep -Fq '  Second,First' "$work/converted.out"
+    "$bin" --convert "$default_export_archive" --reverse >"$work/reversed.out"
+    grep -Fq 'First,Second' "$work/reversed.out"
+
+    # -L records structural symlink metadata and follows symlinked directories.
+    export_archive="$work/export-follow.jsonl"
+    "$bin" --export -L "$export_root" >"$export_archive" 2>"$work/export-follow.err"
+    grep -Fq '"followSymlinks":true' "$export_archive"
+    grep -Fq '"destination":"real"' "$export_archive"
+    grep -Fq '"targetKind":"directory"' "$export_archive"
+    grep -Fq '"targetExists":false' "$export_archive"
+    [ "$(grep -F -c '"path":"alias\/linked-child"' "$export_archive")" -eq 1 ]
+    [ "$(grep -F -c '"path":"real\/linked-child"' "$export_archive")" -eq 1 ]
+    if grep -Fq '"type":"symlink"' "$export_archive"; then
+        echo "target metadata was emitted as a separate record" >&2
+        exit 1
+    fi
+    "$bin" --convert "$export_archive" --slash --print-symlinks \
+        >"$work/converted-follow.out" 2>"$work/converted-follow.err"
+    grep -Fq 'alias@ -> real/' "$work/converted-follow.out"
+
+    # A restore must use the archive's exact symlink-following mode.
+    if "$bin" --restore "$export_archive" --root "$restore_root" --no-backup \
+        >"$work/mismatch.out" 2>"$work/mismatch.err"; then
+        echo "restore unexpectedly accepted an -L archive without -L" >&2
+        exit 1
+    fi
+    grep -q 'follow-symlinks mode' "$work/mismatch.err"
 
     restore_dry_output="$work/restore-dry.out"
     restore_dry_error="$work/restore-dry.err"
-    "$bin" --restore "$export_archive" --root "$restore_root" --follow-symlinks --dry-run --no-backup \
+    "$bin" --restore "$default_export_archive" --root "$restore_root" --dry-run --no-backup \
         >"$restore_dry_output" 2>"$restore_dry_error"
     grep -q 'would change' "$restore_dry_error"
-    grep -q 'warnings' "$restore_dry_error"
+    grep -q 'would clear' "$restore_dry_error"
     grep -q '\[dry-run\] restore' "$restore_dry_output"
     [ "$("$bin" -N "$restore_root/alpha")" = 'Wrong' ]
-    [ "$("$bin" -N "$restore_root/.hidden")" = 'WrongHidden' ]
-    [ "$("$bin" -N "$restore_root/sub/beta")" = 'WrongNested' ]
 
-    "$bin" --restore "$export_archive" --root "$restore_root" --follow-symlinks --no-backup \
-        >"$work/restore.out" 2>"$work/restore.err"
-    grep -q 'restored 4 files' "$work/restore.err"
-    grep -q 'following the current target' "$work/restore.err"
+    # Delete one archived item to exercise the easy-to-count missing-item case.
+    rm "$restore_root/sub/beta"
+    if "$bin" --restore "$default_export_archive" --root "$restore_root" --no-backup \
+        >"$work/restore.out" 2>"$work/restore.err"; then
+        :
+    fi
+    grep -q 'missing' "$work/restore.err"
+    grep -q '1 missing' "$work/restore.err"
+    grep -q 'cleared' "$work/restore.err"
     [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
     [ "$("$bin" -N "$restore_root/.hidden")" = 'HiddenTag' ]
-    [ "$("$bin" -N "$restore_root/sub/beta")" = 'Nested,Tag' ]
     [ "$("$bin" -N "$restore_root/space name")" = 'Project, Alpha,Needs review' ]
-    [ "$("$bin" -N "$restore_root")" = 'Keep' ]
-
-    # Plaintext export records its display grammar. Exercise reverse order,
-    # directory slashes, two-space indentation, and escaping of the separator
-    # inside a filename.
-    separator=$(printf '\342\200\213')
-    zero_width_name=$(printf 'zero\342\200\213width')
-    touch "$export_root/$zero_width_name" "$restore_root/$zero_width_name"
-    "$bin" --set 'Zero,Width' --no-backup "$export_root/$zero_width_name"
-    "$bin" --set WrongZero --no-backup "$restore_root/$zero_width_name"
-    "$bin" --set DirectoryTag --no-backup "$export_root/sub"
-    "$bin" --set WrongDirectory --no-backup "$restore_root/sub"
-
-    pretty_archive="$work/export-pretty.archive"
-    "$bin" --export -p -V --space-indent --separator="$separator" "$export_root" \
-        >"$pretty_archive" 2>"$work/pretty-export.err"
-    grep -Fq '"format":"plain"' "$pretty_archive"
-    grep -Fq '"reverse":true' "$pretty_archive"
-    grep -Fq '"slash":true' "$pretty_archive"
-    grep -Fq '"spaceIndent":true' "$pretty_archive"
-    grep -Fq 'zero\u{200B}width' "$pretty_archive"
-    grep -Fq 'Width,Zero' "$pretty_archive"
-    grep -Fq 'sub/' "$pretty_archive"
-    grep -q 'exported 6 tagged items' "$work/pretty-export.err"
-
-    "$bin" --restore "$pretty_archive" --root "$restore_root" --dry-run --no-backup \
-        >"$work/pretty-restore-dry.out" 2>"$work/pretty-restore-dry.err"
-    grep -q 'would change' "$work/pretty-restore-dry.err"
-    [ "$("$bin" -N "$restore_root/$zero_width_name")" = 'WrongZero' ]
-    [ "$("$bin" -N "$restore_root/sub")" = 'WrongDirectory' ]
-    "$bin" --restore "$pretty_archive" --root "$restore_root" --no-backup \
-        >"$work/pretty-restore.out" 2>"$work/pretty-restore.err"
-    [ "$("$bin" -N "$restore_root/$zero_width_name")" = 'Zero,Width' ]
-    [ "$("$bin" -N "$restore_root/sub")" = 'DirectoryTag' ]
-
-    # A slash-decorated symlink item must still restore as the undecorated
-    # path. The provenance record precedes the item record in this format.
-    symlink_export_root="$work/symlink-export-root"
-    symlink_restore_root="$work/symlink-restore-root"
-    mkdir -p "$symlink_export_root" "$symlink_restore_root"
-    touch "$symlink_export_root/target" "$symlink_restore_root/target"
-    ln -s target "$symlink_export_root/link"
-    ln -s target "$symlink_restore_root/link"
-    "$bin" -L --set LinkTag --no-backup "$symlink_export_root/link"
-    symlink_slash_header='{"fileInfo":false,"format":"plain","reverse":false,"separator":"\"","slash":true,"spaceIndent":false,"type":"header","version":2}'
-    printf '%s\n' "$symlink_slash_header" '@root /' '@symlink "link"' >"$work/symlink-marker.archive"
-    printf '%s\t%s\n' '"link@"' LinkTag >>"$work/symlink-marker.archive"
-    "$bin" --set Wrong --no-backup "$symlink_restore_root/target"
-    "$bin" --restore "$work/symlink-marker.archive" --root "$symlink_restore_root" \
-        -L --no-backup
-    [ "$("$bin" -N "$symlink_restore_root/target")" = 'LinkTag' ]
-    "$bin" --export -L -p "$symlink_export_root" \
-        >"$work/symlink.archive" 2>"$work/symlink-export.err"
-    grep -q 'link@' "$work/symlink.archive"
-    "$bin" --set Wrong --no-backup "$symlink_restore_root/target"
-    "$bin" --restore "$work/symlink.archive" --root "$symlink_restore_root" \
-        -L --no-backup
-    [ "$("$bin" -N "$symlink_restore_root/target")" = 'LinkTag' ]
-
-    json_archive="$work/export.jsonl"
-    "$bin" --export --jsonl "$export_root" >"$json_archive"
-    grep -q '"type":"summary"' "$json_archive"
-    if grep -q '"absolutePath"' "$json_archive"; then
-        echo "export JSONL unexpectedly contains absolutePath" >&2
-        exit 1
-    fi
-    "$bin" --restore "$json_archive" --root "$restore_root" --jsonl --dry-run --no-backup \
-        >"$work/json-restore.out"
-    grep -q '"type":"summary"' "$work/json-restore.out"
-
-    colored_archive="$work/colored.archive"
-    printf '%s\n' "$archive_header" "@root $export_root" >"$colored_archive"
-    printf '\033[31malpha\033[0m\t\033[31mColorized\033[0m\n' >>"$colored_archive"
-    "$bin" --restore "$colored_archive" --root "$restore_root" --dry-run --no-backup \
-        >"$work/colored.out"
-    grep -q 'Colorized' "$work/colored.out"
-    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+    touch "$restore_root/sub/beta"
 
     # The complete archive is validated before any listed item is changed.
-    malformed_archive="$work/malformed.archive"
-    printf '%s\n' "$archive_header" "@root $export_root" >"$malformed_archive"
-    printf '%s\t%s\n' '"unterminated' Rejected >>"$malformed_archive"
-    printf '%s\n' 'not an archive record' >>"$malformed_archive"
-    if "$bin" --restore "$malformed_archive" --root "$restore_root" --no-backup \
-        >"$work/malformed.out" 2>"$work/malformed.err"; then
-        echo "malformed archive unexpectedly restored" >&2
-        exit 1
-    fi
-    grep -q 'invalid archive item path' "$work/malformed.err"
-    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
-
-    duplicate_archive="$work/duplicate.archive"
-    printf '%s\n' "$archive_header" "@root $export_root" >"$duplicate_archive"
-    printf '%s\t%s\n' alpha First >>"$duplicate_archive"
-    printf '%s\t%s\n' alpha Second >>"$duplicate_archive"
+    header=$(sed -n '1p' "$default_export_archive")
+    root_record=$(sed -n '2p' "$default_export_archive")
+    item_record=$(grep '"path":"alpha"' "$default_export_archive")
+    duplicate_archive="$work/duplicate.jsonl"
+    printf '%s\n%s\n%s\n%s\n' "$header" "$root_record" "$item_record" "$item_record" >"$duplicate_archive"
+    "$bin" --set BeforeValidation --no-backup "$restore_root/alpha"
     if "$bin" --restore "$duplicate_archive" --root "$restore_root" --no-backup \
         >"$work/duplicate.out" 2>"$work/duplicate.err"; then
         echo "duplicate archive unexpectedly restored" >&2
         exit 1
     fi
     grep -q 'duplicate archive item' "$work/duplicate.err"
-    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+    [ "$("$bin" -N "$restore_root/alpha")" = 'BeforeValidation' ]
 
-    escape_archive="$work/escape.archive"
-    printf '%s\n' "$archive_header" "@root $export_root" >"$escape_archive"
-    printf '%s\t%s\n' ../alpha Hacked >>"$escape_archive"
+    malformed_archive="$work/malformed.jsonl"
+    printf '%s\n%s\n%s\n' "$header" "$root_record" '{not-json}' >"$malformed_archive"
+    if "$bin" --restore "$malformed_archive" --root "$restore_root" --no-backup \
+        >"$work/malformed.out" 2>"$work/malformed.err"; then
+        echo "malformed archive unexpectedly restored" >&2
+        exit 1
+    fi
+    grep -q 'archive line' "$work/malformed.err"
+
+    kind_archive="$work/kind-mismatch.jsonl"
+    printf '%s\n%s\n%s\n' "$header" "$root_record" \
+        '{"kind":"directory","path":"alpha","tags":["Hacked"],"type":"item"}' >"$kind_archive"
+    if "$bin" --restore "$kind_archive" --root "$restore_root" --no-backup \
+        >"$work/kind.out" 2>"$work/kind.err"; then
+        echo "kind-mismatch archive unexpectedly restored" >&2
+        exit 1
+    fi
+    grep -q 'restore item type changed' "$work/kind.err"
+    [ "$("$bin" -N "$restore_root/alpha")" = 'BeforeValidation' ]
+
+    escape_archive="$work/escape.jsonl"
+    printf '%s\n%s\n%s\n' "$header" "$root_record" \
+        '{"kind":"file","path":"../alpha","tags":["Hacked"],"type":"item"}' >"$escape_archive"
     if "$bin" --restore "$escape_archive" --root "$restore_root" --no-backup \
         >"$work/escape.out" 2>"$work/escape.err"; then
         echo "path-escape archive unexpectedly restored" >&2
         exit 1
     fi
     grep -q 'invalid archive item path' "$work/escape.err"
-    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+    [ "$("$bin" -N "$restore_root/alpha")" = 'BeforeValidation' ]
 
-    # Tag writes must not change mtime on the supported macOS filesystem.
-    touch "$work/mtime-file"
-    mtime_before=$(stat -f %m "$work/mtime-file")
-    "$bin" --set MtimeTest --no-backup "$work/mtime-file"
-    mtime_after=$(stat -f %m "$work/mtime-file")
-    [ "$mtime_before" = "$mtime_after" ]
-
-    # Explicit undo archives capture the preimage immediately before the
-    # mutation and can themselves be restored.
-    undo_archive="$work/undo.archive"
+    # Explicit undo archives use the same canonical JSONL format, capture the
+    # preimage immediately before the mutation, and can themselves be restored.
+    undo_archive="$work/undo.jsonl"
     "$bin" --set UndoNew --backup "$undo_archive" "$restore_root/alpha" \
         2>"$work/undo.err"
-    grep -Fq 'alpha' "$undo_archive"
+    grep -Fq '"format":"jsonl"' "$undo_archive"
+    grep -Fq '"purpose":"undo"' "$undo_archive"
     "$bin" --restore "$undo_archive" --no-backup >/dev/null
-    [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
+    [ "$("$bin" -N "$restore_root/alpha")" = 'BeforeValidation' ]
 
     # The default undo archive is created in the system temporary directory.
     "$bin" --set DefaultUndo "$restore_root/alpha" 2>"$work/default-undo.err"
@@ -557,5 +544,21 @@ if [ "$(uname -s)" = Darwin ]; then
     "$bin" --set 'X,Y' --jsonl --no-backup "$work/b" | grep -q '"dryRun":false'
     [ "$("$bin" -N "$work/b")" = 'X,Y' ]
 fi
+
+# Tag writes must not change mtime. Keep this outside the macOS-only integration
+# block so every supported test environment exercises the invariant.
+touch "$work/mtime-file"
+if [ "$(uname -s)" = Darwin ]; then
+    mtime_before=$(stat -f %m "$work/mtime-file")
+else
+    mtime_before=$(stat -c %Y "$work/mtime-file")
+fi
+"$bin" --set MtimeTest --no-backup "$work/mtime-file"
+if [ "$(uname -s)" = Darwin ]; then
+    mtime_after=$(stat -f %m "$work/mtime-file")
+else
+    mtime_after=$(stat -c %Y "$work/mtime-file")
+fi
+[ "$mtime_before" = "$mtime_after" ]
 
 echo "CLI tests passed"

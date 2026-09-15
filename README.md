@@ -97,7 +97,7 @@ tag --jsonl file1 file2              # streaming structured output
 find files -print0 | tag --stdin0 -T # read NUL-delimited paths
 
 tag --export directory > tags.archive
-tag --export -p -V --space-indent directory > readable-tags.archive
+tag --convert tags.archive --slash --space-indent
 tag --export directory | gzip > tags.archive.gz
 tag --restore tags.archive --root restored-directory --dry-run
 gzip -dc tags.archive.gz | tag --restore - --root restored-directory
@@ -105,59 +105,54 @@ gzip -dc tags.archive.gz | tag --restore - --root restored-directory
 
 ## Export and restore
 
-`--export` writes a v2, root-relative archive for one directory. It includes
-hidden items by default and emits tagged items only, preserving each stored tag
-array exactly. Plaintext output is find-like and can be read back by
-`--restore`; `--jsonl` provides the streaming machine-readable form. JSONL uses
-explicit `root` records and emits symlink provenance with `--follow-symlinks`
-or explicit plaintext `--print-symlinks`; it never repeats an `absolutePath`
-field. A final export summary is written to stderr for
-plaintext, or as a JSONL `summary` record.
+`--export` writes a versioned, root-relative JSONL archive for one directory.
+It includes hidden and untagged items by default and preserves each stored tag
+array exactly. Archive storage is JSONL only. Use `--convert` when a
+human-readable listing is wanted; converted output is presentation-only and is
+not accepted by `--restore`.
 
 `--restore ARCHIVE` accepts an archive path or `-` for stdin. `--root DEST`
 relocates the archive's one root. Restore changes only listed existing items;
-it does not create or delete files, and an archive containing only tagged items
-does not clear tags from unlisted items. Ordered tag arrays are compared before
-writing, and a final summary reports visited, restored/changed, unchanged,
+it does not create or delete files. Empty `tags` arrays explicitly clear tags;
+an omitted `tags` field means tags were unavailable and must not be changed.
+An archive containing only tagged items does not clear tags from unlisted items.
+The final summary reports visited, restored/changed, cleared, unchanged,
 missing, errors, and symlink warnings. `--dry-run` performs the same reads and
 comparisons without changing tags.
 
-Before a real restore writes anything, the complete archive is read and
-validated. Both archive encodings begin with one compact JSON header that
-declares the v2 format and the plaintext separator/display options. Plaintext
-then uses an `@root` record followed by root-relative records. Every plaintext
-path is quoted; tags are conditionally quoted with the same separator and are
-always joined with `,` and no padding. `--space-indent` changes only the
-whitespace between the path and its tags. `--reverse` stores displayed tags in
-reverse order and the header tells restore to reverse them back. `--slash`
-adds `/` to displayed directory paths and restore removes that decoration.
-`--separator` defaults to `"`; for an invisible separator, use for example
-`--separator='\u{200B}'`. JSONL uses `root`, `symlink`, item, and final
-`summary` records. Restore also accepts ANSI-colored plaintext because it
-removes terminal color escapes before parsing. This validation prevents
-malformed or lexically escaping input from being discovered halfway through a
-restore; it does not make filesystem changes transactional if a later metadata
-write fails.
+Before a real restore writes anything, the complete JSONL archive is read and
+validated. The header records the archive version, symlink following mode,
+file-info setting, tagged-only setting, and a copy of Finder's tag-color
+definitions. Item paths are relative and must not escape the selected root.
+Duplicate logical paths and malformed records are rejected before any tag is
+changed. This does not make filesystem changes transactional if a later
+metadata write fails.
 
-`--file-info` adds each tagged item's byte size and content modification time
-(`mtime`, as Unix seconds) to list and export output. JSONL stores them as
-`size` and `mtime`; plaintext archives use `@metadata` records. Restore
-validates these fields but ignores them, so they are available for later
-change-detection tooling without affecting tag restoration.
+`--file-info` adds each item's byte size and content modification time (`mtime`,
+as a UTC-based Unix timestamp) to list and export output. Export enables it by
+default; `--no-file-info` disables it. JSONL stores numeric `size` and `mtime`
+fields. Restore ignores them, so they are available for later change-detection
+tooling without affecting tag restoration.
 Human-readable `--file-info` listings render metadata as `[DATE SIZE]`: DATE is
 `yyyyMMdd`, and SIZE is a right-aligned, rounded binary-megabyte field
 (`~0MB` means a nonempty file below 0.5 MiB). Directories are shown as `0MB`.
-JSONL and the archive retain exact numeric values. The plaintext header also
-records whether file-info records were requested.
-Use `--space-indent` with plain listings to separate a filename and its tags
-with two spaces instead of the usual tab/alignment separator.
+JSONL and the archive retain exact numeric values. `--convert` uses the same
+human formatter as ordinary listings; `--space-indent` separates a filename
+and its tags with two spaces instead of the usual tab/alignment separator.
 The human date is for display only; use JSONL/archive values for stable
 change detection.
 
 Symlinks are not followed by default. `--follow-symlinks`/`-L` resolves and
-follows symlinks, including symlinked directories during recursion. If a
-followed symlink resolves to a different target than the one recorded during
-export, restore warns once to stderr and follows the current target.
+follows symlinks, including symlinked directories during recursion. With `-L`,
+an item may include the literal stored link destination and target type or
+existence information, but target tags are never nested in symlink metadata.
+Target descendants reached through a followed symlink are ordinary item
+records. Consequently, a physical subtree reachable through both a direct path
+and a symlink can occur twice under its two logical paths; v1 does not attempt
+inode-based deduplication.
+Restore requires the same `-L` setting recorded by the archive. If a followed
+symlink now has a different literal destination, restore warns and follows the
+current target.
 `--no-follow-symlinks` is retained as an explicit defensive spelling.
 
 `--slash` appends `/` to directories and `@` to symlinks, like `ls -F`.
@@ -165,8 +160,8 @@ export, restore warns once to stderr and follows the current target.
 example `link@ -> ../target/`; the target slash follows `--slash`, and missing
 targets are marked `(NOT FOUND)` in red when color is enabled. Printing a
 symlink target does not cause traversal or tag I/O to follow it.
-Archive paths are validated before writes, including rejection of absolute
-paths, lexical `..` escapes, malformed records, and conflicting duplicates.
+When converting an archive that did not record target information, the
+converter reports that the target was not recorded rather than guessing.
 
 Mutating operations write a per-file undo archive by default in the system
 temporary directory. The archive path is printed to stderr when the first
@@ -194,9 +189,9 @@ By default, no operation intentionally sorts the stored tag array:
 * **copy:** writes the source array to the destination unchanged.
 * **match/find:** display each matching file's stored order when tags are shown.
 * **usage:** aggregate output is in first-seen exact-tag order.
-* **reverse:** reverses display; during export it reverses the serialized tag
-  list and records that choice so restore returns the original order. It never
-  rewrites live metadata merely because it is selected.
+* **reverse:** reverses display. During export it is ignored so archives always
+  store the natural order. It never rewrites live metadata merely because it is
+  selected.
 
 `--sorted-tags` is explicitly opt-in. For read-only operations it sorts only
 the displayed/aggregate output and **does not write metadata**. For mutating
@@ -289,9 +284,9 @@ prefix, so treating such a write as successful would silently corrupt the tag.
 
 The normal comma-separated **list** output is inherently ambiguous when tag
 names contain commas. Use `--jsonl` for machine consumption or
-`--one-per-line` when a simple text format is sufficient. Plaintext export is
-different: its header declares a quote separator, paths are always quoted, and
-tag values needing it are quoted individually.
+`--one-per-line` when a simple text format is sufficient. JSONL export stores
+paths and tags as proper JSON strings and arrays. `--convert` is intended for
+human-readable output rather than round-tripping.
 
 `*` remains reserved for wildcard behavior in `--match`, `--usage`, `--find`,
 and `--remove`.
@@ -361,24 +356,17 @@ also contain source path information.
 
 ## JSON Lines / NDJSON
 
-`--jsonl` (alias `--ndjson`) emits one JSON object per line and streams results
-without buffering an entire recursive traversal.
-
-The first record is a `header` object containing `format`, `version`, and the
-display configuration. Normal file records contain `path` and `tags`.
-Recursive output emits a
-`{"type":"root","path":"..."}` record once per traversal root. With
-`--follow-symlinks`, it also emits one `{"type":"symlink",...}` record per
-symlink for path-resolution provenance. It never emits `absolutePath`; root
-plus logical path is the authoritative identity. Export adds a final
-`summary` record with counts.
+`--jsonl` (alias `--ndjson`) emits one JSON object per line for normal list and
+mutation output. `--export` always uses the canonical JSONL archive format,
+whether or not `--jsonl` is written. Export streams a header, one root record,
+item records, and a final `summary` record.
 
 Example:
 
 ```json
-{"fileInfo":false,"format":"jsonl","reverse":false,"separator":"\"","slash":false,"spaceIndent":false,"type":"header","version":2}
+{"fileInfo":true,"followSymlinks":false,"format":"jsonl","purpose":"export","taggedOnly":false,"type":"header","version":3}
 {"type":"root","path":"/tmp/tree"}
-{"path":"file","tags":["First","Second"]}
+{"kind":"file","mtime":1780000000,"path":"file","size":1234,"tags":["First","Second"],"type":"item"}
 ```
 
 With `--file-info`, file records also contain numeric `size` and `mtime`
@@ -389,9 +377,9 @@ records after a successful write; dry runs emit the same shape with
 `"dryRun":true`.
 
 Text-only switches such as color, filename suppression, one-per-line, slash
-decoration, and NUL termination do not change the JSONL schema. `--reverse`
-does change the exported tag arrays when explicitly requested, and the header
-records that choice so restore can undo it.
+decoration, and NUL termination do not change the JSONL schema. `--reverse` is
+ignored during export so archives always contain natural tag order. Use
+`--convert` to reverse tags for display.
 
 For text output, bare `--color` and `--color=yes` mean automatic terminal
 coloring. `--color=always` and `--color=force` force ANSI colors, while

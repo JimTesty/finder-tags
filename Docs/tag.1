@@ -39,6 +39,10 @@ tag \- manipulate macOS Finder tags while preserving tag order
 .I ARCHIVE
 .RI [ --root DEST ]
 .br
+.B tag --convert
+.I ARCHIVE
+.RI [ options ]
+.br
 .B tag --move
 .I TAG POSITION path ...
 .SH DESCRIPTION
@@ -53,15 +57,20 @@ The interface is compatible with jdberry/tag where practical.
 List tags. This is the default operation.
 .TP
 .B --export [ROOT]
-Write a tagged-only, root-relative archive for one directory. Hidden items are
-included by default. Both encodings begin with a JSON format header. Plaintext
-is find-like and always quotes paths; --jsonl selects the streaming JSON format.
+Write a versioned, root-relative JSONL archive for one directory. Hidden and
+untagged items are included by default. File information is included by
+default and can be disabled with --no-file-info.
 .TP
 .B --restore ARCHIVE
 Restore an archive from a file, or from standard input when ARCHIVE is -. Use
 --root DEST to relocate the archive's one root. Symlink targets are followed
-only when --follow-symlinks is specified; redirected followed targets produce
-warnings.
+only when the same --follow-symlinks setting recorded in the archive is
+specified; redirected followed targets produce warnings.
+.TP
+.B --convert ARCHIVE
+Read a JSONL archive from a file or standard input and print human-readable
+output. Display options such as --reverse, --slash, --space-indent, and --color
+apply only to the converted output; the output is not restoreable.
 .TP
 .BR -a , " --add " TAGS
 Add or re-case tags without disturbing unrelated tag order.
@@ -109,8 +118,8 @@ Sort tags for display. Mutating operations also sort the final stored array.
 Read-only operations never write merely because this option is present.
 .TP
 .BR -V , " --reverse"
-Reverse display order. Plaintext export records this choice so restore can
-recover the original order.
+Reverse display order. Export ignores this option so JSONL archives always
+store Foundation's natural tag order.
 .TP
 .BR -C , " --case-sensitive"
 Use exact-case matching instead of the default case-insensitive matching.
@@ -140,7 +149,7 @@ Display each tag on its own line. --garrulous is an alias.
 Display comma-separated tags. --no-garrulous is an alias.
 .TP
 .B --space-indent
-Use two spaces instead of a tab before tags in plain list or export output.
+Use two spaces instead of a tab before tags in list or converted output.
 .TP
 .BR -p , " --slash"
 Append / to directory names and @ to symlink names.
@@ -164,14 +173,11 @@ List or export only items having at least one tag.
 .TP
 .B --file-info
 Include each listed or exported item's byte size and content modification time.
-JSONL uses numeric size and mtime fields; plaintext archives use @metadata
-records. Restore validates but ignores these fields.
+Export enables this by default. JSONL uses numeric size and mtime fields;
+restore ignores these fields.
 .TP
-.B --separator CHAR
-Choose the one-character quote separator for plaintext export. The default is
-double quote. A Unicode escape such as '\\u{200B}' selects an invisible
-separator. The separator and plaintext display options are recorded in the
-archive header.
+.B --no-file-info
+Omit size and modification-time fields from export output.
 .SH PATH INPUT AND TRAVERSAL
 .TP
 .B --stdin
@@ -194,8 +200,8 @@ Do not recursively follow symlinked directories or explicitly resolve paths
 before Foundation tag I/O. This is the default.
 .TP
 .B -L, --follow-symlinks
-Follow symlinks and symlinked directories, and record target provenance in
-archive output.
+Follow symlinks and symlinked directories. Archive items may record structural
+target information, but target tags are never nested inside symlink metadata.
 .SH SAFETY
 .TP
 .B --dry-run

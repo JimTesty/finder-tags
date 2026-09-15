@@ -31,34 +31,11 @@ private func parseColorMode(_ raw: String) -> ColorMode {
     }
 }
 
-private func parseArchiveSeparator(_ raw: String) -> Character {
-    var value = raw
-    if raw.hasPrefix("\\u{") && raw.hasSuffix("}") {
-        let hex = String(raw.dropFirst(3).dropLast())
-        guard let number = UInt32(hex, radix: 16), let scalar = UnicodeScalar(number) else {
-            fail("invalid archive separator '\(raw)'")
-        }
-        value = String(scalar)
-    } else if raw.hasPrefix("\\u") && raw.count == 6 {
-        let hex = String(raw.dropFirst(2))
-        guard let number = UInt32(hex, radix: 16), let scalar = UnicodeScalar(number) else {
-            fail("invalid archive separator '\(raw)'")
-        }
-        value = String(scalar)
-    }
-
-    do {
-        return try validatedArchiveSeparator(value)
-    } catch {
-        fail("invalid archive separator '\(raw)': \(error.localizedDescription)")
-    }
-}
-
 private func applyShortFlag(_ ch: Character, options: inout Options) {
     switch ch {
     case "l": setOperation(.list, options: &options)
     case "c": options.colorMode = .auto
-    case "V": options.reverse = true
+    case "V": options.reverse = true; options.reverseWasSet = true
     case "C": options.caseSensitive = true
     case "n": options.showNamesOverride = true
     case "N": options.showNamesOverride = false
@@ -112,6 +89,9 @@ func parseArguments() -> Options {
             case "export":
                 if inlineValue != nil { fail("--export does not take an argument") }
                 setOperation(.export, options: &options)
+            case "convert":
+                setOperation(.convert, options: &options)
+                options.archivePath = operand()
             case "restore":
                 setOperation(.restore, options: &options)
                 options.archivePath = operand()
@@ -162,7 +142,7 @@ func parseArguments() -> Options {
             case "sorted-tags", "sort-tags": options.sortedTags = true
             case "color":
                 options.colorMode = inlineValue.map(parseColorMode) ?? .auto
-            case "reverse": options.reverse = true
+            case "reverse": options.reverse = true; options.reverseWasSet = true
             case "case-sensitive": options.caseSensitive = true
             case "filename", "name": options.showNamesOverride = true
             case "no-filename", "no-name": options.showNamesOverride = false
@@ -181,10 +161,12 @@ func parseArguments() -> Options {
             case "jsonl", "ndjson": options.jsonLines = true
             case "dry-run", "dryrun": options.dryRun = true
             case "tagged-only": options.taggedOnly = true
-            case "file-info": options.fileInfo = true
-            case "separator":
-                options.archiveSeparator = parseArchiveSeparator(operand())
-                options.archiveSeparatorWasSet = true
+            case "file-info":
+                options.fileInfo = true
+                options.fileInfoWasSet = true
+            case "no-file-info":
+                options.fileInfo = false
+                options.fileInfoWasSet = true
             case "root": options.restoreRoot = operand()
             case "backup":
                 options.backupPath = operand()
@@ -266,6 +248,10 @@ func parseArguments() -> Options {
         if !options.paths.isEmpty {
             fail("--restore accepts the archive path followed by --root DEST, not filesystem paths")
         }
+    case .convert:
+        if !options.paths.isEmpty {
+            fail("--convert accepts the archive path, not filesystem paths")
+        }
     case .copy:
         if options.paths.count != 2 {
             fail("--copy requires exactly SOURCE and DESTINATION")
@@ -276,7 +262,7 @@ func parseArguments() -> Options {
         }
     }
 
-    if options.fileInfo {
+    if options.fileInfoWasSet {
         switch options.operation {
         case .list, .export: break
         default: fail("--file-info is only valid with --list or --export")
@@ -284,37 +270,33 @@ func parseArguments() -> Options {
     }
 
     if options.spaceIndent {
-        guard (options.operation.isListOrExport), !options.jsonLines else {
-            fail("--space-indent is only valid with plain --list or --export output")
+        switch options.operation {
+        case .convert:
+            break
+        case .list:
+            if options.jsonLines { fail("--space-indent is only valid with text output") }
+        default:
+            fail("--space-indent is only valid with text output")
         }
-    }
-
-    if options.archiveSeparatorWasSet {
-        guard case .export = options.operation, !options.jsonLines else {
-            fail("--separator is only valid with plain --export output")
-        }
-    }
-
-    if options.printSymlinks && options.jsonLines {
-        fail("--print-symlinks is only valid with text output")
     }
 
     switch options.operation {
-    case .list, .export:
+    case .list, .export, .convert:
         break
     default:
         if options.taggedOnly {
-            fail("--tagged-only is only valid with --list or --export")
+            fail("--tagged-only is only valid with --list, --export, or --convert")
         }
     }
 
     switch options.operation {
     case .export:
-        // Archives are ordered, root-relative records. Display-only options
-        // are recorded in the plaintext header when they affect parsing.
+        // Export is always canonical JSONL. Display-only options are ignored
+        // there and remain available to --list and --convert.
         options.recursive = true
         options.includeHidden = true
-        options.taggedOnly = true
+        options.jsonLines = true
+        if !options.fileInfoWasSet { options.fileInfo = true }
         if options.absolutePaths {
             fail("--absolute is not valid with --export; archive paths are root-relative")
         }
@@ -323,9 +305,6 @@ func parseArguments() -> Options {
         }
         if options.oneTagPerLine || options.nulTerminate {
             fail("text display formatting options are not valid with --export")
-        }
-        if options.jsonLines && options.slashDirectories {
-            fail("--slash is only valid with plaintext --export")
         }
     default:
         break
@@ -347,6 +326,8 @@ func parseArguments() -> Options {
     switch options.operation {
     case .restore:
         if options.archivePath == nil { fail("--restore requires an archive path or '-'") }
+    case .convert:
+        if options.archivePath == nil { fail("--convert requires an archive path or '-'") }
     default:
         break
     }

@@ -18,7 +18,9 @@ final class App {
         if options.isMutating && !options.dryRun && options.backupEnabled {
             self.undoWriter = UndoWriter(
                 path: options.backupPath ?? defaultUndoArchivePath(),
-                syncEachRecord: options.syncBackup
+                syncEachRecord: options.syncBackup,
+                followSymlinks: options.followSymlinks,
+                tagColors: output.colorsForArchive.archiveTagColors
             )
         }
     }
@@ -31,6 +33,8 @@ final class App {
             runExport()
         case .restore:
             runRestore()
+        case .convert:
+            runConvert()
         case .usage(let query):
             runUsage(query)
         case .find(let query):
@@ -44,6 +48,10 @@ final class App {
     }
 
     private func runExport() {
+        if options.reverseWasSet {
+            warn("--reverse is ignored during export; JSONL stores natural tag order")
+        }
+
         let rootURL: URL
         if let path = options.paths.first {
             rootURL = expandedFileURL(path)
@@ -72,26 +80,41 @@ final class App {
                 }
             )
             traversal.forEachTarget { target in
-                let tags: [String]
+                let tags: [String]?
                 do {
                     tags = try self.store.read(target.url)
                 } catch {
-                    if let link = symbolicLinkInfo(for: target.logicalURL), !link.targetExists {
-                        do {
-                            try writer.emitTarget(target, tags: [])
-                        } catch {
-                            writer.stats.errors += 1
-                            self.report("\(target.absolutePath): \(error.localizedDescription)")
-                        }
+                    // Foundation may not expose a usable tag value for a
+                    // symlink itself, or for a dangling target with -L.
+                    // Omitting tags is distinct from an observed empty array,
+                    // so restore will not clear a live target accidentally.
+                    // Keep the item so -L archives retain the link structure.
+                    if isSymbolicLink(target.logicalURL) {
+                        tags = nil
+                        writer.noteWarning()
+                        self.warn("\(target.absolutePath): tags unavailable for symlink; recording the item without tags")
+                    } else {
+                        writer.stats.errors += 1
+                        writer.stats.visited += 1
+                        self.report("\(target.absolutePath): \(error.localizedDescription)")
                         return
                     }
-                    writer.stats.errors += 1
-                    writer.stats.visited += 1
-                    self.report("\(target.absolutePath): \(error.localizedDescription)")
-                    return
+                }
+
+                let metadata: FileMetadata?
+                if options.fileInfo {
+                    do {
+                        metadata = try fileMetadata(for: target.url)
+                    } catch {
+                        metadata = nil
+                        writer.noteWarning()
+                        self.warn("\(target.absolutePath): file size or modification time is unavailable")
+                    }
+                } else {
+                    metadata = nil
                 }
                 do {
-                    try writer.emitTarget(target, tags: tags)
+                    try writer.emitTarget(target, tags: tags, metadata: metadata)
                 } catch {
                     writer.stats.errors += 1
                     self.report("\(target.absolutePath): \(error.localizedDescription)")
@@ -111,6 +134,12 @@ final class App {
 
         do {
             let document = try ArchiveReader().read(path: archivePath)
+            guard document.header.followSymlinks == options.followSymlinks else {
+                throw ArchiveError.modeMismatch(
+                    archive: document.header.followSymlinks,
+                    requested: options.followSymlinks
+                )
+            }
             let destinationRoot = expandedFileURL(options.restoreRoot ?? document.rootPath)
             let engine = RestoreEngine(
                 document: document,
@@ -133,9 +162,32 @@ final class App {
         }
     }
 
+    private func runConvert() {
+        guard let archivePath = options.archivePath else {
+            report("--convert requires an archive path or '-'")
+            return
+        }
+
+        do {
+            let document = try ArchiveReader().read(path: archivePath)
+            let converter = ArchiveConverter(
+                document: document,
+                options: options,
+                output: output
+            )
+            try converter.run()
+        } catch {
+            report("conversion failed: \(error.localizedDescription)")
+        }
+    }
+
     private func report(_ message: String) {
         eprint("\(programName): \(message)")
         hadError = true
+    }
+
+    private func warn(_ message: String) {
+        eprint("\(programName): warning: \(message)")
     }
 
     private func explicitTarget(_ path: String) -> Target {
@@ -277,7 +329,7 @@ final class App {
                     )
                     try performMutation("move", target: target, change: change)
 
-                case .copy, .usage, .find, .export, .restore:
+                case .copy, .usage, .find, .export, .restore, .convert:
                     preconditionFailure("operation handled outside traversal")
                 }
             } catch {
