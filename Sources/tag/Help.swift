@@ -151,11 +151,7 @@ func usage(code: Int32 = 0) -> Never {
       * --usage traverses paths directly; it does NOT use Spotlight.
       * --usage requires TAGS instead of making it optional.
       * --home/--local/--network are not implemented for --find.
-      * --filter, --copy, --move, placement controls, --reverse, --case-sensitive,
-        --sorted-tags, --absolute, stdin path input, --jsonl, and --dry-run are
-        additions.
       * Quoted TAGS can contain commas; jdberry/tag's grammar cannot.
-      * Symlinked targets/directories are followed only with --follow-symlinks.
 
     Use -- before a path beginning with '-'.
     """
