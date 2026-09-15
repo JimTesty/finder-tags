@@ -81,6 +81,9 @@ struct RestoreEngine {
                 // safely read tags for this item. It must never be treated as
                 // an empty array, because that would clear a live target.
                 guard let archivedTags = entry.tags else {
+                    stats.skipped += 1
+                    stats.warnings += 1
+                    onWarning("restore skipped \(entry.path): archive has no tags for this item")
                     continue
                 }
 

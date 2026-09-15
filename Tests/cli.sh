@@ -64,6 +64,16 @@ fi
 printf '%s\n' "$recursive_output" | grep -qx 'real/back-to-tree'
 [ "$(printf '%s\n' "$recursive_output" | wc -l | tr -d ' ')" -lt 30 ]
 
+# Directory enumeration is sorted by literal filename, rather than relying on
+# FileManager's unspecified order. This keeps recursive archives diffable.
+ordered_root="$work/ordered"
+mkdir "$ordered_root"
+touch "$ordered_root/zeta" "$ordered_root/alpha" "$ordered_root/middle"
+ordered_output=$("$bin" -R "$ordered_root")
+[ "$(printf '%s\n' "$ordered_output" | sed -n '2p')" = 'alpha' ]
+[ "$(printf '%s\n' "$ordered_output" | sed -n '3p')" = 'middle' ]
+[ "$(printf '%s\n' "$ordered_output" | sed -n '4p')" = 'zeta' ]
+
 # Exclusions skip the matching item and its subtree. A single component is
 # useful for names such as .git regardless of their depth.
 excluded_output=$("$bin" -R --exclude real/ "$work/tree")
@@ -482,8 +492,10 @@ if [ "$(uname -s)" = Darwin ]; then
     "$bin" --restore "$default_export_archive" --root "$restore_root" --dry-run --no-backup \
         >"$restore_dry_output" 2>"$restore_dry_error"
     grep -q 'would change' "$restore_dry_error"
-    grep -q 'would clear' "$restore_dry_error"
+    grep -q 'would have tags cleared' "$restore_dry_error"
+    grep -q 'restore: .*skipped' "$restore_dry_error"
     grep -q '\[dry-run\] restore' "$restore_dry_output"
+    grep -q '(would clear tags)' "$restore_dry_output"
     [ "$("$bin" -N "$restore_root/alpha")" = 'Wrong' ]
 
     # Delete one archived item to exercise the easy-to-count missing-item case.
@@ -494,6 +506,7 @@ if [ "$(uname -s)" = Darwin ]; then
     fi
     grep -q 'missing' "$work/restore.err"
     grep -q '1 missing' "$work/restore.err"
+    grep -q 'restore: .*1 missing' "$work/restore.err"
     grep -q 'cleared' "$work/restore.err"
     [ "$("$bin" -N "$restore_root/alpha")" = 'Second,First' ]
     [ "$("$bin" -N "$restore_root/.hidden")" = 'HiddenTag' ]
@@ -504,6 +517,19 @@ if [ "$(uname -s)" = Darwin ]; then
     header=$(sed -n '1p' "$default_export_archive")
     root_record=$(sed -n '2p' "$default_export_archive")
     item_record=$(grep '"path":"alpha"' "$default_export_archive")
+
+    # An item without an archived tags field is deliberately skipped and
+    # reported, rather than being mistaken for an empty tag array.
+    skipped_archive="$work/skipped.jsonl"
+    printf '%s\n%s\n%s\n' "$header" "$root_record" \
+        '{"kind":"file","path":"alpha","type":"item"}' >"$skipped_archive"
+    "$bin" --set SkipBaseline --no-backup "$restore_root/alpha"
+    "$bin" --restore "$skipped_archive" --root "$restore_root" --no-backup \
+        >"$work/skipped.out" 2>"$work/skipped.err"
+    grep -q 'restore skipped alpha: archive has no tags' "$work/skipped.err"
+    grep -q '1 skipped' "$work/skipped.err"
+    [ "$("$bin" -N "$restore_root/alpha")" = 'SkipBaseline' ]
+
     duplicate_archive="$work/duplicate.jsonl"
     printf '%s\n%s\n%s\n%s\n' "$header" "$root_record" "$item_record" "$item_record" >"$duplicate_archive"
     "$bin" --set BeforeValidation --no-backup "$restore_root/alpha"

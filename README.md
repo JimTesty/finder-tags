@@ -10,13 +10,14 @@ default** on reads and writes instead of sorting tags or passing them through
 unordered sets. `--sorted-tags` provides an opt-in sorted mode when that is
 preferred.
 
-## Development status
+## Status
 
-This project is new and **not thoroughly tested yet**. It has a broad shell test
-suite, macOS-only integration tests for real Finder-tag operations, and an
-optional differential test suite against `jdberry/tag`, but it has not been
-exercised broadly across macOS releases, filesystems, network volumes, or large
-data sets.
+This is an early public release baseline and is **not thoroughly tested yet**.
+It has a broad shell test suite, macOS-only integration tests for real
+Finder-tag operations, and an optional differential test suite against
+`jdberry/tag`, but it has not been exercised broadly across macOS releases,
+filesystems, network volumes, or large data sets. See
+[`CHANGELOG.md`](CHANGELOG.md) for the current release notes.
 
 Most of the source code was written by **OpenAI GPT-5.6 Sol**, under the
 maintainer's direction and with iterative human testing/review.
@@ -116,9 +117,11 @@ relocates the archive's one root. Restore changes only listed existing items;
 it does not create or delete files. Empty `tags` arrays explicitly clear tags;
 an omitted `tags` field means tags were unavailable and must not be changed.
 An archive containing only tagged items does not clear tags from unlisted items.
-The final summary reports visited, restored/changed, cleared, unchanged,
-missing, errors, and symlink warnings. `--dry-run` performs the same reads and
-comparisons without changing tags.
+The final summary reports visited, restored (or would-change), cleared (or
+would-clear), unchanged, missing, skipped, errors, and symlink warnings.
+Missing items and skipped items include per-path diagnostics. `--dry-run`
+performs the same reads and comparisons without changing tags; each dry-run
+clear is also marked in its per-path output.
 
 Before a real restore writes anything, the complete JSONL archive is read and
 validated. The header records the archive version, symlink following mode,
@@ -148,6 +151,10 @@ name at any depth; a path containing `/` is relative to each traversal root.
 Trailing slashes are accepted and omitted from the normalized patterns stored
 in an export header. Exclusions do not delete anything, and restore never
 modifies items that are absent from the archive.
+
+Each directory's children are emitted in literal filename order. User-supplied
+root paths retain their argument order, but an unchanged tree therefore gets a
+stable recursive listing and stable JSONL item order suitable for archive diffs.
 
 Symlinks are not followed by default. `--follow-symlinks`/`-L` resolves and
 follows symlinks, including symlinked directories during recursion. With `-L`,

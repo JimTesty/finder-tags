@@ -66,6 +66,9 @@ Restore an archive from a file, or from standard input when ARCHIVE is -. Use
 --root DEST to relocate the archive's one root. Symlink targets are followed
 only when the same --follow-symlinks setting recorded in the archive is
 specified; redirected followed targets produce warnings.
+The final summary distinguishes restored or would-change items, cleared or
+would-clear tags, unchanged items, missing items, skipped items, errors, and
+warnings. Missing and skipped items are also reported by path.
 .TP
 .B --convert ARCHIVE
 Read a JSONL archive from a file or standard input and print human-readable

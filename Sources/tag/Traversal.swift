@@ -102,7 +102,15 @@ struct Traversal {
                 at: contentDirectoryURL,
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .tagNamesKey],
                 options: enumerationOptions
-            )
+            ).sorted { lhs, rhs in
+                // FileManager does not guarantee directory enumeration order.
+                // Literal filename order makes recursive output and archives
+                // reproducible without locale-dependent collation.
+                if lhs.lastPathComponent == rhs.lastPathComponent {
+                    return lhs.path < rhs.path
+                }
+                return lhs.lastPathComponent < rhs.lastPathComponent
+            }
         } catch {
             onError("\(logicalDirectoryURL.path): \(error.localizedDescription)")
             return

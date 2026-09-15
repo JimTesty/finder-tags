@@ -39,6 +39,7 @@ struct ArchiveStats {
     var restored = 0
     var cleared = 0
     var missing = 0
+    var skipped = 0
     var warnings = 0
 }
 

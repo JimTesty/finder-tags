@@ -77,6 +77,7 @@ final class Output {
                 "cleared": stats.cleared,
                 "unchanged": stats.unchanged,
                 "missing": stats.missing,
+                "skipped": stats.skipped,
                 "errors": stats.errors,
                 "warnings": stats.warnings
             ]
@@ -91,9 +92,15 @@ final class Output {
         if operation == "export" {
             eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors, \(stats.warnings) warnings)")
         } else {
-            let changed = options.dryRun ? "\(stats.changed) would change" : "\(stats.changed) changed"
-            let cleared = options.dryRun ? "\(stats.cleared) would clear" : "\(stats.cleared) cleared"
-            eprint("\(programName): restored \(stats.restored) files (\(changed), \(cleared), \(stats.visited) visited, \(stats.unchanged) unchanged, \(stats.missing) missing, \(stats.errors) errors, \(stats.warnings) warnings)")
+            let outcomeCount = options.dryRun ? stats.changed : stats.restored
+            let outcomeNoun = outcomeCount == 1 ? "item" : "items"
+            let outcomeVerb = options.dryRun ? "would change" : "restored"
+            let outcome = "\(outcomeCount) \(outcomeNoun) \(outcomeVerb)"
+            let clearedNoun = stats.cleared == 1 ? "item" : "items"
+            let cleared = options.dryRun
+                ? "\(stats.cleared) \(clearedNoun) would have tags cleared"
+                : "\(stats.cleared) \(clearedNoun) had tags cleared"
+            eprint("\(programName): restore: \(outcome), \(cleared), \(stats.unchanged) unchanged, \(stats.missing) missing, \(stats.skipped) skipped, \(stats.errors) errors, \(stats.warnings) warnings (\(stats.visited) visited)")
         }
     }
 
@@ -122,7 +129,9 @@ final class Output {
         if !dryRun { return }
 
         let before = change.before.map(colors.render).joined(separator: ",")
-        let after = change.after.map(colors.render).joined(separator: ",")
+        let after = change.after.isEmpty
+            ? "(no tags)"
+            : change.after.map(colors.render).joined(separator: ",")
         let marker = change.before == change.after ? "=" : "->"
         let path = try formattedPath(
             for: target,
@@ -130,7 +139,10 @@ final class Output {
             printSymlink: options.printSymlinks,
             colors: colors
         )
-        record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)")
+        let clearNote = change.before != change.after && change.after.isEmpty
+            ? " (would clear tags)"
+            : ""
+        record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)\(clearNote)")
     }
 
     private func emitText(name: String?, tags: [String], metadata: FileMetadata?) throws {
