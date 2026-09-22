@@ -65,6 +65,7 @@ struct Options {
     var oneTagPerLine = false
     var spaceIndent = false
     var alignTags: Int? = nil
+    var compactTags = false
     var includeHidden = false
     var enterDirectories = false
     var recursive = false

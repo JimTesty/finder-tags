@@ -181,6 +181,11 @@ func parseArguments() -> Options {
             case "align-tags":
                 options.alignTags = parseTagAlignment(operand())
                 options.spaceIndent = true
+            case "compact-tags":
+                options.compactTags = true
+                options.colorMode = .auto
+                options.reverse = true
+                options.reverseWasSet = true
             case "all": options.includeHidden = true
             case "enter": options.enterDirectories = true
             case "recursive", "descend": options.recursive = true
@@ -314,6 +319,15 @@ func parseArguments() -> Options {
             if options.jsonLines { fail("--align-tags is only valid with text output") }
         default:
             fail("--align-tags is only valid with file-list output")
+        }
+    }
+
+    if options.compactTags {
+        switch options.operation {
+        case .list, .match, .filter, .find, .convert:
+            if options.jsonLines { fail("--compact-tags is only valid with text output") }
+        default:
+            fail("--compact-tags is only valid with file-list output")
         }
     }
 

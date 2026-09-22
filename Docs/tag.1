@@ -182,6 +182,11 @@ In text file-list output, right-pad each file path to at least N display columns
 then use two spaces before tags. This implies --space-indent and is not valid
 with JSONL output. Common full-width and emoji characters count as two columns.
 .TP
+.B --compact-tags
+Mimic Finder's mini color-circles in text file-list output by displaying the
+first character of each tag in reverse tag order, with no separating commas.
+This implies --color and --reverse and is not valid with JSONL output.
+.TP
 .BR -p , " --slash"
 Append / to directory names and @ to symlink names.
 .TP

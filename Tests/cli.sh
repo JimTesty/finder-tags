@@ -44,6 +44,7 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- '--convert ARCHIVE'
 "$bin" --help | grep -q -- '--space-indent'
 "$bin" --help | grep -q -- '--align-tags N'
+"$bin" --help | grep -q -- '--compact-tags'
 "$bin" --help | grep -q -- '--no-backup'
 "$bin" --help | grep -q -- '--verbose'
 [ "$("$bin" --version)" = "tag 8.0" ]
@@ -195,6 +196,11 @@ if "$bin" --align-tags 40 --jsonl "$work/a" >"$work/align-tags-json.out" 2>"$wor
     exit 1
 fi
 grep -q -- '--align-tags is only valid with text output' "$work/align-tags-json.err"
+if "$bin" --compact-tags --jsonl "$work/a" >"$work/compact-tags-json.out" 2>"$work/compact-tags-json.err"; then
+    echo "expected --compact-tags with --jsonl to fail" >&2
+    exit 1
+fi
+grep -q -- '--compact-tags is only valid with text output' "$work/compact-tags-json.err"
 file_info_json=$("$bin" --file-info --jsonl "$work/a")
 printf '%s\n' "$file_info_json" | grep -q '"size"'
 printf '%s\n' "$file_info_json" | grep -q '"mtime"'
@@ -320,6 +326,9 @@ if [ "$(uname -s)" = Darwin ]; then
     align_tags_info_output=$("$bin" --file-info --align-tags="$tag_width" "$tag_path")
     align_tags_info_name=$("$bin" --file-info --no-tags "$tag_path")
     [ "$align_tags_info_output" = "${align_tags_info_name}${align_tags_padding}First,Second" ]
+
+    compact_output=$("$bin" --compact-tags --space-indent --color=no "$tag_path")
+    [ "$compact_output" = "${tag_path}  SF" ]
 
     match_space_indent=$("$bin" --match First --tags --space-indent "$work/a")
     printf '%s\n' "$match_space_indent" | grep -Fq '  First,Second'

@@ -22,6 +22,13 @@ struct FinderColors {
         return escape + tag + "\u{001B}[m"
     }
 
+    func renderFirstCharacter(of tag: String) -> String {
+        guard let first = tag.first else { return "" }
+        let character = String(first)
+        guard let escape = ansiByName[foldedTag(tag)] else { return character }
+        return escape + character + "\u{001B}[m"
+    }
+
     func renderMissing(_ text: String) -> String {
         guard isEnabled else { return text }
         return "\u{001B}[31m\(text)\u{001B}[m"

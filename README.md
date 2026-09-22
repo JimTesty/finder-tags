@@ -146,6 +146,9 @@ and its tags with two spaces instead of the usual tab/alignment separator in
 list, match, find, and usage output too. `--align-tags N` applies to text
 file-list output, pads the filename to at least N display columns before those
 two spaces, and implies `--space-indent`. It does not affect JSONL output.
+`--compact-tags` mimics Finder's mini color-circles by displaying one colored
+first character per tag in reverse order, with no commas; it implies `--color`
+and `--reverse`.
 For an existing symlink, size and mtime come from its target even without
 `--follow-symlinks`, matching the target tags that Foundation commonly returns.
 `--follow-symlinks` still controls recursive traversal and structural symlink

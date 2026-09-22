@@ -163,7 +163,17 @@ final class Output {
     }
 
     private func emitText(name: String?, tags: [String], metadata: FileMetadata?) throws {
-        let renderedTags = options.showTags ? tags.map(colors.render) : []
+        let renderedTags: [String]
+        if options.showTags {
+            renderedTags = options.compactTags
+                ? tags.map { colors.renderFirstCharacter(of: $0) }
+                : tags.map(colors.render)
+        } else {
+            renderedTags = []
+        }
+        let tagText = options.compactTags
+            ? renderedTags.joined()
+            : renderedTags.joined(separator: ",")
         let pathDisplayWidth = name.map { displayWidth($0) }
         let decoratedName: String?
         if let name = name, let metadata = metadata {
@@ -193,21 +203,21 @@ final class Output {
                     value
                     + String(repeating: " ", count: padding)
                     + "  "
-                    + renderedTags.joined(separator: ",")
+                    + tagText
                 )
             } else if options.spaceIndent {
-                record(value + "  " + renderedTags.joined(separator: ","))
+                record(value + "  " + tagText)
             } else {
                 let padding = max(0, 31 - (value as NSString).length)
                 record(
                     value
                     + String(repeating: " ", count: padding)
                     + "\t"
-                    + renderedTags.joined(separator: ",")
+                    + tagText
                 )
             }
         } else if !renderedTags.isEmpty {
-            record(renderedTags.joined(separator: ","))
+            record(tagText)
         }
     }
 

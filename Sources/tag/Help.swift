@@ -68,6 +68,8 @@ func usage(code: Int32 = 0) -> Never {
           --space-indent         Use two spaces instead of tab before tags
           --align-tags N         Pad file paths to N display columns, then use
                                  two spaces before tags; implies --space-indent
+          --compact-tags         Mimic Finder's mini color-circles with reversed
+                                 first-character tags; implies --color and --reverse
           --garrulous            Alias for --one-per-line
           --no-garrulous         Alias for --comma-separated
       -p, --slash                Append '/' to directories and '@' to symlinks
