@@ -340,6 +340,12 @@ if [ "$(uname -s)" = Darwin ]; then
     compact_output=$("$bin" --compact-tags --space-indent --color=no "$tag_path")
     [ "$compact_output" = "${tag_path}  SF" ]
 
+    compact_forced_info=$("$bin" --color=force --compact-tags --file-info --space-indent "$tag_path")
+    case "$compact_forced_info" in
+        *"$esc[32m"*"$esc[m"*) ;;
+        *) echo "explicit --color=force was overridden by --compact-tags" >&2; exit 1 ;;
+    esac
+
     match_space_indent=$("$bin" --match First --tags --space-indent "$work/a")
     printf '%s\n' "$match_space_indent" | grep -Fq '  First,Second'
 

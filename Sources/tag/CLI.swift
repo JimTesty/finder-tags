@@ -61,7 +61,9 @@ private func parseExcludePattern(_ raw: String) -> String {
 private func applyShortFlag(_ ch: Character, options: inout Options) {
     switch ch {
     case "l": setOperation(.list, options: &options)
-    case "c": options.colorMode = .auto
+    case "c":
+        options.colorMode = .auto
+        options.colorWasSet = true
     case "V": options.reverse = true; options.reverseWasSet = true
     case "C": options.caseSensitive = true
     case "n": options.showNamesOverride = true
@@ -171,6 +173,7 @@ func parseArguments() -> Options {
             case "sorted-tags", "sort-tags": options.sortedTags = true
             case "color":
                 options.colorMode = inlineValue.map(parseColorMode) ?? .auto
+                options.colorWasSet = true
             case "reverse": options.reverse = true; options.reverseWasSet = true
             case "case-sensitive": options.caseSensitive = true
             case "filename", "name": options.showNamesOverride = true
@@ -185,7 +188,7 @@ func parseArguments() -> Options {
                 options.spaceIndent = true
             case "compact-tags":
                 options.compactTags = true
-                options.colorMode = .auto
+                if !options.colorWasSet { options.colorMode = .auto }
                 options.reverse = true
                 options.reverseWasSet = true
             case "all": options.includeHidden = true
