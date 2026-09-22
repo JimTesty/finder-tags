@@ -76,8 +76,9 @@ warnings. Missing and skipped items are also reported by path.
 .TP
 .B --convert ARCHIVE
 Read a JSONL archive from a file or standard input and print human-readable
-output. Display options such as --reverse, --slash, --space-indent, and --color
-apply only to the converted output; the output is not restoreable.
+output. Display options such as --reverse, --slash, --space-indent,
+--align-tags, and --color apply only to the converted output; the output is not
+restoreable.
 .TP
 .BR -a , " --add " TAGS
 Add or re-case tags without disturbing unrelated tag order.
@@ -175,6 +176,11 @@ Display comma-separated tags. --no-garrulous is an alias.
 .B --space-indent
 Use two spaces instead of a tab before tags in list, match, find, usage, or
 converted output.
+.TP
+.B --align-tags N
+In text file-list output, right-pad each file path to at least N display columns,
+then use two spaces before tags. This implies --space-indent and is not valid
+with JSONL output. Common full-width and emoji characters count as two columns.
 .TP
 .BR -p , " --slash"
 Append / to directory names and @ to symlink names.

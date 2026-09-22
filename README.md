@@ -143,7 +143,9 @@ Human-readable `--file-info` listings render metadata as `[DATE SIZE]`: DATE is
 JSONL and the archive retain exact numeric values. `--convert` uses the same
 human formatter as ordinary listings; `--space-indent` separates a filename
 and its tags with two spaces instead of the usual tab/alignment separator in
-list, match, find, and usage output too.
+list, match, find, and usage output too. `--align-tags N` applies to text
+file-list output, pads the filename to at least N display columns before those
+two spaces, and implies `--space-indent`. It does not affect JSONL output.
 For an existing symlink, size and mtime come from its target even without
 `--follow-symlinks`, matching the target tags that Foundation commonly returns.
 `--follow-symlinks` still controls recursive traversal and structural symlink

@@ -164,6 +164,7 @@ final class Output {
 
     private func emitText(name: String?, tags: [String], metadata: FileMetadata?) throws {
         let renderedTags = options.showTags ? tags.map(colors.render) : []
+        let pathDisplayWidth = name.map { displayWidth($0) }
         let decoratedName: String?
         if let name = name, let metadata = metadata {
             let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(fileInfoSizeText(metadata.size))]"
@@ -186,6 +187,14 @@ final class Output {
         if let value = decoratedName {
             if renderedTags.isEmpty {
                 record(value)
+            } else if let alignTags = options.alignTags {
+                let padding = max(0, alignTags - (pathDisplayWidth ?? displayWidth(value)))
+                record(
+                    value
+                    + String(repeating: " ", count: padding)
+                    + "  "
+                    + renderedTags.joined(separator: ",")
+                )
             } else if options.spaceIndent {
                 record(value + "  " + renderedTags.joined(separator: ","))
             } else {
@@ -200,6 +209,53 @@ final class Output {
         } else if !renderedTags.isEmpty {
             record(renderedTags.joined(separator: ","))
         }
+    }
+
+    private func displayWidth(_ value: String) -> Int {
+        var width = 0
+        var inEscape = false
+
+        for character in value {
+            let scalars = character.unicodeScalars
+            if inEscape {
+                if scalars.contains(where: { $0.value == 0x6D }) { inEscape = false }
+                continue
+            }
+            if scalars.contains(where: { $0.value == 0x1B }) {
+                inEscape = true
+                continue
+            }
+
+            let visibleScalars = scalars.filter { !isZeroWidthScalar($0.value) }
+            guard !visibleScalars.isEmpty else { continue }
+            width += visibleScalars.contains(where: { isWideScalar($0.value) }) ? 2 : 1
+        }
+        return width
+    }
+
+    private func isZeroWidthScalar(_ value: UInt32) -> Bool {
+        value == 0x200D
+            || (value >= 0x0300 && value <= 0x036F)
+            || (value >= 0x1AB0 && value <= 0x1AFF)
+            || (value >= 0x1DC0 && value <= 0x1DFF)
+            || (value >= 0x20D0 && value <= 0x20FF)
+            || (value >= 0xFE00 && value <= 0xFE0F)
+            || (value >= 0xFE20 && value <= 0xFE2F)
+            || (value >= 0xE0100 && value <= 0xE01EF)
+    }
+
+    private func isWideScalar(_ value: UInt32) -> Bool {
+        (value >= 0x1100 && value <= 0x115F)
+            || (value >= 0x2329 && value <= 0x232A)
+            || (value >= 0x2E80 && value <= 0xA4CF)
+            || (value >= 0xAC00 && value <= 0xD7A3)
+            || (value >= 0xF900 && value <= 0xFAFF)
+            || (value >= 0xFE10 && value <= 0xFE19)
+            || (value >= 0xFE30 && value <= 0xFE6F)
+            || (value >= 0xFF01 && value <= 0xFF60)
+            || (value >= 0xFFE0 && value <= 0xFFE6)
+            || (value >= 0x1F000 && value <= 0x1FAFF)
+            || (value >= 0x20000 && value <= 0x3FFFD)
     }
 
     private func formattedArchivePath(_ item: ArchiveItem) -> String {

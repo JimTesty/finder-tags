@@ -32,6 +32,7 @@ _arguments \
   '(-g --one-per-line)'{-g,--one-per-line}'[one tag per line]' \
   '(-G --comma-separated)'{-G,--comma-separated}'[comma-separated tags]' \
   '--space-indent[use two spaces before tags]' \
+  '--align-tags[pad file paths before tags]:width:' \
   '(-p --slash)'{-p,--slash}'[append slash to directories]' \
   '(-0 --null)'{-0,--null}'[NUL-terminate records]' \
   '--absolute[absolute paths]' \

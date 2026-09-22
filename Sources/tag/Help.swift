@@ -47,14 +47,14 @@ func usage(code: Int32 = 0) -> Never {
 
     ordering/editing:
           --at POSITION          Placement for --add/--move; zero-based index or
-                                first/left/bottom, last/right/top
+                                 first/left/bottom, last/right/top
           --before TAG           Place added/moved tag(s) before TAG
           --after TAG            Place added/moved tag(s) after TAG
           --sorted-tags          Sort displayed tags; mutating operations also
-                                store their resulting tag arrays sorted
+                                 store their resulting tag arrays sorted
       -V, --reverse              Reverse display order; export ignores it
       -C, --case-sensitive       Make tag matching case-sensitive
-                                (default matching is case-insensitive)
+                                 (default matching is case-insensitive)
 
     output:
       -c, --color                Display known Finder tag colors when appropriate
@@ -66,6 +66,8 @@ func usage(code: Int32 = 0) -> Never {
       -g, --one-per-line         Display one tag per line
       -G, --comma-separated      Display comma-separated tags (default)
           --space-indent         Use two spaces instead of tab before tags
+          --align-tags N         Pad file paths to N display columns, then use
+                                 two spaces before tags; implies --space-indent
           --garrulous            Alias for --one-per-line
           --no-garrulous         Alias for --comma-separated
       -p, --slash                Append '/' to directories and '@' to symlinks
@@ -85,7 +87,7 @@ func usage(code: Int32 = 0) -> Never {
           --files-from-stdin     Alias for --stdin
           --files0-from-stdin    Alias for --stdin0
       -A, --all                  Include hidden files while enumerating (export
-                                includes them by default)
+                                 includes them by default)
       -e, --enter                Enumerate contents of explicit directories
       -R, -d, --recursive        Recursively enumerate directories
       -L, --follow-symlinks      Resolve/follow symlinks and symlinked directories
@@ -94,11 +96,11 @@ func usage(code: Int32 = 0) -> Never {
 
     mutation safety:
           --dry-run              Show intended changes without writing; restore
-                                reports the same change count
+                                 reports the same change count
           --dryrun               Alias for --dry-run
           --backup PATH          Write a per-file undo archive (default: temp)
-          --no-backup             Disable the default undo archive
-          --sync-backup           Sync each undo record before mutation
+          --no-backup            Disable the default undo archive
+          --sync-backup          Sync each undo record before mutation
 
     other:
       -h, --help                 Show this help
@@ -139,7 +141,7 @@ func usage(code: Int32 = 0) -> Never {
     --tagged-only is an opt-in filter. --exclude can be repeated; a single
     component such as .git matches at any depth, while a slash-containing path
     is relative to the traversal root. Use --convert ARCHIVE for human-readable
-    output; its --reverse, --slash, --space-indent, and --color options affect
+    output; its --reverse, --slash, --space-indent, --align-tags, and --color options affect
     only that display. Restore follows symlink targets only with the same
     --follow-symlinks setting recorded in the archive. --color accepts
     auto/yes, always/force, and never/no/none aliases; JSONL is never colored.

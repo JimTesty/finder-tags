@@ -64,6 +64,7 @@ struct Options {
     var showTagsOverride: Bool? = nil
     var oneTagPerLine = false
     var spaceIndent = false
+    var alignTags: Int? = nil
     var includeHidden = false
     var enterDirectories = false
     var recursive = false

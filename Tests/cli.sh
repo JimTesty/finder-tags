@@ -43,6 +43,7 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- '--no-file-info'
 "$bin" --help | grep -q -- '--convert ARCHIVE'
 "$bin" --help | grep -q -- '--space-indent'
+"$bin" --help | grep -q -- '--align-tags N'
 "$bin" --help | grep -q -- '--no-backup'
 "$bin" --help | grep -q -- '--verbose'
 [ "$("$bin" --version)" = "tag 8.0" ]
@@ -189,6 +190,11 @@ fi
 [ -z "$("$bin" --usage '' --tagged-only "$work/a")" ]
 "$bin" --jsonl "$work/a" | grep -q '"tags"'
 "$bin" --ndjson "$work/a" | grep -q '"path"'
+if "$bin" --align-tags 40 --jsonl "$work/a" >"$work/align-tags-json.out" 2>"$work/align-tags-json.err"; then
+    echo "expected --align-tags with --jsonl to fail" >&2
+    exit 1
+fi
+grep -q -- '--align-tags is only valid with text output' "$work/align-tags-json.err"
 file_info_json=$("$bin" --file-info --jsonl "$work/a")
 printf '%s\n' "$file_info_json" | grep -q '"size"'
 printf '%s\n' "$file_info_json" | grep -q '"mtime"'
@@ -305,6 +311,15 @@ if [ "$(uname -s)" = Darwin ]; then
         echo "--space-indent unexpectedly emitted a tab" >&2
         exit 1
     fi
+
+    tag_path="$work/a"
+    tag_width=$(( ${#tag_path} + 5 ))
+    align_tags_padding=$(printf '%*s' 7 '')
+    align_tags_output=$("$bin" --align-tags="$tag_width" "$tag_path")
+    [ "$align_tags_output" = "${tag_path}${align_tags_padding}First,Second" ]
+    align_tags_info_output=$("$bin" --file-info --align-tags="$tag_width" "$tag_path")
+    align_tags_info_name=$("$bin" --file-info --no-tags "$tag_path")
+    [ "$align_tags_info_output" = "${align_tags_info_name}${align_tags_padding}First,Second" ]
 
     match_space_indent=$("$bin" --match First --tags --space-indent "$work/a")
     printf '%s\n' "$match_space_indent" | grep -Fq '  First,Second'

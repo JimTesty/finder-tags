@@ -31,6 +31,13 @@ private func parseColorMode(_ raw: String) -> ColorMode {
     }
 }
 
+private func parseTagAlignment(_ raw: String) -> Int {
+    guard let value = Int(raw), value >= 0 else {
+        fail("invalid tag alignment '\(raw)'; use a non-negative integer")
+    }
+    return value
+}
+
 private func parseExcludePattern(_ raw: String) -> String {
     var value = raw
     while value.hasPrefix("./") { value.removeFirst(2) }
@@ -171,6 +178,9 @@ func parseArguments() -> Options {
             case "one-per-line", "garrulous": options.oneTagPerLine = true
             case "comma-separated", "no-garrulous": options.oneTagPerLine = false
             case "space-indent": options.spaceIndent = true
+            case "align-tags":
+                options.alignTags = parseTagAlignment(operand())
+                options.spaceIndent = true
             case "all": options.includeHidden = true
             case "enter": options.enterDirectories = true
             case "recursive", "descend": options.recursive = true
@@ -295,6 +305,15 @@ func parseArguments() -> Options {
             break
         default:
             fail("--exclude is only valid with filesystem traversal operations")
+        }
+    }
+
+    if options.alignTags != nil {
+        switch options.operation {
+        case .list, .match, .filter, .find, .convert:
+            if options.jsonLines { fail("--align-tags is only valid with text output") }
+        default:
+            fail("--align-tags is only valid with file-list output")
         }
     }
 
