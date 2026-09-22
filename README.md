@@ -313,23 +313,34 @@ human-readable output rather than round-tripping.
 
 ## Match, filter, usage, and find
 
-`--match TAGS` / `-m TAGS` follows `jdberry/tag` semantics where applicable:
+`--match TAGS` / `-m TAGS` and `--filter TAGS` use the same query expression.
+Their only default difference is output: `--match` hides tags and `--filter`
+shows them. Use `--tags` or `--no-tags` to select either display explicitly.
 
-* `A,B` requires all specified tags.
+Query expressions use these operators:
+
+* comma means all terms must match;
+* `|` means any term may match;
+* a leading `-` negates the following term or parenthesized expression;
+* parentheses override the default precedence `, < | < -`.
+
+For example, `Project,Red|Orange` means Project and either Red or Orange.
+Quote operator characters inside a tag, or escape a pipe in an unquoted tag as
+`\|`. The same expression grammar is used by `--usage` and `--find`.
+
+The query matcher follows these rules:
+
 * matching is case-insensitive unless `--case-sensitive` is supplied.
 * `'*'` matches files having at least one tag.
 * `''` matches files having no tags.
+* `'-*'` matches files having no tags.
 * with no paths, the current directory is enumerated.
 
 Match output defaults to filenames only. Use `-t/--tags` to include tags.
 
-`--filter TAGS` is the list-style counterpart to `--match`: it directly
-traverses the same way, but defaults to printing filenames and their stored
-tags and accepts the normal list output controls. Comma-separated terms are
-ANDed. Prefix a term with `-` to require that the file does not have that tag,
-for example `--filter 'Work,-Archive'`. `*` requires at least one tag and
-`-*` requires no tags. Use `--filter ''` for the same no-tags query as
-`--match ''`.
+`--filter TAGS` directly traverses the same way and defaults to printing
+filenames and their stored tags. Use `--filter ''` for the same no-tags query
+as `--match ''`.
 
 `--usage TAGS` / `-u TAGS` counts **all tags on files matching TAGS**. Unlike
 `jdberry/tag`, it does not use Spotlight; it directly traverses supplied paths
@@ -342,7 +353,8 @@ tag --usage Work PATH
 
 `--find TAGS` / `-f TAGS` uses macOS Spotlight (`NSMetadataQuery`), then rereads
 the current Foundation tag array for each result so displayed ordering does not
-come from the metadata index. Supplied paths become Spotlight search scopes.
+come from the metadata index. Spotlight's query result determines membership;
+stale index membership is trusted. Supplied paths become Spotlight search scopes.
 `--home`, `--local`, and `--network` are not currently implemented.
 
 ## Paths, stdin, and symbolic links

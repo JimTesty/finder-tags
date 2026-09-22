@@ -17,30 +17,30 @@ enum SpotlightError: LocalizedError {
 struct SpotlightSearch {
     let options: Options
 
-    func forEachTarget(query tags: [String], _ body: (Target) -> Void) throws {
+    func forEachTarget(query: TagQuery, _ body: (Target) -> Void) throws {
         if options.pathInputExplicit && options.paths.isEmpty { return }
 #if os(macOS)
-        let query = NSMetadataQuery()
-        query.predicate = predicate(for: tags)
+        let metadataQuery = NSMetadataQuery()
+        metadataQuery.predicate = predicate(for: query)
 
         if !options.paths.isEmpty {
-            query.searchScopes = options.paths.map { expandedFileURL($0) as Any }
+            metadataQuery.searchScopes = options.paths.map { expandedFileURL($0) as Any }
         }
 
-        query.sortDescriptors = [NSSortDescriptor(key: "kMDItemDisplayName", ascending: true)]
+        metadataQuery.sortDescriptors = [NSSortDescriptor(key: "kMDItemDisplayName", ascending: true)]
 
-        if !query.start() { throw SpotlightError.failedToStart }
-        while query.isGathering {
+        if !metadataQuery.start() { throw SpotlightError.failedToStart }
+        while metadataQuery.isGathering {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05))
         }
-        query.disableUpdates()
+        metadataQuery.disableUpdates()
         defer {
-            query.enableUpdates()
-            query.stop()
+            metadataQuery.enableUpdates()
+            metadataQuery.stop()
         }
 
-        for index in 0..<query.resultCount {
-            guard let item = query.result(at: index) as? NSMetadataItem,
+        for index in 0..<metadataQuery.resultCount {
+            guard let item = metadataQuery.result(at: index) as? NSMetadataItem,
                   let path = item.value(forAttribute: "kMDItemPath") as? String
             else { continue }
 
@@ -60,23 +60,33 @@ struct SpotlightSearch {
     }
 
 #if os(macOS)
-    private func predicate(for tags: [String]) -> NSPredicate {
+    private func predicate(for query: TagQuery) -> NSPredicate {
         let key = "kMDItemUserTags"
-        if tags.contains("*") {
-            return NSPredicate(format: "%K LIKE '*'", key)
-        }
-        if tags.isEmpty {
+        switch query {
+        case .noTags:
             return NSPredicate(format: "NOT %K LIKE '*'", key)
-        }
-
-        let comparisons = tags.map { tag -> NSPredicate in
+        case .anyTag:
+            return NSPredicate(format: "%K LIKE '*'", key)
+        case .tag(let tag):
             if options.caseSensitive {
                 return NSPredicate(format: "%K == %@", key, tag)
             }
             return NSPredicate(format: "%K ==[c] %@", key, tag)
+        case .all(let queries):
+            return compound(queries.map { predicate(for: $0) }, all: true)
+        case .any(let queries):
+            return compound(queries.map { predicate(for: $0) }, all: false)
+        case .not(let query):
+            return NSCompoundPredicate(notPredicateWithSubpredicate: predicate(for: query))
         }
-        if comparisons.count == 1 { return comparisons[0] }
-        return NSCompoundPredicate(andPredicateWithSubpredicates: comparisons)
+    }
+
+    private func compound(_ predicates: [NSPredicate], all: Bool) -> NSPredicate {
+        if predicates.count == 1 { return predicates[0] }
+        if all {
+            return NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        }
+        return NSCompoundPredicate(orPredicateWithSubpredicates: predicates)
     }
 #endif
 }

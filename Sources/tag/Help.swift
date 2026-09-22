@@ -23,8 +23,8 @@ func usage(code: Int32 = 0) -> Never {
       \(programName) --restore ARCHIVE [--root DEST] [--dry-run]
       \(programName) --convert ARCHIVE [options]
 
-    TAGS uses a CSV-like comma-separated grammar. Shell quoting still works as
-    usual, and quotes inside TAGS allow literal commas, for example:
+    Mutation TAGS uses a CSV-like comma-separated grammar. Shell quoting still
+    works as usual, and quotes inside TAGS allow literal commas, for example:
       tag --set 'Red,"Project, Alpha","Needs review"' file
     CR, LF, and NUL are not valid inside tag names.
 
@@ -39,7 +39,7 @@ func usage(code: Int32 = 0) -> Never {
       -r, --remove TAGS          Remove matching tags; '*' removes all tags
       -s, --set TAGS             Replace all tags in the specified order
           --copy SRC DST         Replace DST's tags with SRC's ordered tags
-      -m, --match TAGS           List traversed files matching all TAGS
+      -m, --match TAGS           List traversed files matching TAGS
           --filter TAGS          Match tags with list-style output
       -u, --usage TAGS           Count tags on traversed files matching TAGS
       -f, --find TAGS            Spotlight search for files matching TAGS
@@ -77,7 +77,7 @@ func usage(code: Int32 = 0) -> Never {
           --no-file-info         Omit file size and mtime from export output
           --jsonl                Emit one JSON object per line (NDJSON)
           --ndjson               Alias for --jsonl
-          --tagged-only          List/export only items with at least one tag
+          --tagged-only          Process only items with at least one tag
 
     path input / enumeration:
           --stdin                Read additional newline-delimited paths on stdin
@@ -109,10 +109,13 @@ func usage(code: Int32 = 0) -> Never {
     existing red,orange,yellow re-cases the unique match in place to
     red,Orange,yellow. Use --case-sensitive to append a distinct Orange instead.
 
-    --filter uses comma-separated AND terms; prefix a term with '-' to require
-    its absence. '*' requires at least one tag and '-*' requires no tags.
-    '*' means any tag for --match/--filter/--usage/--find and all tags for --remove. An
-    empty TAGS expression matches files with no tags. --usage requires TAGS.
+    Query TAGS for --match, --filter, --usage, and --find use comma for AND,
+    pipe for OR, and a leading '-' for NOT. Precedence is comma < pipe < '-';
+    parentheses override it. For example, 'Project,Red|Orange' means Project
+    and either Red or Orange. Escape a pipe in an unquoted tag as '\\|'; quoted
+    tags may contain operators literally. '*' requires at least one tag and
+    '-*' requires no tags. An empty TAGS expression matches files with no tags.
+    --usage requires TAGS.
 
     Placement names map to Finder's visual stack: first/left/bottom = index 0,
     last/right/top = the end, because Finder draws the last/rightmost color on

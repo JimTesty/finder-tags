@@ -98,13 +98,16 @@ Replace the complete tag array.
 Replace DESTINATION's tags with SOURCE's tags.
 .TP
 .BR -m , " --match " TAGS
-List traversed files containing all requested tags.
+List traversed files matching TAGS. --match and --filter use the same matching
+expression; --match hides tags by default.
 .TP
 .B --filter TAGS
-List traversed files using list-style output, but only when they match TAGS.
-Comma-separated terms are ANDed; prefix a term with - to require that the tag
-is absent. For example, --filter 'Work,-Archive'. The * term requires at least
-one tag and -* requires no tags.
+List traversed files matching TAGS using list-style output, which shows tags by
+default. Query expressions use comma for AND, | for OR, and a leading - for
+NOT. Precedence is comma < | < -; parentheses override it. For example,
+--filter 'Project,Red|Orange' matches Project and either Red or Orange. Escape
+a pipe in an unquoted tag as \\|. The * term requires at least one tag and -*
+requires no tags.
 .TP
 .BR -u , " --usage " TAGS
 Count all tags on traversed files matching TAGS.
@@ -183,7 +186,8 @@ Display absolute logical paths.
 Emit newline-delimited JSON. --ndjson is an alias.
 .TP
 .B --tagged-only
-List or export only items having at least one tag.
+Process only items having at least one tag. With --copy, it filters the source
+file.
 .TP
 .B --file-info
 Include each listed, matched, found, or exported item's byte size and content
@@ -242,14 +246,18 @@ Disable the default undo archive.
 Sync each undo record before its mutation. This is more durable but can be
 expensive.
 .SH TAG SYNTAX
-TAGS is comma separated. Quoted CSV-style components permit literal commas,
-for example:
+Mutation TAGS is comma separated. Quoted CSV-style components permit literal
+commas, for example:
 .PP
 .nf
 tag --set 'Red,"Project, Alpha","Needs review"' file
 .fi
 .PP
 Matching is case-insensitive by default while stored spelling is preserved.
+Query TAGS for --match, --filter, --usage, and --find use the same expression
+grammar: comma means AND, | means OR, a leading - means NOT, and parentheses
+override the precedence comma < | < -. Quote operator characters inside a tag,
+or escape a pipe in an unquoted tag as \\|.
 Tag names containing CR, LF, or NUL are rejected because Foundation does not
 reliably round-trip them as Finder tags.
 .SH FILES

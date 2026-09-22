@@ -17,12 +17,21 @@ enum Operation {
     case remove([String])
     case set([String])
     case copy
-    case match([String])
-    case filter([FilterTerm])
-    case usage([String])
-    case find([String])
+    case match(TagQuery)
+    case filter(TagQuery)
+    case usage(TagQuery)
+    case find(TagQuery)
     case move(String, PositionSpec?)
 
+}
+
+indirect enum TagQuery: Equatable {
+    case noTags
+    case tag(String)
+    case anyTag
+    case all([TagQuery])
+    case any([TagQuery])
+    case not(TagQuery)
 }
 
 enum StdinPathMode {
@@ -118,11 +127,6 @@ struct Target {
 struct TagChange {
     let before: [String]
     let after: [String]
-}
-
-struct FilterTerm {
-    let tag: String
-    let negated: Bool
 }
 
 struct UsageEntry {

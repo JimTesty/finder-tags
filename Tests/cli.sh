@@ -167,8 +167,19 @@ printf '%s\n' "$stdin_nul" | grep -Fxq "$work/space name"
 # reports no Finder tags, so mutation parsing is exercised with --dry-run.
 [ "$("$bin" --match '' "$work/a")" = "$work/a" ]
 [ "$("$bin" --filter '' "$work/a")" = "$work/a" ]
+[ "$("$bin" --match '-Missing' "$work/a")" = "$work/a" ]
+[ "$("$bin" --filter '-Missing' --no-tags "$work/a")" = "$work/a" ]
 [ "$("$bin" --filter '-*' "$work/a")" = "$work/a" ]
 [ -z "$("$bin" --filter '*' "$work/a")" ]
+[ -z "$("$bin" --match '(A|B),C' "$work/a")" ]
+[ -z "$("$bin" --match 'A\|B' "$work/a")" ]
+if "$bin" --match 'A,,B' "$work/a" >/dev/null 2>&1; then
+    echo "empty query term unexpectedly accepted" >&2
+    exit 1
+fi
+[ -z "$("$bin" --match '' --tagged-only "$work/a")" ]
+[ -z "$("$bin" --filter '' --tagged-only "$work/a")" ]
+[ -z "$("$bin" --usage '' --tagged-only "$work/a")" ]
 "$bin" --jsonl "$work/a" | grep -q '"tags"'
 "$bin" --ndjson "$work/a" | grep -q '"path"'
 file_info_json=$("$bin" --file-info --jsonl "$work/a")
@@ -297,6 +308,29 @@ if [ "$(uname -s)" = Darwin ]; then
         echo "--filter failed to exclude a negated tag" >&2
         exit 1
     fi
+
+    [ "$("$bin" --match 'First|Missing' --tags "$work/a")" = "$filter_output" ]
+    [ "$("$bin" --match 'First,Second|Third' "$work/a")" = "$work/a" ]
+    [ "$("$bin" --match '(First|Missing),Second' "$work/a")" = "$work/a" ]
+    [ "$("$bin" --match 'First,-Third' "$work/a")" = "$work/a" ]
+    "$bin" --set Third --no-backup "$work/b"
+    if "$bin" --match 'First,Second|Third' "$work/b" | grep -q .; then
+        echo "query precedence unexpectedly matched an OR-only branch" >&2
+        exit 1
+    fi
+    "$bin" --set '"Pipe|Tag"' --no-backup "$work/c"
+    [ "$("$bin" --match 'Pipe\|Tag' "$work/c")" = "$work/c" ]
+    [ "$("$bin" --filter 'First|Missing' --no-tags "$work/a")" = "$work/a" ]
+    "$bin" --set '' --no-backup "$work/c"
+    "$bin" --copy "$work/c" "$work/b" --tagged-only --no-backup
+    [ "$("$bin" -N "$work/b")" = 'Third' ]
+
+    usage_query=$("$bin" --usage 'First|Third' "$work/a" "$work/b")
+    printf '%s\n' "$usage_query" | grep -Eq '^1[[:space:]]First$'
+    printf '%s\n' "$usage_query" | grep -Eq '^1[[:space:]]Second$'
+    printf '%s\n' "$usage_query" | grep -Eq '^1[[:space:]]Third$'
+    "$bin" --set TaggedOnly --tagged-only --no-backup "$work/space name"
+    [ -z "$("$bin" -N "$work/space name")" ]
 
     usage_space_indent=$("$bin" --usage First --space-indent "$work/a")
     printf '%s\n' "$usage_space_indent" | grep -Fq '  First'

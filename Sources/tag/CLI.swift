@@ -126,13 +126,13 @@ func parseArguments() -> Options {
             case "set":
                 setOperation(.set(parseTagList(operand())), options: &options)
             case "match":
-                setOperation(.match(parseTagList(operand())), options: &options)
+                setOperation(.match(parseTagQuery(operand())), options: &options)
             case "filter":
-                setOperation(.filter(parseFilterList(operand())), options: &options)
+                setOperation(.filter(parseTagQuery(operand())), options: &options)
             case "usage":
-                setOperation(.usage(parseTagList(operand())), options: &options)
+                setOperation(.usage(parseTagQuery(operand())), options: &options)
             case "find":
-                setOperation(.find(parseTagList(operand())), options: &options)
+                setOperation(.find(parseTagQuery(operand())), options: &options)
             case "copy":
                 if inlineValue != nil {
                     fail("--copy does not take '=...'; use --copy SOURCE DESTINATION")
@@ -225,15 +225,13 @@ func parseArguments() -> Options {
                     let raw = remainder.isEmpty
                         ? requireValue("-\(ch)", args: args, index: &i)
                         : remainder
-                    let tags = parseTagList(raw)
-
                     switch ch {
-                    case "a": setOperation(.add(tags), options: &options)
-                    case "r": setOperation(.remove(tags), options: &options)
-                    case "s": setOperation(.set(tags), options: &options)
-                    case "m": setOperation(.match(tags), options: &options)
-                    case "u": setOperation(.usage(tags), options: &options)
-                    default: setOperation(.find(tags), options: &options)
+                    case "a": setOperation(.add(parseTagList(raw)), options: &options)
+                    case "r": setOperation(.remove(parseTagList(raw)), options: &options)
+                    case "s": setOperation(.set(parseTagList(raw)), options: &options)
+                    case "m": setOperation(.match(parseTagQuery(raw)), options: &options)
+                    case "u": setOperation(.usage(parseTagQuery(raw)), options: &options)
+                    default: setOperation(.find(parseTagQuery(raw)), options: &options)
                     }
                     break
                 }
@@ -305,15 +303,6 @@ func parseArguments() -> Options {
             if options.jsonLines { fail("--space-indent is only valid with text output") }
         default:
             fail("--space-indent is only valid with text output")
-        }
-    }
-
-    switch options.operation {
-    case .list, .filter, .export, .convert:
-        break
-    default:
-        if options.taggedOnly {
-            fail("--tagged-only is only valid with --list, --filter, --export, or --convert")
         }
     }
 

@@ -85,8 +85,12 @@ does not reliably round-trip them as Finder tags.
 `--jsonl` is the archival and recommended machine-readable format because JSON
 escaping preserves comma-containing tags and path strings structurally.
 
-`*` remains reserved as a wildcard for match/usage/find/remove, so those
-operations cannot target a literal tag named `*`.
+Query operators are supported by `--match`, `--filter`, `--usage`, and
+`--find`: comma means AND, `|` means OR, a leading `-` means NOT, and
+parentheses override the `, < | < -` precedence. A pipe can be escaped as
+`\|` in an unquoted query tag. `*` remains reserved as a wildcard for those
+query operations and for `--remove`, so those operations cannot target a
+literal tag named `*`.
 
 ### 10. Relative text paths can be ambiguous with multiple roots
 
@@ -127,8 +131,9 @@ physical line breaks.
 `--find` uses `NSMetadataQuery`, so discovery depends on Spotlight indexing and
 can lag immediately after metadata changes. For each result, the program rereads
 the live Foundation tag array before displaying it, which avoids using the
-index's tag ordering and filters obvious stale matches, but Spotlight can still
-omit a newly matching file until it is indexed.
+index's tag ordering. Spotlight's complete query predicate determines membership,
+so stale index membership is intentionally trusted and can include or omit files
+until Spotlight updates.
 
 `--usage` deliberately uses direct traversal instead, so compatibility testing
 cannot compare fresh `--usage` results strictly against `jdberry/tag`'s

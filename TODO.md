@@ -19,6 +19,10 @@ by literal filename, so unchanged exports have stable item order.
   yet because repeated tag writes are safe.
 * Consider additional `--exclude` pattern semantics and edge-case tests if the
   simple component/prefix form proves insufficient.
+* Consider making the query expression an independent `--filter` pre-filter
+  for other filesystem operations and archive records during restore. This
+  needs explicit rules for operation composition, `--tagged-only`, archive
+  summaries, and dry runs before implementation.
 * Broaden macOS/filesystem compatibility testing and add CI when the public
   interface has seen more real-world use. `jdberry/tag` itself does not follow
   symlinks and has no `-L` equivalent, so compatibility work should stay focused

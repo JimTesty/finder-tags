@@ -213,7 +213,10 @@ final class App {
             guard try destination.logicalURL.checkResourceIsReachable() else {
                 fail("destination is not reachable: \(destinationPath)", code: ExitCode.noInput)
             }
-
+            if options.taggedOnly {
+                let sourceTags = try store.read(source.url)
+                if sourceTags.isEmpty { return }
+            }
             let change = try store.copyChange(from: source.url, to: destination.url)
             try performMutation(
                 "copy", target: destination, change: change, source: source
@@ -223,14 +226,34 @@ final class App {
         }
     }
 
-    private func runUsage(_ query: [String]) {
+    private func queryMatches(_ tags: [String], query: TagQuery) -> Bool {
+        if options.taggedOnly && tags.isEmpty { return false }
+        return tagQueryMatches(tags, query: query, caseSensitive: options.caseSensitive)
+    }
+
+    private func emitMatchingTarget(_ target: Target, query: TagQuery) throws {
+        let tags = try store.read(target.url)
+        guard queryMatches(tags, query: query) else { return }
+        let metadata = options.fileInfo
+            ? try fileMetadata(for: target)
+            : nil
+        try output.emitFile(target, tags: tags, metadata: metadata)
+    }
+
+    private func passesTaggedOnlyForMutation(_ target: Target) throws -> Bool {
+        guard options.taggedOnly else { return true }
+        let tags = try store.read(target.url)
+        return !tags.isEmpty
+    }
+
+    private func runUsage(_ query: TagQuery) {
         let traversal = Traversal(options: options, onError: report)
         var counter = UsageCounter()
 
         traversal.forEachTarget { target in
             do {
                 let tags = try store.read(target.url)
-                if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
+                if queryMatches(tags, query: query) {
                     counter.add(tags)
                 }
             } catch {
@@ -247,19 +270,21 @@ final class App {
         }
     }
 
-    private func runFind(_ query: [String]) {
+    private func runFind(_ query: TagQuery) {
+        let spotlightQuery = options.taggedOnly
+            ? .all([query, .anyTag])
+            : query
         do {
-            try SpotlightSearch(options: options).forEachTarget(query: query) { target in
+            try SpotlightSearch(options: options).forEachTarget(query: spotlightQuery) { target in
                 do {
-                    // Re-read the live Foundation value rather than trusting
-                    // the metadata index for order or a just-changed file.
+                    // Spotlight's complete predicate determines membership.
+                    // Read the current value only for display and metadata
+                    // ordering, without applying a second live-tag filter.
                     let tags = try store.read(target.url)
-                    if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
-                        let metadata = options.fileInfo
-                            ? try fileMetadata(for: target)
-                            : nil
-                        try output.emitFile(target, tags: tags, metadata: metadata)
-                    }
+                    let metadata = options.fileInfo
+                        ? try fileMetadata(for: target)
+                        : nil
+                    try output.emitFile(target, tags: tags, metadata: metadata)
                 } catch {
                     report("\(target.absolutePath): \(error.localizedDescription)")
                 }
@@ -274,6 +299,13 @@ final class App {
 
         traversal.forEachTarget { target in
             do {
+                switch options.operation {
+                case .add, .remove, .set, .move:
+                    guard try passesTaggedOnlyForMutation(target) else { return }
+                default:
+                    break
+                }
+
                 switch options.operation {
                 case .list:
                     let tags: [String]
@@ -293,24 +325,8 @@ final class App {
                         try output.emitFile(target, tags: tags, metadata: metadata)
                     }
 
-                case .match(let query):
-                    let tags = try store.read(target.url)
-                    if tagsMatch(tags, query: query, caseSensitive: options.caseSensitive) {
-                        let metadata = options.fileInfo
-                            ? try fileMetadata(for: target)
-                            : nil
-                        try output.emitFile(target, tags: tags, metadata: metadata)
-                    }
-
-                case .filter(let query):
-                    let tags = try store.read(target.url)
-                    if filterMatches(tags, query: query, caseSensitive: options.caseSensitive)
-                        && (!options.taggedOnly || !tags.isEmpty) {
-                        let metadata = options.fileInfo
-                            ? try fileMetadata(for: target)
-                            : nil
-                        try output.emitFile(target, tags: tags, metadata: metadata)
-                    }
+                case .match(let query), .filter(let query):
+                    try emitMatchingTarget(target, query: query)
 
                 case .add(let tags):
                     let change = try store.addChange(

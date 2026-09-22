@@ -119,16 +119,164 @@ func parseTagList(_ raw: String) -> [String] {
     return result
 }
 
-func parseFilterList(_ raw: String) -> [FilterTerm] {
-    return parseTagList(raw).map { rawTag in
-        guard rawTag != "-" else {
-            fail("filter term '-' must name a tag to exclude")
-        }
-        if rawTag.hasPrefix("-") {
-            return FilterTerm(tag: String(rawTag.dropFirst()), negated: true)
-        }
-        return FilterTerm(tag: rawTag, negated: false)
+private struct TagQueryParser {
+    private let chars: [Character]
+    private var index = 0
+
+    init(_ raw: String) {
+        self.chars = Array(raw)
     }
+
+    mutating func parse() -> TagQuery {
+        skipWhitespace()
+        if atEnd { return .noTags }
+
+        let result = parseAll()
+        skipWhitespace()
+        if !atEnd {
+            fail("unexpected '\(chars[index])' in TAGS; use commas, pipes, or parentheses between terms")
+        }
+        return result
+    }
+
+    // Commas have the weakest binding: A,B|C means A AND (B OR C).
+    private mutating func parseAll() -> TagQuery {
+        var terms: [TagQuery] = []
+
+        while true {
+            skipWhitespace()
+            if atEnd || current == ")" { break }
+
+            terms.append(parseAny())
+            skipWhitespace()
+            if !atEnd && current == "," {
+                index += 1
+                skipWhitespace()
+                if atEnd || current == ")" || current == "," {
+                    fail("empty query term in TAGS")
+                }
+                continue
+            }
+            break
+        }
+
+        if terms.isEmpty {
+            fail("expected a tag expression in TAGS")
+        }
+        return terms.count == 1 ? terms[0] : .all(terms)
+    }
+
+    // Pipes bind more tightly than commas: A|B,C means (A OR B) AND C.
+    private mutating func parseAny() -> TagQuery {
+        var terms = [parseNot()]
+        while true {
+            skipWhitespace()
+            guard !atEnd, current == "|" else { break }
+            index += 1
+            terms.append(parseNot())
+        }
+        return terms.count == 1 ? terms[0] : .any(terms)
+    }
+
+    // A leading '-' negates the following term or parenthesized expression.
+    private mutating func parseNot() -> TagQuery {
+        skipWhitespace()
+        if !atEnd && current == "-" {
+            index += 1
+            return .not(parseNot())
+        }
+        return parsePrimary()
+    }
+
+    private mutating func parsePrimary() -> TagQuery {
+        skipWhitespace()
+        if !atEnd && current == "(" {
+            index += 1
+            let expression = parseAll()
+            skipWhitespace()
+            guard !atEnd, current == ")" else {
+                fail("unterminated parenthesized expression in TAGS")
+            }
+            index += 1
+            return expression
+        }
+
+        let tag = parseAtom()
+        return tag == "*" ? .anyTag : .tag(tag)
+    }
+
+    private mutating func parseAtom() -> String {
+        skipWhitespace()
+        guard !atEnd else { fail("expected a tag in TAGS") }
+
+        if current == "\"" || current == "'" {
+            let quote = current
+            index += 1
+            var value = ""
+            var closed = false
+
+            while !atEnd {
+                let ch = current
+                if ch == quote {
+                    if index + 1 < chars.count && chars[index + 1] == quote {
+                        value.append(quote)
+                        index += 2
+                    } else {
+                        index += 1
+                        closed = true
+                        break
+                    }
+                } else {
+                    value.append(ch)
+                    index += 1
+                }
+            }
+
+            if !closed { fail("unterminated quoted tag in TAGS") }
+            guard !value.isEmpty else { fail("tag name must not be empty") }
+            validateTagName(value)
+            return value
+        }
+
+        var value = ""
+        while !atEnd {
+            let ch = current
+            if ch == "," || ch == "|" || ch == "(" || ch == ")" { break }
+            if ch == "\\" {
+                index += 1
+                guard !atEnd else { fail("unterminated escape in TAGS") }
+                let escaped = current
+                guard escaped == "|" || escaped == "\\" || escaped == ","
+                    || escaped == "(" || escaped == ")" || escaped == "-"
+                else {
+                    fail("invalid escape '\\(escaped)' in TAGS")
+                }
+                value.append(escaped)
+                index += 1
+            } else {
+                value.append(ch)
+                index += 1
+            }
+        }
+
+        let tag = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty else { fail("tag name must not be empty") }
+        validateTagName(tag)
+        return tag
+    }
+
+    private var atEnd: Bool { index >= chars.count }
+
+    private var current: Character { chars[index] }
+
+    private mutating func skipWhitespace() {
+        while !atEnd && current.isWhitespace { index += 1 }
+    }
+}
+
+func parseTagQuery(_ raw: String) -> TagQuery {
+    var parser = TagQueryParser(raw)
+    return parser.parse()
 }
 
 func validateSingleTagOperand(_ tag: String) {
@@ -136,32 +284,25 @@ func validateSingleTagOperand(_ tag: String) {
     validateTagName(tag)
 }
 
-func tagsMatch(_ stored: [String], query: [String], caseSensitive: Bool) -> Bool {
-    if query.contains("*") { return !stored.isEmpty }
-    if query.isEmpty { return stored.isEmpty }
-
-    for wanted in query {
-        if !stored.contains(where: { tagsEqual($0, wanted, caseSensitive: caseSensitive) }) {
-            return false
+func tagQueryMatches(_ stored: [String], query: TagQuery, caseSensitive: Bool) -> Bool {
+    switch query {
+    case .noTags:
+        return stored.isEmpty
+    case .tag(let wanted):
+        return stored.contains(where: {
+            tagsEqual($0, wanted, caseSensitive: caseSensitive)
+        })
+    case .anyTag:
+        return !stored.isEmpty
+    case .all(let queries):
+        return queries.allSatisfy {
+            tagQueryMatches(stored, query: $0, caseSensitive: caseSensitive)
         }
-    }
-    return true
-}
-
-func filterMatches(_ stored: [String], query: [FilterTerm], caseSensitive: Bool) -> Bool {
-    if query.isEmpty { return stored.isEmpty }
-
-    for term in query {
-        let present: Bool
-        if term.tag == "*" {
-            present = !stored.isEmpty
-        } else {
-            present = stored.contains(where: {
-                tagsEqual($0, term.tag, caseSensitive: caseSensitive)
-            })
+    case .any(let queries):
+        return queries.contains {
+            tagQueryMatches(stored, query: $0, caseSensitive: caseSensitive)
         }
-
-        if term.negated ? present : !present { return false }
+    case .not(let query):
+        return !tagQueryMatches(stored, query: query, caseSensitive: caseSensitive)
     }
-    return true
 }

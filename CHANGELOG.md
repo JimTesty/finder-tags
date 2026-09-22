@@ -6,9 +6,9 @@ Initial public release baseline.
 
 - Preserve Finder's stored tag order by default, with opt-in sorting and
   ordered add, remove, set, move, and copy operations.
-- Provide `--filter` for list-style output restricted by comma-separated
-  positive and negative tag terms, while retaining jdberry-compatible
-  filename-only `--match`.
+- Provide a shared query grammar for `--match`, `--filter`, `--usage`, and
+  `--find`, with comma AND, pipe OR, negation, and optional parentheses.
+  `--match` remains filename-only by default while `--filter` shows tags.
 - Provide direct filesystem traversal, stable literal filename ordering, hidden
   item handling, stdin path input, and simple traversal exclusions.
 - Export and restore canonical root-relative JSONL archives with dry-run support,

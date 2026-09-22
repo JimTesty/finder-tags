@@ -52,6 +52,9 @@ struct RestoreEngine {
         if stats.errors > 0 { return stats }
 
         for entry in document.items {
+            if options.taggedOnly && (entry.tags == nil || entry.tags!.isEmpty) {
+                continue
+            }
             guard let logicalURL = destinations[entry.path] else { continue }
             stats.visited += 1
             do {
