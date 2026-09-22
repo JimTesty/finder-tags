@@ -112,6 +112,18 @@ final class Output {
         source: Target? = nil,
         dryRun: Bool
     ) throws {
+        if options.verbose {
+            let transition: String
+            if change.before == change.after {
+                transition = "unchanged"
+            } else {
+                transition = "\(verboseTags(change.before)) -> \(verboseTags(change.after))"
+            }
+            let sourceText = source.map { " from \($0.displayPath)" } ?? ""
+            let action = dryRun ? "would \(operation)" : operation
+            eprint("\(programName): info: \(action) \(target.displayPath)\(sourceText): \(transition)")
+        }
+
         if options.jsonLines {
             emitJSONState(for: target)
             var object = pathObject(target)
@@ -144,6 +156,10 @@ final class Output {
             ? " (would clear tags)"
             : ""
         record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)\(clearNote)")
+    }
+
+    private func verboseTags(_ tags: [String]) -> String {
+        tags.isEmpty ? "(no tags)" : tags.joined(separator: ",")
     }
 
     private func emitText(name: String?, tags: [String], metadata: FileMetadata?) throws {

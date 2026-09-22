@@ -55,6 +55,7 @@ struct Options {
     var operationWasSet = false
 
     var colorMode: ColorMode = .never
+    var verbose = false
     var reverse = false
     var reverseWasSet = false
     var sortedTags = false

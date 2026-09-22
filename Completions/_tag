@@ -54,5 +54,6 @@ _arguments \
   '--no-backup[disable undo archive]' \
   '--sync-backup[sync each undo record]' \
   '(-h --help)'{-h,--help}'[help]' \
-  '(-v --version)'{-v,--version}'[version]' \
+  '(-v --verbose)'{-v,--verbose}'[show informational messages]' \
+  '--version[version]' \
   '*:path:_files'

@@ -395,6 +395,11 @@ Text output shows the before/after arrays. With `--jsonl`, each record contains
 `operation`, `path`, `before`, `after`, `changed`, and `dryRun`; copy records
 also contain source path information.
 
+`--verbose` / `-v` writes informational messages to stderr without changing
+normal output. Mutation messages include before/after tag arrays, and Spotlight
+searches report that indexed results determine membership. `--version` is the
+long-only spelling for the program version.
+
 ## JSON Lines / NDJSON
 
 `--jsonl` (alias `--ndjson`) emits one JSON object per line for normal list and
@@ -462,6 +467,7 @@ aliases:
 | `--reverse` | none | `-V` |
 | `--case-sensitive` | none | `-C` |
 | `--sorted-tags` | `--sort-tags` | none |
+| `--verbose` | none | `-v` |
 
 The existing `-d` alias for `-R/--recursive` is also retained.
 

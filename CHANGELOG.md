@@ -9,6 +9,8 @@ Initial public release baseline.
 - Provide a shared query grammar for `--match`, `--filter`, `--usage`, and
   `--find`, with comma AND, pipe OR, negation, and optional parentheses.
   `--match` remains filename-only by default while `--filter` shows tags.
+- Provide `--verbose` / `-v` informational messages on stderr; `--version` is
+  now long-only.
 - Provide direct filesystem traversal, stable literal filename ordering, hidden
   item handling, stdin path input, and simple traversal exclusions.
 - Export and restore canonical root-relative JSONL archives with dry-run support,

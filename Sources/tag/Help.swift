@@ -102,7 +102,8 @@ func usage(code: Int32 = 0) -> Never {
 
     other:
       -h, --help                 Show this help
-      -v, --version              Show version
+      -v, --verbose              Show informational messages on stderr
+          --version              Show version
 
     TAG matching is case-insensitive by default, but stored case is preserved.
     Case-distinct stored tags are not merged. For example, adding Orange to an

@@ -68,7 +68,7 @@ private func applyShortFlag(_ ch: Character, options: inout Options) {
     case "L": options.followSymlinks = true
     case "0": options.nulTerminate = true
     case "h": usage()
-    case "v": version()
+    case "v": options.verbose = true
     default: fail("unknown option: -\(ch)")
     }
 }
@@ -181,6 +181,7 @@ func parseArguments() -> Options {
             case "absolute": options.absolutePaths = true
             case "jsonl", "ndjson": options.jsonLines = true
             case "dry-run", "dryrun": options.dryRun = true
+            case "verbose": options.verbose = true
             case "tagged-only": options.taggedOnly = true
             case "file-info":
                 options.fileInfo = true

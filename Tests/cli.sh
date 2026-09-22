@@ -44,7 +44,14 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- '--convert ARCHIVE'
 "$bin" --help | grep -q -- '--space-indent'
 "$bin" --help | grep -q -- '--no-backup'
+"$bin" --help | grep -q -- '--verbose'
 [ "$("$bin" --version)" = "tag 8.0" ]
+
+verbose_output=$("$bin" -v --no-tags "$work/a" 2>"$work/verbose.err")
+[ "$verbose_output" = "$work/a" ]
+grep -q 'tag: info: listing traversed files' "$work/verbose.err"
+verbose_dry_run=$("$bin" --verbose --set Verbose --dry-run "$work/a" 2>"$work/verbose-mutation.err")
+grep -q 'tag: info: would set' "$work/verbose-mutation.err"
 
 # Explicit directory first, then descendants relative to that argument.
 enter_output=$("$bin" -e "$work/tree")

@@ -26,6 +26,7 @@ final class App {
     }
 
     func run() -> Int32 {
+        announceOperation()
         switch options.operation {
         case .copy:
             runCopy()
@@ -45,6 +46,46 @@ final class App {
 
         finishUndo()
         return hadError ? ExitCode.ioError : 0
+    }
+
+    private func info(_ message: String) {
+        if options.verbose {
+            eprint("\(programName): info: \(message)")
+        }
+    }
+
+    private func announceOperation() {
+        switch options.operation {
+        case .list:
+            info("listing traversed files")
+        case .export:
+            info("exporting a JSONL archive")
+        case .restore:
+            info("restoring archive tags")
+        case .convert:
+            info("converting an archive for display")
+        case .add:
+            info("adding tags to traversed files")
+        case .remove:
+            info("removing tags from traversed files")
+        case .set:
+            info("setting tags on traversed files")
+        case .copy:
+            info("copying tags between files")
+        case .match:
+            info("matching traversed files by tag query")
+        case .filter:
+            info("matching traversed files by tag query and showing tags")
+        case .usage:
+            info("counting tags on directly traversed matching files")
+        case .find:
+            info("searching Spotlight; indexed results determine membership")
+        case .move:
+            info("moving tags on traversed files")
+        }
+        if options.taggedOnly {
+            info("tagged-only filtering is enabled")
+        }
     }
 
     private func runExport() {
@@ -215,7 +256,10 @@ final class App {
             }
             if options.taggedOnly {
                 let sourceTags = try store.read(source.url)
-                if sourceTags.isEmpty { return }
+                if sourceTags.isEmpty {
+                    info("copy skipped for \(source.displayPath): source has no tags")
+                    return
+                }
             }
             let change = try store.copyChange(from: source.url, to: destination.url)
             try performMutation(
@@ -243,6 +287,10 @@ final class App {
     private func passesTaggedOnlyForMutation(_ target: Target) throws -> Bool {
         guard options.taggedOnly else { return true }
         let tags = try store.read(target.url)
+        if tags.isEmpty {
+            info("skipping \(target.displayPath): no tags")
+            return false
+        }
         return !tags.isEmpty
     }
 
