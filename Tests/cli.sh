@@ -327,6 +327,16 @@ if [ "$(uname -s)" = Darwin ]; then
     align_tags_info_name=$("$bin" --file-info --no-tags "$tag_path")
     [ "$align_tags_info_output" = "${align_tags_info_name}${align_tags_padding}First,Second" ]
 
+    compact_default_output=$("$bin" --compact-tags --color=no "$tag_path")
+    compact_default_path_padding=$((31 - ${#tag_path}))
+    if [ "$compact_default_path_padding" -lt 0 ]; then compact_default_path_padding=0; fi
+    compact_default_padding=$(printf '%*s' "$compact_default_path_padding" '')
+    [ "$compact_default_output" = "${tag_path}${compact_default_padding}$(printf '\t') SF" ]
+
+    compact_align_padding=$(printf '%*s' 8 '')
+    compact_align_output=$("$bin" --compact-tags --align-tags="$tag_width" --color=no "$tag_path")
+    [ "$compact_align_output" = "${tag_path}${compact_align_padding}SF" ]
+
     compact_output=$("$bin" --compact-tags --space-indent --color=no "$tag_path")
     [ "$compact_output" = "${tag_path}  SF" ]
 

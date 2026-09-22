@@ -1,5 +1,7 @@
 import Foundation
 
+private let maximumTagAlignment = 999_999
+
 private func setOperation(_ operation: Operation, options: inout Options) {
     if options.operationWasSet {
         fail("operation may be specified only once")
@@ -32,8 +34,8 @@ private func parseColorMode(_ raw: String) -> ColorMode {
 }
 
 private func parseTagAlignment(_ raw: String) -> Int {
-    guard let value = Int(raw), value >= 0 else {
-        fail("invalid tag alignment '\(raw)'; use a non-negative integer")
+    guard let value = Int(raw), value >= 0, value <= maximumTagAlignment else {
+        fail("invalid tag alignment '\(raw)'; use an integer from 0 through \(maximumTagAlignment)")
     }
     return value
 }

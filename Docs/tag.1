@@ -185,7 +185,10 @@ with JSONL output. Common full-width and emoji characters count as two columns.
 .B --compact-tags
 Mimic Finder's mini color-circles in text file-list output by displaying the
 first character of each tag in reverse tag order, with no separating commas.
-This implies --color and --reverse and is not valid with JSONL output.
+This implies --color and --reverse and is not valid with JSONL output. Without
+--space-indent, one- and two-tag outputs receive extra spaces so their initials
+align with three-tag output; --align-tags includes those spaces in its per-file
+minimum width.
 .TP
 .BR -p , " --slash"
 Append / to directory names and @ to symlink names.

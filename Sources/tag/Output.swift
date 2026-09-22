@@ -174,6 +174,7 @@ final class Output {
         let tagText = options.compactTags
             ? renderedTags.joined()
             : renderedTags.joined(separator: ",")
+        let compactTagPadding = options.compactTags ? max(0, 3 - tags.count) : 0
         let pathDisplayWidth = name.map { displayWidth($0) }
         let decoratedName: String?
         if let name = name, let metadata = metadata {
@@ -198,7 +199,8 @@ final class Output {
             if renderedTags.isEmpty {
                 record(value)
             } else if let alignTags = options.alignTags {
-                let padding = max(0, alignTags - (pathDisplayWidth ?? displayWidth(value)))
+                let targetWidth = alignTags + compactTagPadding
+                let padding = max(0, targetWidth - (pathDisplayWidth ?? displayWidth(value)))
                 record(
                     value
                     + String(repeating: " ", count: padding)
@@ -213,6 +215,7 @@ final class Output {
                     value
                     + String(repeating: " ", count: padding)
                     + "\t"
+                    + String(repeating: " ", count: compactTagPadding)
                     + tagText
                 )
             }
