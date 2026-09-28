@@ -95,6 +95,7 @@ tag --usage '*' -R directory         # count tags on tagged files
 tag --find Work ~/Documents          # Spotlight-backed search
 
 tag --absolute -R directory          # absolute logical output paths
+tag --dot-files -R directory         # include dot files and hidden directories
 tag --no-sort-files -R directory     # filesystem order, without filename sorting
 tag --jsonl file1 file2              # streaming structured output
 find files -print0 | tag --stdin0 -T # read NUL-delimited paths
@@ -377,6 +378,12 @@ With explicit directories, `-e`/`-R` output follows `jdberry/tag`: the explicit
 directory is printed using the argument spelling, while descendants are shown
 relative to that directory. `--absolute` instead emits absolute logical paths.
 
+Filesystem enumeration skips hidden files and directories by default. Use
+`--dot-files` (an alias for `--all`/`-A`) to include them, including during
+recursive traversal. This includes dot-prefixed names and other entries marked
+hidden by macOS. Explicitly supplied hidden paths are processed regardless of
+this option. Export includes hidden entries by default.
+
 By default, filesystem enumeration sorts each directory's children in
 case-sensitive, locale-independent filename order. This is lexical ordering,
 so `file10` precedes `file2`. Recursive traversal is depth-first: each directory
@@ -497,6 +504,7 @@ aliases:
 | `--reverse` | none | `-V` |
 | `--case-sensitive` | none | `-C` |
 | `--sorted-tags` | `--sort-tags` | none |
+| `--all` | `--dot-files` | `-A` |
 | `--no-sort-files` | none | none |
 | `--verbose` | none | `-v` |
 

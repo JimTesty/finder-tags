@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `--dot-files` as an alias for `--all`/`-A` to include hidden files and
+  directories during filesystem traversal.
 - Add `--no-sort-files` to preserve filesystem enumeration order, including
   during export, and disable Spotlight display-name sorting. File order is
   unspecified with this option; sorted traversal remains the default.

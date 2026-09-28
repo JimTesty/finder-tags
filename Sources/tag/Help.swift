@@ -88,8 +88,9 @@ func usage(code: Int32 = 0) -> Never {
           --stdin0               Read additional NUL-delimited paths on stdin
           --files-from-stdin     Alias for --stdin
           --files0-from-stdin    Alias for --stdin0
-      -A, --all                  Include hidden files while enumerating (export
+      -A, --all                  Include hidden files and directories (export
                                  includes them by default)
+          --dot-files            Alias for --all
       -e, --enter                Enumerate contents of explicit directories
       -R, -d, --recursive        Recursively enumerate directories
           --no-sort-files        Use filesystem/Spotlight order instead of sorting

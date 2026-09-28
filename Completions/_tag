@@ -43,7 +43,7 @@ _arguments \
   '--ndjson[alias for --jsonl]' \
   '--stdin[read newline-delimited paths]' \
   '--stdin0[read NUL-delimited paths]' \
-  '(-A --all)'{-A,--all}'[include hidden files]' \
+  '(-A --all --dot-files)'{-A,--all,--dot-files}'[include hidden files and directories]' \
   '(-e --enter)'{-e,--enter}'[enter directories]' \
   '(-R -d --recursive)'{-R,-d,--recursive}'[recursive]' \
   '--no-sort-files[use filesystem/Spotlight order without sorting]' \

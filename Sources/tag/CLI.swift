@@ -191,7 +191,7 @@ func parseArguments() -> Options {
                 if !options.colorWasSet { options.colorMode = .auto }
                 options.reverse = true
                 options.reverseWasSet = true
-            case "all": options.includeHidden = true
+            case "all", "dot-files": options.includeHidden = true
             case "enter": options.enterDirectories = true
             case "recursive", "descend": options.recursive = true
             case "no-sort-files": options.sortFiles = false

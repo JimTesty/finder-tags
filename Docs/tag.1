@@ -238,8 +238,12 @@ Read newline-delimited paths from standard input.
 .B --stdin0
 Read NUL-delimited paths from standard input.
 .TP
-.BR -A , " --all"
-Include hidden files while enumerating. Export includes them by default.
+.BR -A , " --all" , " --dot-files"
+Include hidden files and directories while enumerating, including during
+recursive traversal. --dot-files is an alias for --all. Hidden entries include
+dot-prefixed names and other entries marked hidden by macOS; they are skipped
+by default. Explicitly supplied hidden paths are processed regardless of this
+option. Export includes hidden entries by default.
 .TP
 .BR -e , " --enter"
 Enumerate immediate contents of explicit directories.
