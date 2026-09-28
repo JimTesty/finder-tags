@@ -70,6 +70,7 @@ struct Options {
     var includeHidden = false
     var enterDirectories = false
     var recursive = false
+    var sortFiles = true
     var slashDirectories = false
     var nulTerminate = false
     var jsonLines = false

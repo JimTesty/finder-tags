@@ -41,7 +41,7 @@ debug:
 
 test: build
 	@echo "Running CLI tests"
-	@if sh Tests/cli.sh "$(BINARY)"; then \
+	@if SWIFTC="$(SWIFTC)" sh Tests/cli.sh "$(BINARY)"; then \
 		:; \
 	else \
 		status=$$?; \

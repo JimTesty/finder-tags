@@ -194,6 +194,7 @@ func parseArguments() -> Options {
             case "all": options.includeHidden = true
             case "enter": options.enterDirectories = true
             case "recursive", "descend": options.recursive = true
+            case "no-sort-files": options.sortFiles = false
             case "slash": options.slashDirectories = true
             case "print-symlinks": options.printSymlinks = true
             case "exclude": options.excludePatterns.append(parseExcludePattern(operand()))
@@ -316,6 +317,15 @@ func parseArguments() -> Options {
             break
         default:
             fail("--exclude is only valid with filesystem traversal operations")
+        }
+    }
+
+    if !options.sortFiles {
+        switch options.operation {
+        case .list, .export, .match, .filter, .usage, .find, .add, .remove, .set, .move:
+            break
+        default:
+            fail("--no-sort-files is only valid with filesystem traversal or Spotlight --find")
         }
     }
 

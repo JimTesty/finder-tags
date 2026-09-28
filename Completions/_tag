@@ -46,6 +46,7 @@ _arguments \
   '(-A --all)'{-A,--all}'[include hidden files]' \
   '(-e --enter)'{-e,--enter}'[enter directories]' \
   '(-R -d --recursive)'{-R,-d,--recursive}'[recursive]' \
+  '--no-sort-files[use filesystem/Spotlight order without sorting]' \
   '--no-follow-symlinks[do not follow symlinks (default)]' \
   '--resolve-symlinks0[resolve symlink path operands like find -H]' \
   '{-L,--follow-symlinks}[follow symlinks and symlinked directories]' \

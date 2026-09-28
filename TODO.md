@@ -2,7 +2,8 @@
 
 These are intentionally deferred until the JSONL archive and restore path have
 more real-world use. Recursive traversal now sorts each directory's children
-by literal filename, so unchanged exports have stable item order.
+by literal filename by default, so unchanged exports have stable item order
+unless --no-sort-files is used.
 
 * Add a restore comparison mode that lists and counts existing filesystem items
   omitted from the archive. It will need traversal ordering compatible with the

@@ -95,6 +95,7 @@ tag --usage '*' -R directory         # count tags on tagged files
 tag --find Work ~/Documents          # Spotlight-backed search
 
 tag --absolute -R directory          # absolute logical output paths
+tag --no-sort-files -R directory     # filesystem order, without filename sorting
 tag --jsonl file1 file2              # streaming structured output
 find files -print0 | tag --stdin0 -T # read NUL-delimited paths
 
@@ -167,7 +168,8 @@ modifies items that are absent from the archive.
 
 Directory enumeration uses the filename sorting described under
 [Paths, stdin, and symbolic links](#paths-stdin-and-symbolic-links). An unchanged
-tree therefore gets stable JSONL item order suitable for archive diffs.
+tree therefore gets stable JSONL item order suitable for archive diffs by
+default. `--no-sort-files` also applies to exports and disables this guarantee.
 
 Symlinks are not followed by default. `--resolve-symlinks0` resolves symlinks
 supplied as path operands to their targets when possible, like `find -H`, but
@@ -365,7 +367,8 @@ tag --usage Work PATH
 the current Foundation tag array for each result so displayed ordering does not
 come from the metadata index. Spotlight's query result determines membership;
 stale index membership is trusted. Results are sorted by Spotlight display name
-in ascending order. Supplied paths become Spotlight search scopes.
+in ascending order unless `--no-sort-files` is used, which leaves result order
+to Spotlight. Supplied paths become Spotlight search scopes.
 `--home`, `--local`, and `--network` are not currently implemented.
 
 ## Paths, stdin, and symbolic links
@@ -374,11 +377,15 @@ With explicit directories, `-e`/`-R` output follows `jdberry/tag`: the explicit
 directory is printed using the argument spelling, while descendants are shown
 relative to that directory. `--absolute` instead emits absolute logical paths.
 
-During filesystem enumeration, each directory's children are sorted by
+By default, filesystem enumeration sorts each directory's children in
 case-sensitive, locale-independent filename order. This is lexical ordering,
 so `file10` precedes `file2`. Recursive traversal is depth-first: each directory
 is processed before its contents, then traversal continues with the next sibling.
-Filename sorting cannot currently be disabled. `--sorted-tags` and `--reverse`
+`--no-sort-files` skips filename sorting and preserves the order returned by
+the filesystem. This order is unspecified and does not guarantee filename,
+creation-date, modification-date, or Finder display order. The option applies
+to filesystem traversal, including exports, and Spotlight `--find`, whose
+unsorted result order is also unspecified. `--sorted-tags` and `--reverse`
 affect tag order only.
 
 Explicit path operands retain their argument order. Shell glob patterns such
@@ -490,6 +497,7 @@ aliases:
 | `--reverse` | none | `-V` |
 | `--case-sensitive` | none | `-C` |
 | `--sorted-tags` | `--sort-tags` | none |
+| `--no-sort-files` | none | none |
 | `--verbose` | none | `-v` |
 
 The existing `-d` alias for `-R/--recursive` is also retained.
@@ -518,6 +526,8 @@ Important differences:
 4. The tool adds ordered placement/movement, copying, case-sensitive matching,
    stdin path input, richer JSONL, dry-run, absolute paths, and symlink control.
 5. Quoted TAGS can contain commas.
+6. **Files are sorted by default during enumeration.** `--no-sort-files` uses
+   filesystem order instead, as jdberry/tag does during directory traversal.
 
 ## License
 

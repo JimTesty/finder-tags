@@ -221,16 +221,16 @@ controls traversal and structural archive symlink metadata.
 .B --no-file-info
 Omit size and modification-time fields from export output.
 .SH PATH INPUT AND TRAVERSAL
-During filesystem enumeration, each directory's children are sorted by
+By default, filesystem enumeration sorts each directory's children in
 case-sensitive, locale-independent filename order (file10 precedes file2).
 Recursive traversal is depth-first: each directory is processed before its
-contents, then traversal continues with the next sibling. Filename sorting
-cannot currently be disabled. --sorted-tags and --reverse affect tag order only.
+contents, then traversal continues with the next sibling. --sorted-tags and
+--reverse affect tag order only.
 .PP
 Explicit path operands retain their argument order. Glob patterns are expanded
 and ordered by the shell before tag receives them. Stdin paths follow
 command-line paths and retain their input order. Spotlight --find results are
-sorted by display name in ascending order.
+sorted by display name in ascending order unless --no-sort-files is used.
 .TP
 .B --stdin
 Read newline-delimited paths from standard input.
@@ -246,6 +246,14 @@ Enumerate immediate contents of explicit directories.
 .TP
 .BR -R , " -d ," " --recursive"
 Recursively enumerate directories.
+.TP
+.B --no-sort-files
+Skip filename sorting during filesystem traversal, including export, and
+disable display-name sorting for Spotlight --find. Filesystem and unsorted
+Spotlight result order are unspecified; no filename, creation-date,
+modification-date, or Finder display order is guaranteed. Recursion remains
+depth-first. Explicit arguments, shell globs, and stdin paths retain their
+input order. Valid with filesystem traversal operations and Spotlight --find.
 .TP
 .B --resolve-symlinks0
 Resolve symlinks supplied as path operands to their targets when possible,

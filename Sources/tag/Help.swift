@@ -92,6 +92,7 @@ func usage(code: Int32 = 0) -> Never {
                                  includes them by default)
       -e, --enter                Enumerate contents of explicit directories
       -R, -d, --recursive        Recursively enumerate directories
+          --no-sort-files        Use filesystem/Spotlight order instead of sorting
           --resolve-symlinks0    Resolve symlinks supplied as path operands, like find -H
       -L, --follow-symlinks      Resolve/follow symlinks and symlinked directories
           --no-follow-symlinks   Do not follow symlinks during traversal (default)
@@ -133,11 +134,13 @@ func usage(code: Int32 = 0) -> Never {
 
     Filesystem enumeration sorts each directory's children by case-sensitive,
     locale-independent filename order (file10 before file2). Recursion is
-    depth-first, processing each directory before its contents. Filename sorting
-    cannot be disabled; --sorted-tags and --reverse affect tag order only.
+    depth-first, processing each directory before its contents. --no-sort-files
+    skips filename sorting, including during export; filesystem order is unspecified.
+    --sorted-tags and --reverse affect tag order only.
     Explicit paths retain argument order; the shell expands and orders globs.
     Stdin paths follow command-line paths in input order. Spotlight --find sorts
-    results by display name in ascending order.
+    results by display name in ascending order unless --no-sort-files is used;
+    unsorted Spotlight result order is unspecified.
 
     Symbolic links are not followed by default. --resolve-symlinks0 resolves
     symlinks supplied as path operands when their targets exist, like find -H;

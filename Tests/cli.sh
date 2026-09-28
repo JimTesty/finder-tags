@@ -26,6 +26,7 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- 'finder-tags executable: tag'
 "$bin" --help | grep -q -- '--case-sensitive'
 "$bin" --help | grep -q -- '--sorted-tags'
+"$bin" --help | grep -q -- '--no-sort-files'
 "$bin" --help | grep -q -- '--before TAG'
 "$bin" --help | grep -q -- '--filter TAGS'
 "$bin" --help | grep -q -- '--absolute'
@@ -85,6 +86,45 @@ ordered_output=$("$bin" -R "$ordered_root")
 [ "$(printf '%s\n' "$ordered_output" | sed -n '2p')" = 'alpha' ]
 [ "$(printf '%s\n' "$ordered_output" | sed -n '3p')" = 'middle' ]
 [ "$(printf '%s\n' "$ordered_output" | sed -n '4p')" = 'zeta' ]
+
+# Compare no-sort output to Foundation itself, without assuming that native
+# order differs from alphabetical order on every filesystem. Include hidden
+# entries and a nested directory to check implicit, entered, and recursive use.
+"${SWIFTC:-swiftc}" -swift-version 5 "$repo/Tests/directory-order.swift" -o "$work/directory-order"
+mkdir "$ordered_root/sub"
+touch "$ordered_root/.hidden" "$ordered_root/file10" "$ordered_root/file2"
+touch "$ordered_root/sub/zeta" "$ordered_root/sub/alpha"
+native_children=$("$work/directory-order" "$ordered_root")
+native_recursive=$("$work/directory-order" "$ordered_root" --recursive)
+expected_enter=$(printf '%s\n%s\n' "$ordered_root" "$native_children")
+expected_recursive=$(printf '%s\n%s\n' "$ordered_root" "$native_recursive")
+[ "$(cd "$ordered_root" && "$bin" --no-sort-files -AT)" = "$native_children" ]
+[ "$("$bin" --no-sort-files -AeT "$ordered_root")" = "$expected_enter" ]
+[ "$("$bin" --no-sort-files -ART "$ordered_root")" = "$expected_recursive" ]
+[ "$("$bin" --no-sort-files --match '' -AR "$ordered_root")" = "$expected_recursive" ]
+
+# Explicit argument and stdin ordering is preserved with the option too.
+explicit_order=$(printf '%s\n%s\n' "$work/b" "$work/a")
+[ "$("$bin" --no-sort-files -T "$work/b" "$work/a")" = "$explicit_order" ]
+[ "$(printf '%s\n' "$work/a" | "$bin" --no-sort-files --stdin -T "$work/b")" = "$explicit_order" ]
+
+# Unsorted exports remain valid archives and retain native order on conversion.
+"$bin" --no-sort-files --export --no-file-info "$ordered_root" >"$work/unsorted.jsonl"
+converted_order=$("$bin" --convert "$work/unsorted.jsonl" -T 2>"$work/unsorted-convert.err")
+[ "$converted_order" = "$(printf '.\n%s\n' "$native_recursive")" ]
+
+# Operations that never enumerate or search files reject the option.
+for operation in copy restore convert; do
+    case "$operation" in
+        copy) set -- "$work/a" "$work/b" ;;
+        *) set -- "$work/unsorted.jsonl" ;;
+    esac
+    if "$bin" --no-sort-files "--$operation" "$@" >"$work/no-sort-invalid.out" 2>"$work/no-sort-invalid.err"; then
+        echo "--no-sort-files unexpectedly accepted with --$operation" >&2
+        exit 1
+    fi
+    grep -q -- '--no-sort-files is only valid' "$work/no-sort-invalid.err"
+done
 
 # Exclusions skip the matching item and its subtree. A single component is
 # useful for names such as .git regardless of their depth.

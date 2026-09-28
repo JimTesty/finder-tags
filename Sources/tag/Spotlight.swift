@@ -29,7 +29,9 @@ struct SpotlightSearch {
             }
         }
 
-        metadataQuery.sortDescriptors = [NSSortDescriptor(key: "kMDItemDisplayName", ascending: true)]
+        if options.sortFiles {
+            metadataQuery.sortDescriptors = [NSSortDescriptor(key: "kMDItemDisplayName", ascending: true)]
+        }
 
         if !metadataQuery.start() { throw SpotlightError.failedToStart }
         while metadataQuery.isGathering {

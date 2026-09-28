@@ -99,20 +99,23 @@ struct Traversal {
             ? resolvedTagURL(logicalDirectoryURL)
             : logicalDirectoryURL.standardizedFileURL
 
-        let children: [URL]
+        var children: [URL]
         do {
             children = try fileManager.contentsOfDirectory(
                 at: contentDirectoryURL,
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .tagNamesKey],
                 options: enumerationOptions
-            ).sorted { lhs, rhs in
+            )
+            if options.sortFiles {
                 // FileManager does not guarantee directory enumeration order.
                 // Literal filename order makes recursive output and archives
                 // reproducible without locale-dependent collation.
-                if lhs.lastPathComponent == rhs.lastPathComponent {
-                    return lhs.path < rhs.path
+                children.sort { lhs, rhs in
+                    if lhs.lastPathComponent == rhs.lastPathComponent {
+                        return lhs.path < rhs.path
+                    }
+                    return lhs.lastPathComponent < rhs.lastPathComponent
                 }
-                return lhs.lastPathComponent < rhs.lastPathComponent
             }
         } catch {
             onError("\(logicalDirectoryURL.path): \(error.localizedDescription)")

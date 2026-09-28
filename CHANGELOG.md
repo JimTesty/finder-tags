@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add `--no-sort-files` to preserve filesystem enumeration order, including
+  during export, and disable Spotlight display-name sorting. File order is
+  unspecified with this option; sorted traversal remains the default.
+
 ## 8.0 -- 2026-09-16
 
 Initial public release baseline.
