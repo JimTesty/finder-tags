@@ -165,9 +165,9 @@ Trailing slashes are accepted and omitted from the normalized patterns stored
 in an export header. Exclusions do not delete anything, and restore never
 modifies items that are absent from the archive.
 
-Each directory's children are emitted in literal filename order. User-supplied
-root paths retain their argument order, but an unchanged tree therefore gets a
-stable recursive listing and stable JSONL item order suitable for archive diffs.
+Directory enumeration uses the filename sorting described under
+[Paths, stdin, and symbolic links](#paths-stdin-and-symbolic-links). An unchanged
+tree therefore gets stable JSONL item order suitable for archive diffs.
 
 Symlinks are not followed by default. `--resolve-symlinks0` resolves symlinks
 supplied as path operands to their targets when possible, like `find -H`, but
@@ -364,7 +364,8 @@ tag --usage Work PATH
 `--find TAGS` / `-f TAGS` uses macOS Spotlight (`NSMetadataQuery`), then rereads
 the current Foundation tag array for each result so displayed ordering does not
 come from the metadata index. Spotlight's query result determines membership;
-stale index membership is trusted. Supplied paths become Spotlight search scopes.
+stale index membership is trusted. Results are sorted by Spotlight display name
+in ascending order. Supplied paths become Spotlight search scopes.
 `--home`, `--local`, and `--network` are not currently implemented.
 
 ## Paths, stdin, and symbolic links
@@ -372,6 +373,16 @@ stale index membership is trusted. Supplied paths become Spotlight search scopes
 With explicit directories, `-e`/`-R` output follows `jdberry/tag`: the explicit
 directory is printed using the argument spelling, while descendants are shown
 relative to that directory. `--absolute` instead emits absolute logical paths.
+
+During filesystem enumeration, each directory's children are sorted by
+case-sensitive, locale-independent filename order. This is lexical ordering,
+so `file10` precedes `file2`. Recursive traversal is depth-first: each directory
+is processed before its contents, then traversal continues with the next sibling.
+Filename sorting cannot currently be disabled. `--sorted-tags` and `--reverse`
+affect tag order only.
+
+Explicit path operands retain their argument order. Shell glob patterns such
+as `*.txt` are expanded and ordered by the shell before `tag` receives them.
 
 Additional paths can be streamed on stdin:
 
@@ -381,9 +392,9 @@ generate_paths | tag --stdin0 --set Reviewed
 ```
 
 `--stdin` is newline-delimited. `--stdin0` is NUL-delimited and is preferred for
-arbitrary filenames. Command-line and stdin paths are combined. Explicitly
-requesting stdin and providing no paths processes zero files instead of falling
-back to the current directory.
+arbitrary filenames. Stdin paths follow command-line paths and retain their
+input order. Explicitly requesting stdin and providing no paths processes zero
+files instead of falling back to the current directory.
 
 Symbolic links are **not followed by default**. `--resolve-symlinks0` resolves
 symlinks supplied as path operands when their targets exist, like `find -H`.

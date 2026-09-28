@@ -131,6 +131,14 @@ func usage(code: Int32 = 0) -> Never {
     not rewrite metadata. Mutating commands sort the final stored array after
     applying the requested edit. Default behavior always preserves tag order.
 
+    Filesystem enumeration sorts each directory's children by case-sensitive,
+    locale-independent filename order (file10 before file2). Recursion is
+    depth-first, processing each directory before its contents. Filename sorting
+    cannot be disabled; --sorted-tags and --reverse affect tag order only.
+    Explicit paths retain argument order; the shell expands and orders globs.
+    Stdin paths follow command-line paths in input order. Spotlight --find sorts
+    results by display name in ascending order.
+
     Symbolic links are not followed by default. --resolve-symlinks0 resolves
     symlinks supplied as path operands when their targets exist, like find -H;
     it does not follow symlinks encountered during traversal. --follow-symlinks
