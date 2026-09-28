@@ -59,10 +59,12 @@ ambiguity rather than guessing.
 ### 7. Symlink behavior has two layers
 
 Default traversal does not recursively follow symlinked directories and does
-not explicitly resolve symlink paths before Foundation tag I/O. `-L` enables
-following; recursive work can then escape the requested tree through a directory
-symlink. Cycles are suppressed by resolved directory identity, but the same
-target can still be visited through different non-cyclic aliases.
+not explicitly resolve symlink paths before Foundation tag I/O. The
+`--resolve-symlinks0` option resolves symlinks supplied as path operands, while
+`-L` follows symlinks encountered during traversal; recursive work can then
+escape the requested tree through a directory symlink. Cycles are suppressed
+by resolved directory identity, but the same target can still be visited
+through different non-cyclic aliases.
 
 Foundation itself ultimately controls how tag resource values behave when
 directly asked about a symlink, so the default should be viewed as a traversal

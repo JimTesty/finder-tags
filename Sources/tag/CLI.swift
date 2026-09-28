@@ -217,6 +217,7 @@ func parseArguments() -> Options {
             case "sync-backup": options.syncBackup = true
             case "no-follow-symlinks": options.followSymlinks = false
             case "follow-symlinks": options.followSymlinks = true
+            case "resolve-symlinks0": options.resolveSymlinksForArguments = true
             case "stdin", "files-from-stdin":
                 if options.stdinPathMode != nil { fail("stdin path mode may be specified only once") }
                 options.stdinPathMode = .lines

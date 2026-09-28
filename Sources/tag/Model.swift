@@ -85,6 +85,7 @@ struct Options {
     var position: PositionSpec? = nil
     var absolutePaths = false
     var followSymlinks = false
+    var resolveSymlinksForArguments = false
     var printSymlinks = false
     var excludePatterns: [String] = []
     var stdinPathMode: StdinPathMode? = nil
@@ -118,7 +119,8 @@ struct Options {
 }
 
 struct Target {
-    // url is the URL used for tag I/O. It is symlink-resolved only with -L.
+    // url is the URL used for tag I/O. -L or explicit-operand resolution may
+    // resolve it through symlinks.
     // logicalURL preserves the user's filesystem path for output/provenance.
     let url: URL
     let logicalURL: URL

@@ -44,7 +44,7 @@ func fileMetadata(for url: URL) throws -> FileMetadata {
 }
 
 func fileMetadata(for target: Target) throws -> FileMetadata {
-    // Foundation's Finder-tag lookup may follow an existing symlink even
+    // Foundation may return tags from an existing symlink's target even
     // without -L. Use the same referent for displayed and archived file-info,
     // so a symlink's tags are not paired with the link's own byte length and
     // timestamp. -L still controls traversal and structural symlink metadata.
@@ -61,6 +61,14 @@ func fail(_ message: String, code: Int32 = ExitCode.usage) -> Never {
 
 func expandedFileURL(_ path: String) -> URL {
     return URL(fileURLWithPath: NSString(string: path).expandingTildeInPath).standardizedFileURL
+}
+
+func argumentFileURL(_ path: String, resolveSymlinks: Bool) -> URL {
+    let url = expandedFileURL(path)
+    guard resolveSymlinks, isSymbolicLink(url) else { return url }
+
+    let resolvedURL = resolvedTagURL(url)
+    return fileManager.fileExists(atPath: resolvedURL.path) ? resolvedURL : url
 }
 
 func resolvedTagURL(_ url: URL) -> URL {

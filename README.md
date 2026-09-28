@@ -169,10 +169,13 @@ Each directory's children are emitted in literal filename order. User-supplied
 root paths retain their argument order, but an unchanged tree therefore gets a
 stable recursive listing and stable JSONL item order suitable for archive diffs.
 
-Symlinks are not followed by default. `--follow-symlinks`/`-L` resolves and
-follows symlinks, including symlinked directories during recursion. With `-L`,
-an item may include the literal stored link destination and target type or
-existence information, but target tags are never nested in symlink metadata.
+Symlinks are not followed by default. `--resolve-symlinks0` resolves symlinks
+supplied as path operands to their targets when possible, like `find -H`, but
+does not follow symlinks encountered during traversal. `--follow-symlinks`/`-L`
+resolves and follows symlinks, including symlinked directories during
+recursion. With `-L`, an item may include the literal stored link destination
+and target type or existence information, but target tags are never nested in
+symlink metadata.
 Target descendants reached through a followed symlink are ordinary item
 records. Consequently, a physical subtree reachable through both a direct path
 and a symlink can occur twice under its two logical paths; v1 does not attempt
@@ -382,15 +385,17 @@ arbitrary filenames. Command-line and stdin paths are combined. Explicitly
 requesting stdin and providing no paths processes zero files instead of falling
 back to the current directory.
 
-Symbolic links are **not followed by default**. `--follow-symlinks`/`-L` makes
-Finder generally present the target file's tags and makes recursive traversal
-follow symlinked directories while suppressing directory cycles.
+Symbolic links are **not followed by default**. `--resolve-symlinks0` resolves
+symlinks supplied as path operands when their targets exist, like `find -H`.
+`--follow-symlinks`/`-L` resolves symlinks to their targets for tag I/O and
+makes recursive traversal follow symlinked directories while suppressing
+directory cycles.
 
 `--no-follow-symlinks` is the default for recursive work: it does not descend
-into symlinked directories or resolve them for traversal. Foundation may still
-follow an existing symlink for Finder tag and file-info lookup. This prevents
-a recursive mutation from escaping its starting tree through a directory
-symlink.
+into symlinked directories encountered during traversal. Foundation may still
+return the target's tags or file information when given an existing symlink.
+This prevents a recursive mutation from escaping its starting tree through an
+encountered directory symlink.
 
 ## `--dry-run`
 

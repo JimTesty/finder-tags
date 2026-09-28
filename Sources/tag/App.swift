@@ -95,7 +95,10 @@ final class App {
 
         let rootURL: URL
         if let path = options.paths.first {
-            rootURL = expandedFileURL(path)
+            rootURL = argumentFileURL(
+                path,
+                resolveSymlinks: options.resolveSymlinksForArguments
+            )
         } else {
             rootURL = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
                 .standardizedFileURL
@@ -232,7 +235,10 @@ final class App {
     }
 
     private func explicitTarget(_ path: String) -> Target {
-        let logical = expandedFileURL(path)
+        let logical = argumentFileURL(
+            path,
+            resolveSymlinks: options.resolveSymlinksForArguments
+        )
         return Target(
             url: tagIOURL(logical, followSymlinks: options.followSymlinks),
             logicalURL: logical,

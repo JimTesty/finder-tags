@@ -237,9 +237,14 @@ Enumerate immediate contents of explicit directories.
 .BR -R , " -d ," " --recursive"
 Recursively enumerate directories.
 .TP
+.B --resolve-symlinks0
+Resolve symlinks supplied as path operands to their targets when possible,
+like find -H. Symlinks encountered during traversal are not followed by this
+option alone.
+.TP
 .B --no-follow-symlinks
-Do not recursively follow symlinked directories or explicitly resolve paths
-before Foundation tag I/O. This is the default.
+Do not recursively follow symlinked directories. Explicit operand resolution is
+controlled separately by --resolve-symlinks0. This is the default.
 .TP
 .B -L, --follow-symlinks
 Follow symlinks and symlinked directories. Archive items may record structural

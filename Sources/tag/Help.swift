@@ -92,8 +92,9 @@ func usage(code: Int32 = 0) -> Never {
                                  includes them by default)
       -e, --enter                Enumerate contents of explicit directories
       -R, -d, --recursive        Recursively enumerate directories
+          --resolve-symlinks0    Resolve symlinks supplied as path operands, like find -H
       -L, --follow-symlinks      Resolve/follow symlinks and symlinked directories
-          --no-follow-symlinks   Do not resolve/follow symlinks (default)
+          --no-follow-symlinks   Do not follow symlinks during traversal (default)
           --exclude PATH         Skip matching paths/subtrees during traversal
 
     mutation safety:
@@ -130,12 +131,14 @@ func usage(code: Int32 = 0) -> Never {
     not rewrite metadata. Mutating commands sort the final stored array after
     applying the requested edit. Default behavior always preserves tag order.
 
-    Symbolic links are not followed by default. --follow-symlinks (or -L)
-    resolves symlinks, follows symlinked directories, and records structural
-    target information in archive output, but never embeds target tags inside
-    a symlink record. --print-symlinks displays the literal stored link
-    destination without changing traversal; dangling targets are marked NOT
-    FOUND.
+    Symbolic links are not followed by default. --resolve-symlinks0 resolves
+    symlinks supplied as path operands when their targets exist, like find -H;
+    it does not follow symlinks encountered during traversal. --follow-symlinks
+    (or -L) resolves symlinks, follows symlinked directories, and records
+    structural target information in archive output, but never embeds target
+    tags inside a symlink record. --print-symlinks displays the literal stored
+    link destination without changing traversal; dangling targets are marked
+    NOT FOUND.
 
     Export archives are always JSONL, include untagged items by default, and
     preserve stored tag order. --reverse is ignored during export. --file-info

@@ -24,7 +24,9 @@ struct SpotlightSearch {
         metadataQuery.predicate = predicate(for: query)
 
         if !options.paths.isEmpty {
-            metadataQuery.searchScopes = options.paths.map { expandedFileURL($0) as Any }
+            metadataQuery.searchScopes = options.paths.map {
+                argumentFileURL($0, resolveSymlinks: options.resolveSymlinksForArguments) as Any
+            }
         }
 
         metadataQuery.sortDescriptors = [NSSortDescriptor(key: "kMDItemDisplayName", ascending: true)]

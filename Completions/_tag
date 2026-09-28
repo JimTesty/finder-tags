@@ -47,6 +47,7 @@ _arguments \
   '(-e --enter)'{-e,--enter}'[enter directories]' \
   '(-R -d --recursive)'{-R,-d,--recursive}'[recursive]' \
   '--no-follow-symlinks[do not follow symlinks (default)]' \
+  '--resolve-symlinks0[resolve symlink path operands like find -H]' \
   '{-L,--follow-symlinks}[follow symlinks and symlinked directories]' \
   '--exclude[exclude path/subtree during traversal]:path:_files' \
   '--print-symlinks[print symlink destinations]' \

@@ -23,7 +23,10 @@ struct Traversal {
         }
 
         for path in options.paths {
-            let logicalURL = expandedFileURL(path)
+            let logicalURL = argumentFileURL(
+                path,
+                resolveSymlinks: options.resolveSymlinksForArguments
+            )
             do {
                 let reachable = try logicalURL.checkResourceIsReachable()
                 guard reachable || isSymbolicLink(logicalURL) else {

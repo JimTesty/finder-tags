@@ -113,7 +113,7 @@ fi
 [ "$(cd "$work/tree" && "$bin" --print-symlinks link)" = 'link -> real' ]
 [ "$(cd "$work/tree" && "$bin" --slash --print-symlinks link)" = 'link@ -> real/' ]
 [ "$(cd "$work/tree" && "$bin" --slash --print-symlinks dangling)" = 'dangling@ -> missing (NOT FOUND)' ]
-# Finder tag lookup may follow an existing symlink even without -L. File-info
+# macOS tag lookup may follow an existing symlink even without -L. File-info
 # follows the same target, rather than reporting the link text's byte length.
 nofollow_link_info=$("$bin" --file-info --no-tags "$work/tree/file-link")
 printf '%s\n' "$nofollow_link_info" | grep -Eq '\[[0-9]{8} +2MB\].*file-link'

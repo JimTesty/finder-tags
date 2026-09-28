@@ -75,8 +75,8 @@ struct TagStore {
                     foldedTag(existing[$0]) == foldedTag(tag)
                 }
                 if matches.count == 1 {
-                    // Finder matching is normally case-insensitive, but case is
-                    // data. Re-case the unique existing match in place.
+                    // Finder's tag matching is normally case-insensitive, but
+                    // case is data. Re-case the unique existing match in place.
                     revised[matches[0]] = tag
                     continue
                 }
