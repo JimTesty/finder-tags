@@ -48,6 +48,7 @@ enum ColorMode {
 struct FileMetadata {
     let size: Int64
     let modificationTime: Double
+    var isDirectory = false
 }
 
 struct Options {

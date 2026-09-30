@@ -34,13 +34,18 @@ func fileMetadata(for url: URL) throws -> FileMetadata {
             NSLocalizedDescriptionKey: "file size or modification time is unavailable"
         ])
     }
-    let size = values.isDirectory == true ? 0 : values.fileSize ?? -1
+    let isDirectory = values.isDirectory == true
+    let size = isDirectory ? 0 : values.fileSize ?? -1
     guard size >= 0 else {
         throw NSError(domain: "finder-tags", code: 1, userInfo: [
             NSLocalizedDescriptionKey: "file size is unavailable"
         ])
     }
-    return FileMetadata(size: Int64(size), modificationTime: date.timeIntervalSince1970)
+    return FileMetadata(
+        size: Int64(size),
+        modificationTime: date.timeIntervalSince1970,
+        isDirectory: isDirectory
+    )
 }
 
 func fileMetadata(for target: Target) throws -> FileMetadata {

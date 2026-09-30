@@ -17,7 +17,7 @@ touch "$work/a" "$work/b" "$work/c" "$work/space name"
 mkdir -p "$work/tree/sub" "$work/tree/real"
 touch "$work/tree/root-file" "$work/tree/sub/child" "$work/tree/real/linked-child"
 touch "$work/tree/.hidden"
-dd if=/dev/zero of="$work/tree/large-target" bs=1048576 count=2 2>/dev/null
+dd if=/dev/zero of="$work/tree/large-target" bs=1000000 count=2 2>/dev/null
 ln -s real "$work/tree/link"
 ln -s large-target "$work/tree/file-link"
 ln -s .. "$work/tree/real/back-to-tree"
@@ -248,7 +248,7 @@ file_info_text=$("$bin" --file-info "$work/a")
 printf '%s\n' "$file_info_text" | grep -q '\['
 printf '%s\n' "$file_info_text" | grep -Eq '\[[0-9]{8} [^]]*MB\]'
 file_info_directory=$("$bin" --file-info "$work/tree")
-printf '%s\n' "$file_info_directory" | grep -Eq '\[[0-9]{8} +0MB\]'
+printf '%s\n' "$file_info_directory" | grep -Eq '\[[0-9]{8} +---\]'
 esc=$(printf '\033')
 forced_info=$("$bin" --file-info --color=force "$work/a")
 case "$forced_info" in
@@ -616,7 +616,7 @@ if [ "$(uname -s)" = Darwin ]; then
     # Conversion is the human-facing view of canonical JSONL.
     "$bin" --convert "$default_export_archive" --slash --space-indent \
         >"$work/converted.out" 2>"$work/converted.err"
-    grep -Eq '^\[[0-9]{8} +0MB\] \.?/?$' "$work/converted.out"
+    grep -Eq '^\[[0-9]{8} +---\] \.?/?$' "$work/converted.out"
     grep -Fq '  Second,First' "$work/converted.out"
     "$bin" --convert "$default_export_archive" --reverse >"$work/reversed.out"
     grep -Fq 'First,Second' "$work/reversed.out"

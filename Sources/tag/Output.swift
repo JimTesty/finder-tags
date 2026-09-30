@@ -40,7 +40,12 @@ final class Output {
                 colors: colors
             )
             : nil
-        try emitText(name: name, tags: tags, metadata: metadata)
+        try emitText(
+            name: name,
+            tags: tags,
+            metadata: metadata,
+            isDirectory: metadata?.isDirectory == true
+        )
     }
 
     func emitArchiveItem(_ item: ArchiveItem) throws {
@@ -53,7 +58,12 @@ final class Output {
         } else {
             name = nil
         }
-        try emitText(name: name, tags: tags, metadata: item.metadata)
+        let isDirectory = item.kind == .directory || (
+            item.kind == .symlink &&
+                item.symlinkTargetExists == true &&
+                item.symlinkTargetKind == .directory
+        )
+        try emitText(name: name, tags: tags, metadata: item.metadata, isDirectory: isDirectory)
     }
 
     func emitUsage(_ entries: [UsageEntry]) throws {
@@ -162,7 +172,12 @@ final class Output {
         tags.isEmpty ? "(no tags)" : tags.joined(separator: ",")
     }
 
-    private func emitText(name: String?, tags: [String], metadata: FileMetadata?) throws {
+    private func emitText(
+        name: String?,
+        tags: [String],
+        metadata: FileMetadata?,
+        isDirectory: Bool = false
+    ) throws {
         let renderedTags: [String]
         if options.showTags {
             renderedTags = options.compactTags
@@ -178,7 +193,8 @@ final class Output {
         let pathDisplayWidth = name.map { displayWidth($0) }
         let decoratedName: String?
         if let name = name, let metadata = metadata {
-            let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(fileInfoSizeText(metadata.size))]"
+            let sizeText = fileInfoSizeText(metadata.size, isDirectory: isDirectory)
+            let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(sizeText)]"
             let coloredDecoration = colors.isEnabled
                 ? "\u{001B}[32m\(decoration)\u{001B}[m"
                 : decoration
@@ -325,14 +341,22 @@ final class Output {
             : .file
     }
 
-    private func fileInfoSizeText(_ bytes: Int64) -> String {
+    private func fileInfoSizeText(_ bytes: Int64, isDirectory: Bool) -> String {
         let value: String
-        if bytes == 0 {
-            value = "0MB"
+        if isDirectory {
+            value = "---"
         } else {
-            let megabytes = Double(bytes) / 1_048_576.0
-            let rounded = Int(megabytes.rounded())
-            value = rounded == 0 ? "~0MB" : "\(rounded)MB"
+            let bytesPerMegabyte: Int64 = 1_000_000
+            if bytes >= 950_000 { // 0.95 MB
+                let wholeMegabytes = bytes / bytesPerMegabyte +
+                    (bytes % bytesPerMegabyte >= bytesPerMegabyte / 2 ? 1 : 0)
+                value = "\(wholeMegabytes)MB"
+            } else if bytes >= 50_000 { // 0.05 MB
+                let tenths = (bytes * 10 + bytesPerMegabyte / 2) / bytesPerMegabyte
+                value = ".\(tenths)MB"
+            } else {
+                value = "~0MB"
+            }
         }
         return String(repeating: " ", count: max(0, 6 - value.count)) + value
     }

@@ -140,8 +140,11 @@ enables it by default; `--no-file-info` disables it. JSONL stores numeric `size`
 and `mtime` fields. Restore ignores them, so they are available for later
 change-detection tooling without affecting tag restoration.
 Human-readable `--file-info` listings render metadata as `[DATE SIZE]`: DATE is
-`yyyyMMdd`, and SIZE is a right-aligned, rounded binary-megabyte field
-(`~0MB` means a nonempty file below 0.5 MiB). Directories are shown as `0MB`.
+`yyyyMMdd`, and SIZE is right-aligned, using decimal megabytes (1 MB =
+1,000,000 bytes). File sizes below 0.05 MB show `~0MB`, sizes from 0.05 MB to
+below 0.95 MB round to one decimal and display without a leading zero (for
+example, `.5MB`), and sizes of at least 0.95 MB round to the nearest whole MB.
+Directories are shown as `---`.
 JSONL and the archive retain exact numeric values. `--convert` uses the same
 human formatter as ordinary listings; `--space-indent` separates a filename
 and its tags with two spaces instead of the usual tab/alignment separator in
