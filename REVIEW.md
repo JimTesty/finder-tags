@@ -104,12 +104,16 @@ Use `--absolute` for ordinary output, or use JSONL's stateful `root` record and
 logical relative paths when consuming recursive output. Export/restore v1
 intentionally supports one archive root and uses `--root DEST` for relocation.
 
-### 11. Finder color discovery is private and fragile
+### 11. Custom Finder color discovery is private and fragile
 
-Tag read/write uses public Foundation APIs. `--color` is different: Finder does
-not expose its named-tag color map through the same API, so color discovery
-best-effort parses Finder preference data. A future macOS release can break it.
-Failure is intentionally non-fatal.
+Tag read/write uses public Foundation APIs. Standard tag names and color codes
+come from AppKit's public `NSWorkspace.fileLabels` API. Custom tag colors and
+overrides best-effort parse Finder preference data, because Finder does not
+expose its full named-tag color map through a public API. A future macOS release
+can break custom color discovery; failure is non-fatal and standard colors
+remain available. Explicit preference entries, including color 0 (no color),
+override the standard colors. The synced tag list takes priority; ordinary
+preferences are used only when the synced list is unavailable.
 
 The color lookup is case-insensitive and may not distinguish hypothetical
 case-distinct Finder tag definitions with different colors.

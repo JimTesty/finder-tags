@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Read standard Finder tag colors through the public macOS label API so they
+  remain available when Finder preferences omit them or cannot be read. Merge
+  custom definitions over the defaults, preserving explicit no-color overrides.
 - Add `--dot-files` as an alias for `--all`/`-A` to include hidden files and
   directories during filesystem traversal.
 - Add `--no-sort-files` to preserve filesystem enumeration order, including

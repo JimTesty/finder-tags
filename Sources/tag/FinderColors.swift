@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct TagColorInfo {
     let name: String
@@ -10,11 +13,23 @@ struct FinderColors {
     let isEnabled: Bool
     let archiveTagColors: [TagColorInfo]
 
-    init(enabled: Bool) {
+    init(enabled: Bool, verbose: Bool = false) {
+        let report: ((String) -> Void)? = verbose ? {
+            eprint("\(programName): info: \($0)")
+        } : nil
+        self.init(enabled: enabled, tagColors: FinderColors.load(report: report))
+    }
+
+    init(enabled: Bool, tagColors: [TagColorInfo]) {
         isEnabled = enabled
-        let loaded = FinderColors.load()
-        ansiByName = enabled ? loaded.ansiByName : [:]
-        archiveTagColors = loaded.metadata
+        archiveTagColors = tagColors
+        var escapes: [String: String] = [:]
+        if enabled {
+            for tag in tagColors {
+                escapes[foldedTag(tag.name)] = FinderColors.ansiByCode[tag.color]
+            }
+        }
+        ansiByName = escapes
     }
 
     func render(_ tag: String) -> String {
@@ -44,37 +59,77 @@ struct FinderColors {
         7: "\u{001B}[48;5;208m"  // orange
     ]
 
-    private static func load() -> (ansiByName: [String: String], metadata: [TagColorInfo]) {
+    private static func load(report: ((String) -> Void)?) -> [TagColorInfo] {
+        // Finder need not persist its standard tags in its private preferences.
+        // NSWorkspace exposes their localized names in label-number order.
+        #if canImport(AppKit)
+        let defaults: [TagColorInfo] = NSWorkspace.shared.fileLabels.enumerated().compactMap { code, name in
+            code == 0 || name.isEmpty ? nil : TagColorInfo(name: name, color: code)
+        }
+        report?("loaded \(defaults.count) standard Finder tag colors from macOS")
+        #else
+        let defaults: [TagColorInfo] = []
+        #endif
+
         let home = fileManager.homeDirectoryForCurrentUser
         let candidates = [
             home.appendingPathComponent("Library/SyncedPreferences/com.apple.finder.plist"),
             home.appendingPathComponent("Library/Preferences/com.apple.finder.plist")
         ]
+        return load(defaultTagColors: defaults, preferenceURLs: candidates, report: report)
+    }
 
-        for url in candidates {
-            guard let data = try? Data(contentsOf: url),
-                  let plist = try? PropertyListSerialization.propertyList(
+    static func load(
+        defaultTagColors: [TagColorInfo],
+        preferenceURLs: [URL],
+        report: ((String) -> Void)? = nil
+    ) -> [TagColorInfo] {
+        var metadata = defaultTagColors
+        var indexByName: [String: Int] = [:]
+        for (index, tag) in metadata.enumerated() {
+            indexByName[foldedTag(tag.name)] = index
+        }
+
+        // Keep Finder's synced list authoritative when present. Fill in standard
+        // labels from macOS rather than resurrecting stale custom definitions
+        // from a lower-priority preference file.
+        for url in preferenceURLs {
+            let plist: Any
+            do {
+                let data = try Data(contentsOf: url)
+                plist = try PropertyListSerialization.propertyList(
                     from: data, options: [], format: nil
-                  ),
-                  let entries = findFinderTags(in: plist)
-            else { continue }
+                )
+            } catch {
+                report?("could not load Finder tag colors from \(url.path): \(error.localizedDescription)")
+                continue
+            }
+            guard let entries = findFinderTags(in: plist) else {
+                report?("no FinderTags list in \(url.path)")
+                continue
+            }
 
-            var result: [String: String] = [:]
-            var metadata: [TagColorInfo] = []
+            var loadedCount = 0
             for entry in entries {
                 guard let name = entry["n"] as? String,
                       let color = entry["l"] as? NSNumber
                 else { continue }
 
-                metadata.append(TagColorInfo(name: name, color: color.intValue))
-                if let escape = ansiByCode[color.intValue] {
-                    result[foldedTag(name)] = escape
+                let tag = TagColorInfo(name: name, color: color.intValue)
+                let key = foldedTag(name)
+                if let index = indexByName[key] {
+                    metadata[index] = tag
+                } else {
+                    indexByName[key] = metadata.count
+                    metadata.append(tag)
                 }
+                loadedCount += 1
             }
-            return (result, metadata)
+            report?("loaded \(loadedCount) Finder tag color definitions from \(url.path)")
+            return metadata
         }
 
-        return ([:], [])
+        return metadata
     }
 
     private static func findFinderTags(in object: Any) -> [[String: Any]]? {

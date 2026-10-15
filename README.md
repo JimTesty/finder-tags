@@ -107,6 +107,12 @@ tag --restore tags.archive --root restored-directory --dry-run
 gzip -dc tags.archive.gz | tag --restore - --root restored-directory
 ```
 
+Standard tag colors come from macOS's public label API, including localized
+label names. Custom colors and changes to standard colors are read from Finder
+preferences when available. Missing preference data leaves the standard colors
+available. `--verbose` reports the system defaults and preference discovery
+results; see [`REVIEW.md`](REVIEW.md) for the limitations of custom color discovery.
+
 ## Export and restore
 
 `--export` writes a versioned, root-relative JSONL archive for one directory.

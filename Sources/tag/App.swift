@@ -12,7 +12,8 @@ final class App {
         self.output = Output(
             options: options,
             colors: FinderColors(
-                enabled: !options.jsonLines && colorIsEnabled(options.colorMode)
+                enabled: !options.jsonLines && colorIsEnabled(options.colorMode),
+                verbose: options.verbose
             )
         )
         if options.isMutating && !options.dryRun && options.backupEnabled {
