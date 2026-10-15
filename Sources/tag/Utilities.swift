@@ -9,43 +9,8 @@ let programName = URL(fileURLWithPath: CommandLine.arguments[0]).lastPathCompone
 let programVersion = "8.0"
 let fileManager = FileManager.default
 
-// Escape untrusted text before adding terminal formatting or record separators.
-// Keep ordinary Unicode (including combining marks and emoji joiners) intact.
-func escapedDisplayText(_ text: String) -> String {
-    var result = ""
-    for scalar in text.unicodeScalars {
-        switch scalar.value {
-        case 0: result += "\\0"
-        case 9: result += "\\t"
-        case 10: result += "\\n"
-        case 13: result += "\\r"
-        case 92: result += "\\\\"
-        case 1...31, 127...159, 0x2028, 0x2029,
-             0x061C, 0x200E...0x200F, 0x202A...0x202E, 0x2066...0x206F:
-            // Include Unicode line breaks and direction controls, which can
-            // rearrange a displayed path without changing the stored name.
-            result += "\\u{\(String(scalar.value, radix: 16))}"
-        default:
-            result.unicodeScalars.append(scalar)
-        }
-    }
-    return result
-}
-
 func eprint(_ message: String) {
     FileHandle.standardError.write(Data((escapedDisplayText(message) + "\n").utf8))
-}
-
-func stdoutIsTerminal() -> Bool {
-    return isatty(STDOUT_FILENO) == 1
-}
-
-func colorIsEnabled(_ mode: ColorMode) -> Bool {
-    switch mode {
-    case .auto: return stdoutIsTerminal()
-    case .always: return true
-    case .never: return false
-    }
 }
 
 func fileMetadata(for url: URL) throws -> FileMetadata {
@@ -165,38 +130,6 @@ func checkedSymbolicLink(_ url: URL) throws -> Bool {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSFilePathErrorKey: url.path])
     }
     return info.st_mode & mode_t(S_IFMT) == mode_t(S_IFLNK)
-}
-
-func formattedPath(
-    for target: Target,
-    slash: Bool,
-    printSymlink: Bool,
-    colors: FinderColors,
-    escapeControls: Bool
-) throws -> String {
-    var path = escapeControls ? escapedDisplayText(target.displayPath) : target.displayPath
-
-    if isSymbolicLink(target.logicalURL) {
-        if slash { path += "@" }
-        if printSymlink, let link = symbolicLinkInfo(for: target.logicalURL) {
-            var destination = link.destination
-            if slash && link.targetExists && link.targetIsDirectory && !destination.hasSuffix("/") {
-                destination += "/"
-            }
-            path += " -> " + (escapeControls ? escapedDisplayText(destination) : destination)
-            if !link.targetExists {
-                path += " " + colors.renderMissing("(NOT FOUND)")
-            }
-        }
-        return path
-    }
-
-    guard slash else { return path }
-    let values = try target.url.resourceValues(forKeys: [.isDirectoryKey])
-    if values.isDirectory == true && !path.hasSuffix("/") {
-        path += "/"
-    }
-    return path
 }
 
 func readPathsFromStdin(_ mode: StdinPathMode) -> [String] {

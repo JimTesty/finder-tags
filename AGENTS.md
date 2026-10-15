@@ -3,6 +3,8 @@
 - `Tests/cli.sh` keeps fixtures under `Tests/.cli-work.*`. Its Darwin branch
   performs real Finder-tag writes; the portable portion covers parser and
   traversal behavior. Keep cleanup scoped to each run's work directory.
+- `Tests/Swift/test-main.swift` runs the feature suites; share process, JSONL,
+  and fixture helpers through `test-support.swift`. See `Tests/README.md`.
 - The shell tests grep Foundation's JSONSerialization output. JSONSerialization
   escapes `/` as `\/`, so nested JSON path assertions need fixed-string
   patterns containing the backslash.

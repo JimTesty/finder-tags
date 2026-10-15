@@ -1,4 +1,21 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
+func stdoutIsTerminal() -> Bool {
+    return isatty(STDOUT_FILENO) == 1
+}
+
+func colorIsEnabled(_ mode: ColorMode) -> Bool {
+    switch mode {
+    case .auto: return stdoutIsTerminal()
+    case .always: return true
+    case .never: return false
+    }
+}
 
 // Rendering never infers a color from a name or the current Mac's preferences.
 struct FinderColors {
@@ -8,19 +25,11 @@ struct FinderColors {
         isEnabled = enabled
     }
 
-    func render(_ tag: StoredTag) -> String {
-        render(tag.name, color: tag.color)
-    }
-
     func render(_ text: String, color: Int?) -> String {
         guard isEnabled, let code = color, let escape = FinderColors.ansiByCode[code] else {
             return text
         }
         return escape + text + "\u{001B}[m"
-    }
-
-    func renderFirstCharacter(of tag: StoredTag) -> String {
-        render(tag.name.first.map(String.init) ?? "", color: tag.color)
     }
 
     func renderMissing(_ text: String) -> String {

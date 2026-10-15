@@ -2,12 +2,12 @@ import Foundation
 
 final class Output {
     private let options: Options
-    private let colors: FinderColors
+    private let renderer: TextRenderer
     private var lastJSONRoot: String?
 
     init(options: Options, colors: FinderColors) {
         self.options = options
-        self.colors = colors
+        self.renderer = TextRenderer(options: options, colors: colors)
     }
 
     func emitFile(
@@ -32,15 +32,9 @@ final class Output {
         }
 
         let name = options.showNames
-            ? try formattedPath(
-                for: target,
-                slash: options.slashDirectories,
-                printSymlink: options.printSymlinks,
-                colors: colors,
-                escapeControls: !options.nulTerminate
-            )
+            ? try formattedPath(for: target)
             : nil
-        try emitText(
+        emitText(
             name: name,
             tags: tags,
             metadata: metadata,
@@ -64,7 +58,7 @@ final class Output {
                 item.symlinkTargetExists == true &&
                 item.symlinkTargetKind == .directory
         )
-        try emitText(name: name, tags: tags, metadata: item.metadata, isDirectory: isDirectory)
+        emitText(name: name, tags: tags, metadata: item.metadata, isDirectory: isDirectory)
     }
 
     func emitUsage(_ entries: [UsageEntry]) throws {
@@ -80,7 +74,7 @@ final class Output {
                     eprint("\(programName): info: tag '\(entry.tag)' has different stored colors \(entry.colors.sorted()); usage total is uncolored")
                 }
                 let separator = options.spaceIndent ? "  " : "\t"
-                record("\(entry.count)\(separator)\(colors.render(displayText(entry.tag), color: color))")
+                record("\(entry.count)\(separator)\(renderer.tag(StoredTag(name: entry.tag, color: color)))")
             }
         }
     }
@@ -161,18 +155,12 @@ final class Output {
         // intentionally visible because its purpose is to preview changes.
         if !dryRun { return }
 
-        let before = change.beforeTags.map { renderTag($0) }.joined(separator: ",")
+        let before = change.beforeTags.map { renderer.tag($0) }.joined(separator: ",")
         let after = change.after.isEmpty
             ? "(no tags)"
-            : change.afterTags.map { renderTag($0) }.joined(separator: ",")
+            : change.afterTags.map { renderer.tag($0) }.joined(separator: ",")
         let marker = change.hasChanges ? "->" : "="
-        let path = try formattedPath(
-            for: target,
-            slash: options.slashDirectories,
-            printSymlink: options.printSymlinks,
-            colors: colors,
-            escapeControls: !options.nulTerminate
-        )
+        let path = try formattedPath(for: target)
         let clearNote = change.hasChanges && change.after.isEmpty
             ? " (would clear tags)"
             : ""
@@ -185,21 +173,9 @@ final class Output {
         }.joined(separator: ",")
     }
 
-    private func displayText(_ text: String) -> String {
-        options.nulTerminate ? text : escapedDisplayText(text)
-    }
-
-    private func renderTag(_ tag: StoredTag, compact: Bool = false) -> String {
-        let name = compact ? String(tag.name.prefix(1)) : tag.name
-        return colors.render(displayText(name), color: tag.color)
-    }
-
     private func emitText(
-        name: String?,
-        tags: [StoredTag],
-        metadata: FileMetadata?,
-        isDirectory: Bool = false
-    ) throws {
+        name: String?, tags: [StoredTag], metadata: FileMetadata?, isDirectory: Bool = false
+    ) {
         if options.verbose {
             for tag in tags {
                 if let color = tag.color, !(0...7).contains(color) {
@@ -207,140 +183,39 @@ final class Output {
                 }
             }
         }
-        let renderedTags: [String]
-        if options.showTags {
-            renderedTags = tags.map { renderTag($0, compact: options.compactTags) }
-        } else {
-            renderedTags = []
+        for line in renderer.fileRecords(formattedName: name, tags: tags, metadata: metadata, isDirectory: isDirectory) {
+            record(line)
         }
-        let tagText = options.compactTags
-            ? renderedTags.joined()
-            : renderedTags.joined(separator: ",")
-        let compactTagPadding = options.compactTags ? max(0, 3 - tags.count) : 0
-        let pathDisplayWidth = name.map { displayWidth($0) }
-        let decoratedName: String?
-        if let name = name, let metadata = metadata {
-            let sizeText = fileInfoSizeText(metadata.size, isDirectory: isDirectory)
-            let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(sizeText)]"
-            let coloredDecoration = colors.isEnabled
-                ? "\u{001B}[32m\(decoration)\u{001B}[m"
-                : decoration
-            decoratedName = "\(coloredDecoration) \(name)"
-        } else {
-            decoratedName = name
-        }
+    }
 
-        if options.oneTagPerLine {
-            if let value = decoratedName { record(value) }
-            for tag in renderedTags {
-                record((decoratedName == nil ? "" : "    ") + tag)
-            }
-            return
-        }
-
-        if let value = decoratedName {
-            if renderedTags.isEmpty {
-                record(value)
-            } else if let alignTags = options.alignTags {
-                let targetWidth = alignTags + compactTagPadding
-                let padding = max(0, targetWidth - (pathDisplayWidth ?? displayWidth(value)))
-                record(
-                    value
-                    + String(repeating: " ", count: padding)
-                    + "  "
-                    + tagText
-                )
-            } else if options.spaceIndent {
-                record(value + "  " + tagText)
-            } else {
-                let padding = max(0, 31 - (value as NSString).length)
-                record(
-                    value
-                    + String(repeating: " ", count: padding)
-                    + "\t"
-                    + String(repeating: " ", count: compactTagPadding)
-                    + tagText
+    private func formattedPath(for target: Target) throws -> String {
+        if isSymbolicLink(target.logicalURL) {
+            var path = renderer.path(target.displayPath, isSymlink: true)
+            if options.printSymlinks, let link = symbolicLinkInfo(for: target.logicalURL) {
+                path += renderer.symlinkDestination(
+                    link.destination, targetExists: link.targetExists, targetIsDirectory: link.targetIsDirectory
                 )
             }
-        } else if !renderedTags.isEmpty {
-            record(tagText)
+            return path
         }
-    }
 
-    private func displayWidth(_ value: String) -> Int {
-        var width = 0
-        var inEscape = false
-
-        for character in value {
-            let scalars = character.unicodeScalars
-            if inEscape {
-                if scalars.contains(where: { $0.value == 0x6D }) { inEscape = false }
-                continue
-            }
-            if scalars.contains(where: { $0.value == 0x1B }) {
-                inEscape = true
-                continue
-            }
-
-            let visibleScalars = scalars.filter { !isZeroWidthScalar($0.value) }
-            guard !visibleScalars.isEmpty else { continue }
-            width += visibleScalars.contains(where: { isWideScalar($0.value) }) ? 2 : 1
+        var isDirectory = false
+        if options.slashDirectories {
+            isDirectory = try target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
         }
-        return width
-    }
-
-    private func isZeroWidthScalar(_ value: UInt32) -> Bool {
-        value == 0x200D
-            || (value >= 0x0300 && value <= 0x036F)
-            || (value >= 0x1AB0 && value <= 0x1AFF)
-            || (value >= 0x1DC0 && value <= 0x1DFF)
-            || (value >= 0x20D0 && value <= 0x20FF)
-            || (value >= 0xFE00 && value <= 0xFE0F)
-            || (value >= 0xFE20 && value <= 0xFE2F)
-            || (value >= 0xE0100 && value <= 0xE01EF)
-    }
-
-    private func isWideScalar(_ value: UInt32) -> Bool {
-        (value >= 0x1100 && value <= 0x115F)
-            || (value >= 0x2329 && value <= 0x232A)
-            || (value >= 0x2E80 && value <= 0xA4CF)
-            || (value >= 0xAC00 && value <= 0xD7A3)
-            || (value >= 0xF900 && value <= 0xFAFF)
-            || (value >= 0xFE10 && value <= 0xFE19)
-            || (value >= 0xFE30 && value <= 0xFE6F)
-            || (value >= 0xFF01 && value <= 0xFF60)
-            || (value >= 0xFFE0 && value <= 0xFFE6)
-            || (value >= 0x1F000 && value <= 0x1FAFF)
-            || (value >= 0x20000 && value <= 0x3FFFD)
+        return renderer.path(target.displayPath, isDirectory: isDirectory)
     }
 
     private func formattedArchivePath(_ item: ArchiveItem) -> String {
-        var path = displayText(item.path)
-        if options.slashDirectories {
-            if item.kind == .symlink {
-                path += "@"
-            } else if item.kind == .directory && path != "." {
-                path += "/"
-            }
-        }
-
+        let path = renderer.path(
+            item.path, isDirectory: item.kind == .directory && item.path != ".", isSymlink: item.kind == .symlink
+        )
         guard options.printSymlinks, item.kind == .symlink else { return path }
-        if let destination = item.symlinkDestination {
-            var displayDestination = destination
-            if options.slashDirectories,
-               item.symlinkTargetExists == true,
-               item.symlinkTargetKind == .directory,
-               !displayDestination.hasSuffix("/") {
-                displayDestination += "/"
-            }
-            path += " -> " + displayText(displayDestination)
-            if item.symlinkTargetExists == false {
-                path += " " + colors.renderMissing("(NOT FOUND)")
-            }
-        } else {
-            path += " -> (target not recorded)"
-        }
-        return path
+        return path + renderer.symlinkDestination(
+            item.symlinkDestination,
+            targetExists: item.symlinkTargetExists,
+            targetIsDirectory: item.symlinkTargetKind == .directory
+        )
     }
 
     private func pathObject(_ target: Target) throws -> [String: Any] {
@@ -375,35 +250,6 @@ final class Output {
         return (try? target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
             ? .directory
             : .file
-    }
-
-    private func fileInfoSizeText(_ bytes: Int64, isDirectory: Bool) -> String {
-        let value: String
-        if isDirectory {
-            value = "---"
-        } else {
-            let bytesPerMegabyte: Int64 = 1_000_000
-            if bytes >= 950_000 { // 0.95 MB
-                let wholeMegabytes = bytes / bytesPerMegabyte +
-                    (bytes % bytesPerMegabyte >= bytesPerMegabyte / 2 ? 1 : 0)
-                value = "\(wholeMegabytes)MB"
-            } else if bytes >= 50_000 { // 0.05 MB
-                let tenths = (bytes * 10 + bytesPerMegabyte / 2) / bytesPerMegabyte
-                value = ".\(tenths)MB"
-            } else {
-                value = "~0MB"
-            }
-        }
-        return String(repeating: " ", count: max(0, 6 - value.count)) + value
-    }
-
-    private func fileInfoDateText(_ seconds: Double) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = TimeZone.current
-        formatter.dateFormat = "yyyyMMdd"
-        return formatter.string(from: Date(timeIntervalSince1970: seconds))
     }
 
     private func emitJSONState(for target: Target) {

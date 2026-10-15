@@ -85,8 +85,17 @@ private func applyShortFlag(_ ch: Character, options: inout Options) {
 }
 
 func parseArguments() -> Options {
+    var options = parseCommandLineArguments(Array(CommandLine.arguments.dropFirst()))
+    if let mode = options.stdinPathMode {
+        options.paths.append(contentsOf: readPathsFromStdin(mode))
+    }
+
+    validateAndApplyDefaults(&options)
+    return options
+}
+
+private func parseCommandLineArguments(_ args: [String]) -> Options {
     var options = Options()
-    let args = Array(CommandLine.arguments.dropFirst())
     var i = 0
 
     while i < args.count {
@@ -280,10 +289,10 @@ func parseArguments() -> Options {
         i += 1
     }
 
-    if let mode = options.stdinPathMode {
-        options.paths.append(contentsOf: readPathsFromStdin(mode))
-    }
+    return options
+}
 
+private func validateAndApplyDefaults(_ options: inout Options) {
     switch options.operation {
     case .list, .match, .filter, .usage, .find:
         break
@@ -429,6 +438,4 @@ func parseArguments() -> Options {
     if options.dryRun && !options.isMutating {
         fail("--dry-run is only valid with --add, --remove, --set, --move, --copy, or --restore")
     }
-
-    return options
 }

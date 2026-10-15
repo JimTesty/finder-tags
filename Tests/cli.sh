@@ -13,13 +13,17 @@ rm -rf "$work"
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
-"${SWIFTC:-swiftc}" -swift-version 5 \
-    "$repo/Sources/tag/FinderColors.swift" "$repo/Sources/tag/Model.swift" \
-    "$repo/Sources/tag/TagSyntax.swift" "$repo/Sources/tag/Utilities.swift" \
-    "$repo/Sources/tag/FileTagMetadata.swift" "$repo/Sources/tag/TagStore.swift" \
-    "$repo/Sources/tag/Usage.swift" \
-    "$repo/Tests/finder-colors.swift" "$repo/Tests/text-display.swift" -o "$work/finder-colors"
-"$work/finder-colors" "$work" "$bin"
+# Compile the regression suites with their own entry point, using the same
+# production sources as the CLI apart from its top-level main.swift.
+set --
+for source in "$repo"/Sources/tag/*.swift; do
+    case "$source" in
+        */main.swift) ;;
+        *) set -- "$@" "$source" ;;
+    esac
+done
+"${SWIFTC:-swiftc}" -swift-version 5 "$@" "$repo"/Tests/Swift/*.swift -o "$work/regressions"
+"$work/regressions" "$work" "$bin"
 
 touch "$work/a" "$work/b" "$work/c" "$work/space name"
 mkdir -p "$work/tree/sub" "$work/tree/real"

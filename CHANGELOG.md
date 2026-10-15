@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Consolidate text rendering, separate CLI parsing from option validation, and
+  organize Swift regression suites by feature with shared test helpers.
 - Escape control characters and backslashes in text listings, previews, and
   diagnostics before adding terminal formatting. Preserve original stored
   names, JSON values, and NUL-delimited stdout.
