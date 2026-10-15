@@ -12,16 +12,14 @@ final class App {
         self.output = Output(
             options: options,
             colors: FinderColors(
-                enabled: !options.jsonLines && colorIsEnabled(options.colorMode),
-                verbose: options.verbose
+                enabled: !options.jsonLines && colorIsEnabled(options.colorMode)
             )
         )
         if options.isMutating && !options.dryRun && options.backupEnabled {
             self.undoWriter = UndoWriter(
                 path: options.backupPath ?? defaultUndoArchivePath(),
                 syncEachRecord: options.syncBackup,
-                followSymlinks: options.followSymlinks,
-                tagColors: output.colorsForArchive.archiveTagColors
+                followSymlinks: options.followSymlinks
             )
         }
     }
@@ -115,7 +113,7 @@ final class App {
                 return
             }
 
-            let writer = ArchiveWriter(options: options, colors: output.colorsForArchive)
+            let writer = ArchiveWriter(options: options)
             try writer.emitRoot(rootURL)
             let traversal = Traversal(
                 options: options,
@@ -125,9 +123,9 @@ final class App {
                 }
             )
             traversal.forEachTarget { target in
-                let tags: [String]?
+                let tags: [StoredTag]?
                 do {
-                    tags = try self.store.read(target.url)
+                    tags = try self.store.readTags(target.url)
                 } catch {
                     // Foundation may not expose a usable tag value for a
                     // symlink itself, or for a dangling target with -L.
@@ -277,13 +275,13 @@ final class App {
         }
     }
 
-    private func queryMatches(_ tags: [String], query: TagQuery) -> Bool {
+    private func queryMatches(_ tags: [StoredTag], query: TagQuery) -> Bool {
         if options.taggedOnly && tags.isEmpty { return false }
-        return tagQueryMatches(tags, query: query, caseSensitive: options.caseSensitive)
+        return tagQueryMatches(tags.map { $0.name }, query: query, caseSensitive: options.caseSensitive)
     }
 
     private func emitMatchingTarget(_ target: Target, query: TagQuery) throws {
-        let tags = try store.read(target.url)
+        let tags = try store.readTags(target.url)
         guard queryMatches(tags, query: query) else { return }
         let metadata = options.fileInfo
             ? try fileMetadata(for: target)
@@ -307,7 +305,7 @@ final class App {
 
         traversal.forEachTarget { target in
             do {
-                let tags = try store.read(target.url)
+                let tags = try store.readTags(target.url)
                 if queryMatches(tags, query: query) {
                     counter.add(tags)
                 }
@@ -335,7 +333,7 @@ final class App {
                     // Spotlight's complete predicate determines membership.
                     // Read the current value only for display and metadata
                     // ordering, without applying a second live-tag filter.
-                    let tags = try store.read(target.url)
+                    let tags = try store.readTags(target.url)
                     let metadata = options.fileInfo
                         ? try fileMetadata(for: target)
                         : nil
@@ -363,9 +361,9 @@ final class App {
 
                 switch options.operation {
                 case .list:
-                    let tags: [String]
+                    let tags: [StoredTag]
                     do {
-                        tags = try store.read(target.url)
+                        tags = try store.readTags(target.url)
                     } catch {
                         if let link = symbolicLinkInfo(for: target.logicalURL), !link.targetExists {
                             tags = []
@@ -431,10 +429,11 @@ final class App {
         change rawChange: TagChange,
         source: Target? = nil
     ) throws {
-        let change = sortedChangeIfRequested(rawChange, options: options)
-        if !options.dryRun && change.before != change.after {
-            try recordUndo(target: target, tags: change.before)
-            try store.apply(change, to: target.url)
+        var change = sortedChangeIfRequested(rawChange, options: options)
+        if !options.dryRun && change.hasChanges {
+            try recordUndo(target: target, tags: change.beforeTags)
+            let after = try store.apply(change, to: target.url)
+            change = TagChange(beforeTags: change.beforeTags, afterTags: after)
         }
         try output.emitChange(
             operation: operation,
@@ -453,7 +452,7 @@ final class App {
         }
     }
 
-    private func recordUndo(target: Target, tags: [String]) throws {
+    private func recordUndo(target: Target, tags: [StoredTag]) throws {
         try undoWriter?.record(target: target, tags: tags)
     }
 }

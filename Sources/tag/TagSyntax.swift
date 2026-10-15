@@ -19,9 +19,19 @@ func sortedTagArray(_ tags: [String]) -> [String] {
     }.map { $0.element }
 }
 
+func sortedStoredTags(_ tags: [StoredTag]) -> [StoredTag] {
+    tags.enumerated().sorted { lhs, rhs in
+        let result = lhs.element.name.compare(rhs.element.name)
+        return result == .orderedSame ? lhs.offset < rhs.offset : result == .orderedAscending
+    }.map { $0.element }
+}
+
 func sortedChangeIfRequested(_ change: TagChange, options: Options) -> TagChange {
     if !options.sortedTags { return change }
-    return TagChange(before: change.before, after: sortedTagArray(change.after))
+    return TagChange(
+        beforeTags: change.beforeTags, afterTags: sortedStoredTags(change.afterTags),
+        initialColorNames: change.initialColorNames
+    )
 }
 
 func parsePosition(_ raw: String) -> PositionSpec {

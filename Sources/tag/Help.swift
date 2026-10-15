@@ -38,7 +38,7 @@ func usage(code: Int32 = 0) -> Never {
           --prepend TAGS         Add new tags at first/left/bottom
       -r, --remove TAGS          Remove matching tags; '*' removes all tags
       -s, --set TAGS             Replace all tags in the specified order
-          --copy SRC DST         Replace DST's tags with SRC's ordered tags
+          --copy SRC DST         Copy SRC's ordered tag names and colors to DST
       -m, --match TAGS           List traversed files matching TAGS
           --filter TAGS          Match tags with list-style output
       -u, --usage TAGS           Count tags on traversed files matching TAGS
@@ -153,7 +153,7 @@ func usage(code: Int32 = 0) -> Never {
     NOT FOUND.
 
     Export archives are always JSONL, include untagged items by default, and
-    preserve stored tag order. --reverse is ignored during export. --file-info
+    preserve stored tag order and color numbers. --reverse is ignored during export. --file-info
     is enabled by default for export and can be disabled with --no-file-info.
     --tagged-only is an opt-in filter. --exclude can be repeated; a single
     component such as .git matches at any depth, while a slash-containing path

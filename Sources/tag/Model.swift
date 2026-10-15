@@ -132,14 +132,39 @@ struct Target {
     var absolutePath: String { return logicalURL.standardizedFileURL.path }
 }
 
+// Retained for reading the informational palette in older archive headers.
+struct TagColorInfo {
+    let name: String
+    let color: Int
+}
+
+struct StoredTag: Equatable {
+    let name: String
+    // nil means that no per-tag color number was available. Zero explicitly
+    // means no color; unknown numbers are preserved rather than normalized.
+    let color: Int?
+
+    init(name: String, color: Int? = nil) {
+        self.name = name
+        self.color = color
+    }
+}
+
 struct TagChange {
-    let before: [String]
-    let after: [String]
+    let beforeTags: [StoredTag]
+    let afterTags: [StoredTag]
+    var initialColorNames: Set<String> = []
+
+    var before: [String] { beforeTags.map { $0.name } }
+    var after: [String] { afterTags.map { $0.name } }
+    var hasChanges: Bool { beforeTags != afterTags }
 }
 
 struct UsageEntry {
     let tag: String
     let count: Int
+    let colors: Set<Int>
+    let hasUnknownColor: Bool
 }
 
 enum ExitCode {

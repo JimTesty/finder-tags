@@ -21,6 +21,15 @@ struct ArchiveItem {
     let symlinkDestination: String?
     let symlinkTargetExists: Bool?
     let symlinkTargetKind: ArchiveItemKind?
+    let colors: [Int?]?
+
+    var storedTags: [StoredTag]? {
+        tags.map { names in
+            names.enumerated().map { index, name in
+                StoredTag(name: name, color: colors?[index])
+            }
+        }
+    }
 }
 
 struct ArchiveDocument {
@@ -283,6 +292,7 @@ struct ArchiveReader {
             targetKind = nil
         }
 
+        let colors = try archiveItemColors(object["colors"], tags: tags, line: line)
         return ArchiveItem(
             path: path,
             kind: kind,
@@ -290,7 +300,8 @@ struct ArchiveReader {
             metadata: metadata,
             symlinkDestination: destination,
             symlinkTargetExists: targetExists,
-            symlinkTargetKind: targetKind
+            symlinkTargetKind: targetKind,
+            colors: colors
         )
     }
 
@@ -310,15 +321,13 @@ struct ArchiveReader {
 
 final class ArchiveWriter {
     private let options: Options
-    private let colors: FinderColors
     private var rootURL: URL?
     private var didEmitRoot = false
 
     var stats = ArchiveStats()
 
-    init(options: Options, colors: FinderColors) {
+    init(options: Options) {
         self.options = options
-        self.colors = colors
     }
 
     func emitRoot(_ root: URL) throws {
@@ -331,12 +340,12 @@ final class ArchiveWriter {
             fileInfo: options.fileInfo,
             taggedOnly: options.taggedOnly,
             excludePatterns: options.excludePatterns,
-            tagColors: colors.archiveTagColors
+            tagColors: []
         ))
         try writeJSON(["type": "root", "path": rootURL!.path])
     }
 
-    func emitTarget(_ target: Target, tags: [String]?, metadata: FileMetadata?) throws {
+    func emitTarget(_ target: Target, tags: [StoredTag]?, metadata: FileMetadata?) throws {
         guard let rootURL = rootURL else { throw ArchiveError.missingRoot }
         stats.visited += 1
         let path = try relativePath(target.logicalURL, to: rootURL)
@@ -358,7 +367,8 @@ final class ArchiveWriter {
             "kind": kind.rawValue
         ]
         if let tags = tags {
-            object["tags"] = tags
+            object["tags"] = tags.map { $0.name }
+            object["colors"] = tagColorNumbers(tags)
             if !tags.isEmpty { stats.tagged += 1 }
         }
         if let metadata = metadata {
@@ -416,17 +426,15 @@ final class UndoWriter {
     let path: String
     private let syncEachRecord: Bool
     private let followSymlinks: Bool
-    private let tagColors: [TagColorInfo]
     private var handle: FileHandle?
 
-    init(path: String, syncEachRecord: Bool, followSymlinks: Bool, tagColors: [TagColorInfo]) {
+    init(path: String, syncEachRecord: Bool, followSymlinks: Bool) {
         self.path = path
         self.syncEachRecord = syncEachRecord
         self.followSymlinks = followSymlinks
-        self.tagColors = tagColors
     }
 
-    func record(target: Target, tags: [String]) throws {
+    func record(target: Target, tags: [StoredTag]) throws {
         try openIfNeeded()
         let absolute = target.logicalURL.standardizedFileURL.path
         let path = absolute == "/" ? "." : String(absolute.dropFirst())
@@ -434,7 +442,8 @@ final class UndoWriter {
             "type": "item",
             "path": path,
             "kind": itemKind(for: target).rawValue,
-            "tags": tags
+            "tags": tags.map { $0.name },
+            "colors": tagColorNumbers(tags)
         ]
         if let handle = handle {
             let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
@@ -469,7 +478,7 @@ final class UndoWriter {
             fileInfo: false,
             taggedOnly: false,
             excludePatterns: [],
-            tagColors: tagColors
+            tagColors: []
         )
         let headerData = try JSONSerialization.data(withJSONObject: header, options: [.sortedKeys])
         file.write(headerData)

@@ -16,8 +16,10 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 "${SWIFTC:-swiftc}" -swift-version 5 \
     "$repo/Sources/tag/FinderColors.swift" "$repo/Sources/tag/Model.swift" \
     "$repo/Sources/tag/TagSyntax.swift" "$repo/Sources/tag/Utilities.swift" \
+    "$repo/Sources/tag/FileTagMetadata.swift" "$repo/Sources/tag/TagStore.swift" \
+    "$repo/Sources/tag/Usage.swift" \
     "$repo/Tests/finder-colors.swift" -o "$work/finder-colors"
-"$work/finder-colors" "$work"
+"$work/finder-colors" "$work" "$bin"
 
 touch "$work/a" "$work/b" "$work/c" "$work/space name"
 mkdir -p "$work/tree/sub" "$work/tree/real"

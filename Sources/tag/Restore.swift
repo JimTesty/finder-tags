@@ -8,7 +8,7 @@ struct RestoreEngine {
     let output: Output
     let onError: (String) -> Void
     let onWarning: (String) -> Void
-    let beforeMutation: (Target, [String]) throws -> Void
+    let beforeMutation: (Target, [StoredTag]) throws -> Void
 
     func run() -> ArchiveStats {
         var stats = ArchiveStats()
@@ -83,7 +83,7 @@ struct RestoreEngine {
                 // An omitted tags field means that the exporter could not
                 // safely read tags for this item. It must never be treated as
                 // an empty array, because that would clear a live target.
-                guard let archivedTags = entry.tags else {
+                guard entry.tags != nil else {
                     stats.skipped += 1
                     stats.warnings += 1
                     onWarning("restore skipped \(entry.path): archive has no tags for this item")
@@ -91,8 +91,14 @@ struct RestoreEngine {
                 }
 
                 let ioURL = tagIOURL(logicalURL, followSymlinks: options.followSymlinks)
-                let before = try store.read(ioURL)
-                let change = TagChange(before: before, after: archivedTags)
+                let before = try store.readTags(ioURL)
+                // Older records lack per-file colors. Preserve matching live
+                // colors rather than applying a guessed header-wide palette.
+                let after = entry.storedTags!.map { tag in
+                    guard tag.color == nil else { return tag }
+                    return before.first { $0.name == tag.name } ?? tag
+                }
+                let change = TagChange(beforeTags: before, afterTags: after)
                 let target = Target(
                     url: ioURL,
                     logicalURL: logicalURL,
@@ -100,7 +106,7 @@ struct RestoreEngine {
                     rootPath: destinationRoot.path
                 )
 
-                if change.before == change.after {
+                if !change.hasChanges {
                     stats.unchanged += 1
                     continue
                 }
@@ -109,7 +115,7 @@ struct RestoreEngine {
                     stats.changed += 1
                     if change.after.isEmpty { stats.cleared += 1 }
                 } else {
-                    try beforeMutation(target, change.before)
+                    try beforeMutation(target, change.beforeTags)
                     try store.apply(change, to: ioURL)
                     stats.changed += 1
                     stats.restored += 1

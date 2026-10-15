@@ -31,8 +31,8 @@ rolled back. `--dry-run` is available when a preview matters.
 
 ### 4. Immediate read-back verification may be strict on unusual filesystems
 
-Every write is immediately read back and compared at the Swift string-array
-level, including order. This catches silent persistence, normalization, and
+Every write is immediately read back and compared, including tag names,
+color numbers, and order. This catches silent persistence, normalization, and
 reordering failures. On a network or unusual filesystem with delayed metadata
 visibility, it could report failure even if metadata becomes visible shortly
 afterward.
@@ -104,19 +104,27 @@ Use `--absolute` for ordinary output, or use JSONL's stateful `root` record and
 logical relative paths when consuming recursive output. Export/restore v1
 intentionally supports one archive root and uses `--root DEST` for relocation.
 
-### 11. Custom Finder color discovery is private and fragile
+### 11. Finder's per-tag metadata format is not a public API
 
-Tag read/write uses public Foundation APIs. Standard tag names and color codes
-come from AppKit's public `NSWorkspace.fileLabels` API. Custom tag colors and
-overrides best-effort parse Finder preference data, because Finder does not
-expose its full named-tag color map through a public API. A future macOS release
-can break custom color discovery; failure is non-fatal and standard colors
-remain available. Explicit preference entries, including color 0 (no color),
-override the standard colors. The synced tag list takes priority; ordinary
-preferences are used only when the synced list is unavailable.
+Foundation's tag-name API drops the color suffix. `FileTagMetadata` therefore
+reads and writes the file's `com.apple.metadata:_kMDItemUserTags` binary plist,
+whose strings contain a name followed by a newline and color number. This
+fixes a demonstrated loss of custom colors during name-only writes. Reads and
+writes follow the same symlink referent as the existing Foundation behavior.
+Foundation remains responsible for legacy labels, choosing initial colors of
+newly requested names, and updating the legacy FinderInfo label before the
+complete per-tag array is written. A failure between those writes can leave a
+partial change; the undo preimage is recorded first.
 
-The color lookup is case-insensitive and may not distinguish hypothetical
-case-distinct Finder tag definitions with different colors.
+Rendering uses stored per-tag numbers, with no preference-file lookup or
+name-based fallback. Zero stays uncolored, and unknown numbers remain intact
+in copies and archives. Case-distinct tags can have different colors. Usage
+totals with conflicting or unavailable colors are uncolored rather than
+choosing whichever file happened to be visited first.
+
+A future macOS version could change the private xattr encoding. Malformed or
+unreadable metadata is reported as an error; it is not silently treated as no
+tags. Old archives without per-item numbers cannot recover historical colors.
 
 ### 12. Colored tags can visually spill across soft-wrapped lines
 
@@ -183,6 +191,3 @@ but a very large archive can use substantial memory.
   for low-value metadata unless real users demonstrate a need.
 * Parallel recursive mutation: concurrency would amplify read-modify-write race
   risks and make deterministic behavior harder to reason about.
-* Reimplementing Finder xattrs directly: the Foundation abstraction is much
-  cleaner and should remain the primary API unless a concrete limitation is
-  found.

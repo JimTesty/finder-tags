@@ -5,8 +5,6 @@ final class Output {
     private let colors: FinderColors
     private var lastJSONRoot: String?
 
-    var colorsForArchive: FinderColors { return colors }
-
     init(options: Options, colors: FinderColors) {
         self.options = options
         self.colors = colors
@@ -14,16 +12,17 @@ final class Output {
 
     func emitFile(
         _ target: Target,
-        tags storedTags: [String],
+        tags storedTags: [StoredTag],
         metadata: FileMetadata? = nil
     ) throws {
-        var tags = options.sortedTags ? sortedTagArray(storedTags) : storedTags
+        var tags = options.sortedTags ? sortedStoredTags(storedTags) : storedTags
         if options.reverse { tags.reverse() }
 
         if options.jsonLines {
             emitJSONState(for: target)
             var object = pathObject(target)
-            object["tags"] = tags
+            object["tags"] = tags.map { $0.name }
+            object["colors"] = tagColorNumbers(tags)
             if let metadata = metadata {
                 object["size"] = metadata.size
                 object["mtime"] = metadata.modificationTime
@@ -49,7 +48,7 @@ final class Output {
     }
 
     func emitArchiveItem(_ item: ArchiveItem) throws {
-        var tags = item.tags ?? []
+        var tags = item.storedTags ?? []
         if options.reverse { tags.reverse() }
 
         let name: String?
@@ -69,10 +68,17 @@ final class Output {
     func emitUsage(_ entries: [UsageEntry]) throws {
         for entry in entries {
             if options.jsonLines {
-                try jsonRecord(["tag": entry.tag, "count": entry.count])
+                var object: [String: Any] = ["tag": entry.tag, "count": entry.count]
+                object["colors"] = entry.colors.sorted()
+                object["hasUnknownColor"] = entry.hasUnknownColor
+                try jsonRecord(object)
             } else {
+                let color = !entry.hasUnknownColor && entry.colors.count == 1 ? entry.colors.first : nil
+                if options.verbose && entry.colors.count > 1 {
+                    eprint("\(programName): info: tag \(String(reflecting: entry.tag)) has different stored colors \(entry.colors.sorted()); usage total is uncolored")
+                }
                 let separator = options.spaceIndent ? "  " : "\t"
-                record("\(entry.count)\(separator)\(colors.render(entry.tag))")
+                record("\(entry.count)\(separator)\(colors.render(entry.tag, color: color))")
             }
         }
     }
@@ -124,10 +130,10 @@ final class Output {
     ) throws {
         if options.verbose {
             let transition: String
-            if change.before == change.after {
+            if !change.hasChanges {
                 transition = "unchanged"
             } else {
-                transition = "\(verboseTags(change.before)) -> \(verboseTags(change.after))"
+                transition = "\(verboseTags(change.beforeTags)) -> \(verboseTags(change.afterTags))"
             }
             let sourceText = source.map { " from \($0.displayPath)" } ?? ""
             let action = dryRun ? "would \(operation)" : operation
@@ -140,7 +146,9 @@ final class Output {
             object["operation"] = operation
             object["before"] = change.before
             object["after"] = change.after
-            object["changed"] = change.before != change.after
+            object["beforeColors"] = tagColorNumbers(change.beforeTags)
+            object["afterColors"] = tagColorNumbers(change.afterTags)
+            object["changed"] = change.hasChanges
             object["dryRun"] = dryRun
             if let source = source { object["source"] = source.displayPath }
             try jsonRecord(object)
@@ -151,33 +159,42 @@ final class Output {
         // intentionally visible because its purpose is to preview changes.
         if !dryRun { return }
 
-        let before = change.before.map(colors.render).joined(separator: ",")
+        let before = change.beforeTags.map(colors.render).joined(separator: ",")
         let after = change.after.isEmpty
             ? "(no tags)"
-            : change.after.map(colors.render).joined(separator: ",")
-        let marker = change.before == change.after ? "=" : "->"
+            : change.afterTags.map(colors.render).joined(separator: ",")
+        let marker = change.hasChanges ? "->" : "="
         let path = try formattedPath(
             for: target,
             slash: options.slashDirectories,
             printSymlink: options.printSymlinks,
             colors: colors
         )
-        let clearNote = change.before != change.after && change.after.isEmpty
+        let clearNote = change.hasChanges && change.after.isEmpty
             ? " (would clear tags)"
             : ""
         record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)\(clearNote)")
     }
 
-    private func verboseTags(_ tags: [String]) -> String {
-        tags.isEmpty ? "(no tags)" : tags.joined(separator: ",")
+    private func verboseTags(_ tags: [StoredTag]) -> String {
+        tags.isEmpty ? "(no tags)" : tags.map {
+            "\($0.name) [color \($0.color.map(String.init) ?? "unknown")]"
+        }.joined(separator: ",")
     }
 
     private func emitText(
         name: String?,
-        tags: [String],
+        tags: [StoredTag],
         metadata: FileMetadata?,
         isDirectory: Bool = false
     ) throws {
+        if options.verbose {
+            for tag in tags {
+                if let color = tag.color, !(0...7).contains(color) {
+                    eprint("\(programName): info: tag \(String(reflecting: tag.name)) has unrecognized stored color \(color); displayed uncolored")
+                }
+            }
+        }
         let renderedTags: [String]
         if options.showTags {
             renderedTags = options.compactTags

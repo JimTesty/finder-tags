@@ -1,4 +1,28 @@
 import Foundation
+import CoreFoundation
+
+// Colors align with the ordered tag names. JSON null means unavailable, which
+// is distinct from an explicit zero (no color). Keep unfamiliar integers intact.
+func tagColorNumbers(_ tags: [StoredTag]) -> [Any] {
+    tags.map { tag -> Any in tag.color.map { $0 as Any } ?? NSNull() }
+}
+
+func archiveItemColors(_ value: Any?, tags: [String]?, line: Int) throws -> [Int?]? {
+    guard let value = value else { return nil } // Older version 3 archives.
+    guard let tags = tags, let values = value as? [Any], values.count == tags.count else {
+        throw ArchiveError.invalidLine(line: line, message: "colors must align with the tags array")
+    }
+    return try values.map { value in
+        if value is NSNull { return nil }
+        // Do not truncate fractional values or silently turn booleans into 0/1.
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              let integer = Int(number.stringValue) else {
+            throw ArchiveError.invalidLine(line: line, message: "colors must contain integers or null")
+        }
+        return integer
+    }
+}
 
 // Version 3 is the first JSONL-only archive schema. The previous version had
 // two incompatible encodings and is intentionally not read anymore.
@@ -68,11 +92,12 @@ private func archiveTagColors(_ value: Any?, line: Int) throws -> [TagColorInfo]
         guard let name = entry["name"] as? String,
               let color = entry["color"] as? NSNumber,
               !name.isEmpty,
-              color.intValue >= 0
+              CFGetTypeID(color) != CFBooleanGetTypeID(),
+              let number = Int(color.stringValue), number >= 0
         else {
             throw ArchiveError.invalidLine(line: line, message: "invalid tagColors entry")
         }
-        result.append(TagColorInfo(name: name, color: color.intValue))
+        result.append(TagColorInfo(name: name, color: number))
     }
     return result
 }

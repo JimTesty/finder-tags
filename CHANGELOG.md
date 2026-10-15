@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Read standard Finder tag colors through the public macOS label API so they
-  remain available when Finder preferences omit them or cannot be read. Merge
-  custom definitions over the defaults, preserving explicit no-color overrides.
+- Render each tag using its stored color number, including custom tags and
+  explicit no-color values, without Finder preference or name-based guesses.
+- Preserve colors during copying and edits, including color-only copies. Save
+  per-item colors in export and undo archives and restore them. Older version 3
+  archives remain readable; unknown color numbers are retained unchanged.
 - Add `--dot-files` as an alias for `--all`/`-A` to include hidden files and
   directories during filesystem traversal.
 - Add `--no-sort-files` to preserve filesystem enumeration order, including

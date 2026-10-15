@@ -107,17 +107,18 @@ tag --restore tags.archive --root restored-directory --dry-run
 gzip -dc tags.archive.gz | tag --restore - --root restored-directory
 ```
 
-Standard tag colors come from macOS's public label API, including localized
-label names. Custom colors and changes to standard colors are read from Finder
-preferences when available. Missing preference data leaves the standard colors
-available. `--verbose` reports the system defaults and preference discovery
-results; see [`REVIEW.md`](REVIEW.md) for the limitations of custom color discovery.
+Colors come from the number stored with each tag on the file, including custom
+tags. No color is inferred from a tag's name or Finder preferences. Color `0`
+means uncolored; missing or unfamiliar numbers are displayed without color.
+Copying and editing preserve existing numbers. macOS chooses initial colors
+only for newly added names. `--usage` leaves a total uncolored if the same name
+has different or unavailable colors; `--verbose` reports conflicting numbers.
 
 ## Export and restore
 
 `--export` writes a versioned, root-relative JSONL archive for one directory.
 It includes hidden and untagged items by default and preserves each stored tag
-array exactly. Archive storage is JSONL only. Use `--convert` when a
+array and per-tag colors exactly. Archive storage is JSONL only. Use `--convert` when a
 human-readable listing is wanted; converted output is presentation-only and is
 not accepted by `--restore`.
 
@@ -134,8 +135,14 @@ clear is also marked in its per-path output.
 
 Before a real restore writes anything, the complete JSONL archive is read and
 validated. The header records the archive version, symlink following mode,
-file-info setting, tagged-only setting, exclusions, and a copy of Finder's
-tag-color definitions. Item paths are relative and must not escape the selected root.
+file-info setting, tagged-only setting, and exclusions. Each item's `colors`
+array aligns with its `tags` array: integer numbers are preserved, including
+`0`, and `null` means unavailable. Color-only differences are restored and
+included in undo archives. Older version 3 archives without `colors` remain
+readable: restore retains known colors of matching live tags, and conversion
+leaves tags uncolored. The old header `tagColors` field remains accepted for
+compatibility but does not determine file colors.
+Item paths are relative and must not escape the selected root.
 Duplicate logical paths and malformed records are rejected before any tag is
 changed. This does not make filesystem changes transactional if a later
 metadata write fails.
@@ -438,8 +445,10 @@ performs the normal metadata reads and computes the exact before/after arrays,
 but does not write.
 
 Text output shows the before/after arrays. With `--jsonl`, each record contains
-`operation`, `path`, `before`, `after`, `changed`, and `dryRun`; copy records
-also contain source path information.
+`operation`, `path`, `before`, `after`, `beforeColors`, `afterColors`, `changed`,
+and `dryRun`; copy records also contain source path information. `changed`
+includes color-only changes. A dry-run can report `null` for the initial color
+of a newly requested name because macOS has not assigned it yet.
 
 `--verbose` / `-v` writes informational messages to stderr without changing
 normal output. Mutation messages include before/after tag arrays, and Spotlight
@@ -458,13 +467,14 @@ Example:
 ```json
 {"exclude":[],"fileInfo":true,"followSymlinks":false,"format":"jsonl","purpose":"export","taggedOnly":false,"type":"header","version":3}
 {"type":"root","path":"/tmp/tree"}
-{"kind":"file","mtime":1780000000,"path":"file","size":1234,"tags":["First","Second"],"type":"item"}
+{"colors":[3,0],"kind":"file","mtime":1780000000,"path":"file","size":1234,"tags":["First","Second"],"type":"item"}
 ```
 
 With `--file-info`, file records also contain numeric `size` and `mtime`
 fields.
 
-For `--usage`, records contain `tag` and `count`. Mutations emit before/after
+For `--usage`, records contain `tag`, `count`, the distinct stored `colors`, and
+`hasUnknownColor` for observations without a number. Mutations emit before/after
 records after a successful write; dry runs emit the same shape with
 `"dryRun":true`.
 
@@ -480,12 +490,13 @@ colored.
 
 ## Reliability behavior
 
-A successful Foundation read with no tag value means "no tags". A failed
-resource-value read throws and is **never** interpreted as an empty tag list.
+A successful metadata read with no tags means "no tags". Failed reads or
+malformed stored tag data are **never** interpreted as an empty tag list.
+Foundation supplies legacy label metadata when the per-tag xattr is absent.
 
 Every destructive operation reads target metadata before writing. `--copy`
 completes both source and destination reads before any destination write. Every
-actual write is then read back and compared, including array ordering. A
+actual write is then read back and compared, including names, colors, and array ordering. A
 mismatch is reported as an error.
 
 The macOS integration suite also checks that a tag write leaves the file's
