@@ -18,7 +18,7 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
     "$repo/Sources/tag/TagSyntax.swift" "$repo/Sources/tag/Utilities.swift" \
     "$repo/Sources/tag/FileTagMetadata.swift" "$repo/Sources/tag/TagStore.swift" \
     "$repo/Sources/tag/Usage.swift" \
-    "$repo/Tests/finder-colors.swift" -o "$work/finder-colors"
+    "$repo/Tests/finder-colors.swift" "$repo/Tests/text-display.swift" -o "$work/finder-colors"
 "$work/finder-colors" "$work" "$bin"
 
 touch "$work/a" "$work/b" "$work/c" "$work/space name"

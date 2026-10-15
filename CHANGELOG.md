@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Escape control characters and backslashes in text listings, previews, and
+  diagnostics before adding terminal formatting. Preserve original stored
+  names, JSON values, and NUL-delimited stdout.
 - Reject restore path escapes through Unicode separators or parent symlinks;
   require the final summary on export archives and reject malformed field types.
 - Replay undo journals in reverse order, restore explicit null colors exactly,

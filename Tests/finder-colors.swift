@@ -10,6 +10,10 @@ enum FinderColorTests {
     }
 
     static func main() throws {
+        try TextDisplayTests.run(
+            work: URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true),
+            binary: URL(fileURLWithPath: CommandLine.arguments[2])
+        )
         let renderer = FinderColors(enabled: true)
         let purple = "\u{001B}[48;5;129m"
         let reset = "\u{001B}[m"
@@ -323,7 +327,8 @@ enum FinderColorTests {
         }
         expect(setStatus == 0)
         let invalidUndo = safety.appendingPathComponent("invalid-undo.jsonl")
-        _ = try run(["--set", "Healthy", good.path, "--backup", invalidUndo.path], status: 74)
+        let invalidMutation = try run(["--set", "Healthy", good.path, "--backup", invalidUndo.path], status: 74)
+        expect(invalidMutation.err.contains(#"invalid stored tag: 'Bad\0Name\n3'"#))
         expect(!fileManager.fileExists(atPath: invalidUndo.path))
         _ = try run(["--export", safetyRoot.path, "--no-file-info"], status: 74)
         #endif

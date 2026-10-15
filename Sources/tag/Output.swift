@@ -36,7 +36,8 @@ final class Output {
                 for: target,
                 slash: options.slashDirectories,
                 printSymlink: options.printSymlinks,
-                colors: colors
+                colors: colors,
+                escapeControls: !options.nulTerminate
             )
             : nil
         try emitText(
@@ -76,10 +77,10 @@ final class Output {
             } else {
                 let color = !entry.hasUnknownColor && entry.colors.count == 1 ? entry.colors.first : nil
                 if options.verbose && entry.colors.count > 1 {
-                    eprint("\(programName): info: tag \(String(reflecting: entry.tag)) has different stored colors \(entry.colors.sorted()); usage total is uncolored")
+                    eprint("\(programName): info: tag '\(entry.tag)' has different stored colors \(entry.colors.sorted()); usage total is uncolored")
                 }
                 let separator = options.spaceIndent ? "  " : "\t"
-                record("\(entry.count)\(separator)\(colors.render(entry.tag, color: color))")
+                record("\(entry.count)\(separator)\(colors.render(displayText(entry.tag), color: color))")
             }
         }
     }
@@ -160,16 +161,17 @@ final class Output {
         // intentionally visible because its purpose is to preview changes.
         if !dryRun { return }
 
-        let before = change.beforeTags.map(colors.render).joined(separator: ",")
+        let before = change.beforeTags.map { renderTag($0) }.joined(separator: ",")
         let after = change.after.isEmpty
             ? "(no tags)"
-            : change.afterTags.map(colors.render).joined(separator: ",")
+            : change.afterTags.map { renderTag($0) }.joined(separator: ",")
         let marker = change.hasChanges ? "->" : "="
         let path = try formattedPath(
             for: target,
             slash: options.slashDirectories,
             printSymlink: options.printSymlinks,
-            colors: colors
+            colors: colors,
+            escapeControls: !options.nulTerminate
         )
         let clearNote = change.hasChanges && change.after.isEmpty
             ? " (would clear tags)"
@@ -183,6 +185,15 @@ final class Output {
         }.joined(separator: ",")
     }
 
+    private func displayText(_ text: String) -> String {
+        options.nulTerminate ? text : escapedDisplayText(text)
+    }
+
+    private func renderTag(_ tag: StoredTag, compact: Bool = false) -> String {
+        let name = compact ? String(tag.name.prefix(1)) : tag.name
+        return colors.render(displayText(name), color: tag.color)
+    }
+
     private func emitText(
         name: String?,
         tags: [StoredTag],
@@ -192,15 +203,13 @@ final class Output {
         if options.verbose {
             for tag in tags {
                 if let color = tag.color, !(0...7).contains(color) {
-                    eprint("\(programName): info: tag \(String(reflecting: tag.name)) has unrecognized stored color \(color); displayed uncolored")
+                    eprint("\(programName): info: tag '\(tag.name)' has unrecognized stored color \(color); displayed uncolored")
                 }
             }
         }
         let renderedTags: [String]
         if options.showTags {
-            renderedTags = options.compactTags
-                ? tags.map { colors.renderFirstCharacter(of: $0) }
-                : tags.map(colors.render)
+            renderedTags = tags.map { renderTag($0, compact: options.compactTags) }
         } else {
             renderedTags = []
         }
@@ -306,7 +315,7 @@ final class Output {
     }
 
     private func formattedArchivePath(_ item: ArchiveItem) -> String {
-        var path = item.path
+        var path = displayText(item.path)
         if options.slashDirectories {
             if item.kind == .symlink {
                 path += "@"
@@ -324,7 +333,7 @@ final class Output {
                !displayDestination.hasSuffix("/") {
                 displayDestination += "/"
             }
-            path += " -> " + displayDestination
+            path += " -> " + displayText(displayDestination)
             if item.symlinkTargetExists == false {
                 path += " " + colors.renderMissing("(NOT FOUND)")
             }

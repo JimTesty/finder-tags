@@ -348,6 +348,16 @@ names contain commas. Use `--jsonl` for machine consumption or
 paths and tags as proper JSON strings and arrays. `--convert` is intended for
 human-readable output rather than round-tripping.
 
+Normal text listings, previews, and diagnostics display control characters as
+visible escapes, including `\n`, `\t`, and `\u{1b}` for ESC. Unicode line and
+direction controls are escaped too; ordinary Unicode and emoji are preserved.
+Literal backslashes are doubled to distinguish them from these escapes. This
+applies to text redirected to a file as well as text shown in a terminal.
+Escaping happens before the program adds its colors and layout. Stored names,
+JSON values, and NUL-delimited (`-0`/`--null`) stdout retain their original
+contents; diagnostics are always escaped. For an exact filename stream, use
+`-0 --no-tags`.
+
 `*` remains reserved for wildcard behavior in `--match`, `--filter`, `--usage`,
 `--find`, and `--remove`.
 

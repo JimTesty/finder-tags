@@ -148,6 +148,13 @@ store Foundation's natural tag order.
 .BR -C , " --case-sensitive"
 Use exact-case matching instead of the default case-insensitive matching.
 .SH OUTPUT
+Normal text listings, previews, and diagnostics show control characters as
+visible escapes such as \en, \et, and \eu{1b} for ESC. Unicode line and
+direction controls are escaped; ordinary Unicode and emoji are preserved.
+Literal backslashes are doubled. Escaping applies to redirected text too,
+before the program adds colors and layout. Stored names, JSON values, and
+NUL-delimited stdout retain their original contents. Diagnostics are always
+escaped. Use -0 --no-tags for an exact filename stream.
 .TP
 .BR -v , " --verbose"
 Show informational messages on standard error. Mutations include their
@@ -208,7 +215,7 @@ trailing / when --slash is also specified; missing targets are marked NOT
 FOUND.
 .TP
 .BR -0 , " --null"
-Terminate text records with NUL. --nul is an alias.
+Terminate text records with NUL and leave names unescaped. --nul is an alias.
 .TP
 .B --absolute
 Display absolute logical paths.

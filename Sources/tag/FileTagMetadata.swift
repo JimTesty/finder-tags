@@ -44,14 +44,14 @@ enum FileTagMetadata {
             let scalars = value.unicodeScalars
             guard let newline = scalars.lastIndex(of: "\n") else {
                 guard !value.isEmpty, !containsInvalidTagCharacters(value) else {
-                    throw invalid("invalid stored tag: \(String(reflecting: value))")
+                    throw invalid("invalid stored tag: '\(value)'")
                 }
                 return StoredTag(name: value)
             }
             let name = String(scalars[..<newline])
             let suffix = String(scalars[scalars.index(after: newline)...])
             guard !name.isEmpty, !containsInvalidTagCharacters(name), let color = Int(suffix) else {
-                throw invalid("invalid stored tag: \(String(reflecting: value))")
+                throw invalid("invalid stored tag: '\(value)'")
             }
             return StoredTag(name: name, color: color)
         }
@@ -59,7 +59,7 @@ enum FileTagMetadata {
 
     static func write(_ tags: [StoredTag], to url: URL) throws {
         for tag in tags where tag.name.isEmpty || containsInvalidTagCharacters(tag.name) {
-            throw invalid("invalid stored tag name: \(String(reflecting: tag.name))")
+            throw invalid("invalid stored tag name: '\(tag.name)'")
         }
         #if canImport(Darwin)
         let values = tags.map { tag in

@@ -1,27 +1,28 @@
 import Foundation
 
 func usage(code: Int32 = 0) -> Never {
+    let name = escapedDisplayText(programName)
     let text = """
-    \(programName) - manipulate macOS Finder tags while preserving tag order
+    \(name) - manipulate macOS Finder tags while preserving tag order
 
     finder-tags executable: tag
     Usage-compatible with jdberry/tag where noted.
 
     usage:
-      \(programName) [-l | --list] [options] [path ...]
-      \(programName) -a | --add TAGS [placement] [options] path ...
-      \(programName) -r | --remove TAGS [options] path ...
-      \(programName) -s | --set TAGS [options] path ...
-      \(programName) -m | --match TAGS [options] [path ...]
-      \(programName) --filter TAGS [options] [path ...]
-      \(programName) -u | --usage TAGS [options] [path ...]
-      \(programName) -f | --find TAGS [options] [path ...]
-      \(programName) --move TAG POSITION [options] path ...
-      \(programName) --move TAG --before|--after TAG [options] path ...
-      \(programName) --copy SOURCE DESTINATION [--dry-run]
-      \(programName) --export [options] [ROOT]
-      \(programName) --restore ARCHIVE [--root DEST] [--dry-run]
-      \(programName) --convert ARCHIVE [options]
+      \(name) [-l | --list] [options] [path ...]
+      \(name) -a | --add TAGS [placement] [options] path ...
+      \(name) -r | --remove TAGS [options] path ...
+      \(name) -s | --set TAGS [options] path ...
+      \(name) -m | --match TAGS [options] [path ...]
+      \(name) --filter TAGS [options] [path ...]
+      \(name) -u | --usage TAGS [options] [path ...]
+      \(name) -f | --find TAGS [options] [path ...]
+      \(name) --move TAG POSITION [options] path ...
+      \(name) --move TAG --before|--after TAG [options] path ...
+      \(name) --copy SOURCE DESTINATION [--dry-run]
+      \(name) --export [options] [ROOT]
+      \(name) --restore ARCHIVE [--root DEST] [--dry-run]
+      \(name) --convert ARCHIVE [options]
 
     Mutation TAGS uses a CSV-like comma-separated grammar. Shell quoting still
     works as usual, and quotes inside TAGS allow literal commas, for example:
@@ -74,7 +75,7 @@ func usage(code: Int32 = 0) -> Never {
           --no-garrulous         Alias for --comma-separated
       -p, --slash                Append '/' to directories and '@' to symlinks
           --print-symlinks       Show each symlink's stored destination (text)
-      -0, --null                 Terminate text records with NUL
+      -0, --null                 Terminate with NUL; leave names unescaped
           --nul                  Backward-compatible alias for --null
           --absolute             Display absolute logical paths
           --file-info            Include file size and mtime in list/match/find/export
@@ -176,14 +177,17 @@ func usage(code: Int32 = 0) -> Never {
       * --home/--local/--network are not implemented for --find.
       * Quoted TAGS can contain commas; jdberry/tag's grammar cannot.
 
+    Normal text and diagnostics escape control characters and backslashes.
+    JSON values and NUL-delimited stdout preserve the original names.
     Use -- before a path beginning with '-'.
     """
 
-    if code == 0 { print(text) } else { eprint(text) }
+    let stream = code == 0 ? FileHandle.standardOutput : FileHandle.standardError
+    stream.write(Data((text + "\n").utf8))
     exit(code)
 }
 
 func version() -> Never {
-    print("\(programName) \(programVersion)")
+    print("\(escapedDisplayText(programName)) \(programVersion)")
     exit(0)
 }

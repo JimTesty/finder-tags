@@ -86,6 +86,10 @@ does not reliably round-trip them as Finder tags.
 
 `--jsonl` is the archival and recommended machine-readable format because JSON
 escaping preserves comma-containing tags and path strings structurally.
+Normal text and diagnostics escape control characters, Unicode line/direction
+controls, and literal backslashes before adding the program's formatting.
+NUL-delimited stdout preserves raw names; `-0 --no-tags` provides an exact
+filename stream.
 
 Query operators are supported by `--match`, `--filter`, `--usage`, and
 `--find`: comma means AND, `|` means OR, a leading `-` means NOT, and
