@@ -48,11 +48,16 @@ func parsePosition(_ raw: String) -> PositionSpec {
     }
 }
 
+func containsInvalidTagCharacters(_ tag: String) -> Bool {
+    // Inspect scalars: CRLF is a single Character, but contains two line breaks.
+    tag.unicodeScalars.contains { $0.value == 0 || $0.value == 10 || $0.value == 13 }
+}
+
 private func validateTagName(_ tag: String) {
     // NSURLTagNamesKey does not round-trip line breaks reliably on macOS: a
     // write can succeed but a subsequent read returns only the prefix before
     // the newline. Reject values we know cannot be represented faithfully.
-    if tag.contains("\n") || tag.contains("\r") || tag.unicodeScalars.contains("\0") {
+    if containsInvalidTagCharacters(tag) {
         fail("tag names may not contain CR, LF, or NUL characters")
     }
 }

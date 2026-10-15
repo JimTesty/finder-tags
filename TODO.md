@@ -1,5 +1,18 @@
 # Future work
 
+## Deferred audit work (2026-10-15)
+
+* Full summary accounting and interrupted undo-journal recovery. Export archives
+  now require their final summary, but counts and exporter error totals are not
+  validated. Broader reader/writer recovery rules have low current value while
+  export/restore is unused; no legacy-format migration work is planned.
+* Eliminate concurrent path-replacement races with descriptor-based traversal
+  and writes. Restore checks parent symlinks before writing and again per item,
+  but locking down identity through Foundation's label/initial-color writes
+  needs a larger I/O design. Defer that complexity for this local tool.
+
+## Other future work
+
 These are intentionally deferred until the JSONL archive and restore path have
 more real-world use. Recursive traversal now sorts each directory's children
 by literal filename by default, so unchanged exports have stable item order

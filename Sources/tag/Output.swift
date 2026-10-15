@@ -20,7 +20,7 @@ final class Output {
 
         if options.jsonLines {
             emitJSONState(for: target)
-            var object = pathObject(target)
+            var object = try pathObject(target)
             object["tags"] = tags.map { $0.name }
             object["colors"] = tagColorNumbers(tags)
             if let metadata = metadata {
@@ -48,7 +48,8 @@ final class Output {
     }
 
     func emitArchiveItem(_ item: ArchiveItem) throws {
-        var tags = item.storedTags ?? []
+        let storedTags = item.storedTags ?? []
+        var tags = options.sortedTags ? sortedStoredTags(storedTags) : storedTags
         if options.reverse { tags.reverse() }
 
         let name: String?
@@ -142,7 +143,7 @@ final class Output {
 
         if options.jsonLines {
             emitJSONState(for: target)
-            var object = pathObject(target)
+            var object = try pathObject(target)
             object["operation"] = operation
             object["before"] = change.before
             object["after"] = change.after
@@ -150,7 +151,7 @@ final class Output {
             object["afterColors"] = tagColorNumbers(change.afterTags)
             object["changed"] = change.hasChanges
             object["dryRun"] = dryRun
-            if let source = source { object["source"] = source.displayPath }
+            if let source = source { object["source"] = source.absolutePath }
             try jsonRecord(object)
             return
         }
@@ -333,10 +334,19 @@ final class Output {
         return path
     }
 
-    private func pathObject(_ target: Target) -> [String: Any] {
+    private func pathObject(_ target: Target) throws -> [String: Any] {
+        let path: String
+        if !options.absolutePaths, let root = target.rootPath {
+            guard let relative = relativeLogicalPath(target.logicalURL, to: URL(fileURLWithPath: root)) else {
+                throw ArchiveError.invalidPath(target.absolutePath)
+            }
+            path = relative
+        } else {
+            path = target.absolutePath
+        }
         var object: [String: Any] = [
             "type": "item",
-            "path": target.displayPath,
+            "path": path,
             "kind": itemKind(for: target).rawValue
         ]
         if let link = symbolicLinkInfo(for: target.logicalURL), options.printSymlinks {

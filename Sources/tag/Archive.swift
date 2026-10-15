@@ -63,6 +63,7 @@ enum ArchiveError: LocalizedError {
     case invalidHeader(String)
     case unsupportedRecord(String)
     case invalidSymlink(String)
+    case symlinkAncestor(String)
     case modeMismatch(archive: Bool, requested: Bool)
 
     var errorDescription: String? {
@@ -87,6 +88,8 @@ enum ArchiveError: LocalizedError {
             return "unsupported archive record type: \(type)"
         case let .invalidSymlink(path):
             return "invalid archive symlink metadata: \(path)"
+        case let .symlinkAncestor(path):
+            return "restore path traverses a parent symlink in no-follow mode: \(path)"
         case let .modeMismatch(archive, requested):
             return "archive follow-symlinks mode is \(archive ? "enabled" : "disabled"), "
                 + "but restore requested \(requested ? "enabled" : "disabled"); "
@@ -112,7 +115,7 @@ private struct ArchiveBuilder {
     }
 
     mutating func setRoot(_ rawPath: String) throws {
-        guard rawPath.hasPrefix("/"), !rawPath.unicodeScalars.contains("\0") else {
+        guard rawPath.utf8.first == 47, !rawPath.utf8.contains(0) else {
             throw ArchiveError.invalidRoot(rawPath)
         }
         guard rootPath == nil else { throw ArchiveError.multipleRoots }
@@ -121,7 +124,7 @@ private struct ArchiveBuilder {
 
     mutating func addItem(_ item: ArchiveItem) throws {
         try validateRelativeArchivePath(item.path)
-        guard itemPaths.insert(item.path).inserted else {
+        if !itemPaths.insert(item.path).inserted && header?.purpose != "undo" {
             throw ArchiveError.duplicatePath(item.path)
         }
         if let tags = item.tags {
@@ -240,7 +243,11 @@ struct ArchiveReader {
         guard sawHeader else {
             throw ArchiveError.invalidLine(line: 1, message: "missing JSON archive header")
         }
-        return try builder.document()
+        let document = try builder.document()
+        if document.header.purpose == "export" && !sawSummary {
+            throw ArchiveError.invalidLine(line: lines.count, message: "incomplete export archive: missing final summary")
+        }
+        return document
     }
 
     private func parseItem(_ object: [String: Any], line: Int) throws -> ArchiveItem {
@@ -270,13 +277,18 @@ struct ArchiveReader {
         }
 
         let metadata = try jsonMetadata(object, line: line)
-        let destination = object["destination"] as? String
+        let destination: String?
+        if let value = object["destination"] {
+            guard let string = value as? String else {
+                throw ArchiveError.invalidLine(line: line, message: "destination must be a string")
+            }
+            destination = string
+        } else {
+            destination = nil
+        }
         let targetExists: Bool?
         if let value = object["targetExists"] {
-            guard let bool = value as? Bool else {
-                throw ArchiveError.invalidLine(line: line, message: "targetExists must be boolean")
-            }
-            targetExists = bool
+            targetExists = try archiveBoolean(value, field: "targetExists", line: line)
         } else {
             targetExists = nil
         }
@@ -307,15 +319,11 @@ struct ArchiveReader {
 
     private func jsonMetadata(_ object: [String: Any], line: Int) throws -> FileMetadata? {
         guard object["size"] != nil || object["mtime"] != nil else { return nil }
-        guard let size = object["size"] as? NSNumber,
-              let mtime = object["mtime"] as? NSNumber else {
-            throw ArchiveError.invalidLine(line: line, message: "size and mtime must be numbers")
+        guard let size = archiveInteger(object["size"]), size >= 0,
+              let mtime = archiveFiniteNumber(object["mtime"]) else {
+            throw ArchiveError.invalidLine(line: line, message: "size must be a nonnegative integer and mtime a finite number")
         }
-        let metadata = FileMetadata(size: size.int64Value, modificationTime: mtime.doubleValue)
-        guard metadata.size >= 0, metadata.modificationTime.isFinite else {
-            throw ArchiveError.invalidLine(line: line, message: "invalid size or mtime")
-        }
-        return metadata
+        return FileMetadata(size: Int64(size), modificationTime: mtime)
     }
 }
 
@@ -407,12 +415,10 @@ final class ArchiveWriter {
     }
 
     private func relativePath(_ logicalURL: URL, to rootURL: URL) throws -> String {
-        let root = rootURL.standardizedFileURL.path
-        let logical = logicalURL.standardizedFileURL.path
-        if logical == root { return "." }
-        let prefix = root.hasSuffix("/") ? root : root + "/"
-        guard logical.hasPrefix(prefix) else { throw ArchiveError.invalidPath(logical) }
-        return String(logical.dropFirst(prefix.count))
+        guard let path = relativeLogicalPath(logicalURL, to: rootURL) else {
+            throw ArchiveError.invalidPath(logicalURL.path)
+        }
+        return path
     }
 
     private func writeJSON(_ object: [String: Any]) throws {
@@ -436,12 +442,15 @@ final class UndoWriter {
 
     func record(target: Target, tags: [StoredTag]) throws {
         try openIfNeeded()
-        let absolute = target.logicalURL.standardizedFileURL.path
-        let path = absolute == "/" ? "." : String(absolute.dropFirst())
+        // The preimage belongs to the file edited, even when an operand or a
+        // parent directory is a symlink. Later retargeting must not redirect undo.
+        let ioURL = resolvedTagURL(target.url)
+        let absolute = ioURL.path
+        let path = absolute == "/" ? "." : String(decoding: absolute.utf8.dropFirst(), as: UTF8.self)
         let object: [String: Any] = [
             "type": "item",
             "path": path,
-            "kind": itemKind(for: target).rawValue,
+            "kind": try itemKind(for: ioURL).rawValue,
             "tags": tags.map { $0.name },
             "colors": tagColorNumbers(tags)
         ]
@@ -464,13 +473,12 @@ final class UndoWriter {
     private func openIfNeeded() throws {
         if handle != nil { return }
         let url = expandedFileURL(path)
-        if fileManager.fileExists(atPath: url.path) {
-            throw ArchiveIOError.alreadyExists(path: url.path)
-        }
-        guard fileManager.createFile(atPath: url.path, contents: nil, attributes: nil),
-              let file = FileHandle(forWritingAtPath: url.path) else {
+        let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL, mode_t(0o600))
+        guard descriptor >= 0 else {
+            if errno == EEXIST { throw ArchiveIOError.alreadyExists(path: url.path) }
             throw ArchiveIOError.cannotCreate(path: url.path)
         }
+        let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         handle = file
         let header = archiveHeaderObject(
             purpose: "undo",
@@ -489,9 +497,8 @@ final class UndoWriter {
         eprint("\(programName): undo archive: \(url.path)")
     }
 
-    private func itemKind(for target: Target) -> ArchiveItemKind {
-        if isSymbolicLink(target.logicalURL) { return .symlink }
-        return (try? target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    private func itemKind(for url: URL) throws -> ArchiveItemKind {
+        return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
             ? .directory
             : .file
     }

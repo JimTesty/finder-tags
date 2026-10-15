@@ -1,6 +1,6 @@
 # Source review and development notes
 
-Last reviewed: 2026-09-16
+Last reviewed: 2026-10-15
 
 This is a lightweight source review, not a security audit. The code has shell
 coverage and macOS integration tests, but the project is still **not thoroughly
@@ -101,7 +101,8 @@ shown relative to that root. If several roots each contain `sub/file`, plain
 text can therefore contain repeated `sub/file` paths.
 
 Use `--absolute` for ordinary output, or use JSONL's stateful `root` record and
-logical relative paths when consuming recursive output. Export/restore v1
+logical relative paths when consuming recursive output. JSONL uses `.` for
+the root item, independently of text argument spelling. Export/restore
 intentionally supports one archive root and uses `--root DEST` for relocation.
 
 ### 11. Finder's per-tag metadata format is not a public API
@@ -155,17 +156,38 @@ Spotlight-backed implementation.
 
 ### 14. Export/restore is not transactional
 
-Restore validates the complete archive before the first tag write and
-re-resolves each destination immediately before comparing and changing it. It
+Restore parses and validates all archive records before the first tag write.
+It validates path separators as bytes, rejects parent symlinks without `-L`,
+and repeats destination checks immediately before comparing and changing each item. It
 does not lock files or roll back earlier changes if a later file fails. A
-per-file undo archive is written before each mutation by default, but without
+per-file undo archive is created exclusively and written before each mutation by default, but without
 `--sync-backup` a sudden power loss can still leave the most recent buffered
 preimage unavailable. The undo archive is deliberately a local temporary file;
 compressed/journaled undo output needs a separate atomicity design.
 
 The archive reader currently buffers the input before restore so it can validate
-the complete document before the first write. This is simple and safe for v1,
+all records before the first write. Export archives require a final summary,
+while undo journals can be unfinished. Summary contents are not yet validated.
+This remains a simple buffered reader,
 but a very large archive can use substantial memory.
+
+### Deferred after the adversarial audit
+
+The October audit's path, metadata, undo, CLI, launcher, and JSONL fixes have
+focused regression coverage. Two broader changes are deferred because
+export/restore is not currently used and the added complexity has little
+immediate value:
+
+* **Full archive completion and recovery rules.** Missing export summaries are
+  rejected, but summary counts, exporter error totals, and recovery from a torn
+  final undo record need one explicit policy across the reader and writers.
+  This is deferred format work, not a compatibility requirement.
+* **Protection against concurrent filesystem replacement.** Parent checks stop
+  existing symlink escapes, but another process can replace an entry between
+  checking and writing it. Closing that window requires file-descriptor-based
+  traversal and tag I/O, including a plan for Foundation's path-based label and
+  initial-color writes. That is a substantial integration change for a local
+  metadata tool. The existing read-modify-write race remains as well.
 
 ## Potential improvements / features
 

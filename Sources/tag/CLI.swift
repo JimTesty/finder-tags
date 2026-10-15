@@ -105,8 +105,14 @@ func parseArguments() -> Options {
             )
             let name = String(parts[0])
             let inlineValue = parts.count == 2 ? String(parts[1]) : nil
+            var takesValue = false
+
+            func rejectInlineValue() {
+                if inlineValue != nil { fail("--\(name) does not take an argument") }
+            }
 
             func operand() -> String {
+                takesValue = true
                 if let value = inlineValue { return value }
                 return requireValue("--\(name)", args: args, index: &i)
             }
@@ -172,6 +178,7 @@ func parseArguments() -> Options {
                 setPosition(.after(tag), options: &options, option: "--after")
             case "sorted-tags", "sort-tags": options.sortedTags = true
             case "color":
+                takesValue = true
                 options.colorMode = inlineValue.map(parseColorMode) ?? .auto
                 options.colorWasSet = true
             case "reverse": options.reverse = true; options.reverseWasSet = true
@@ -227,11 +234,12 @@ func parseArguments() -> Options {
                 if options.stdinPathMode != nil { fail("stdin path mode may be specified only once") }
                 options.stdinPathMode = .nul
                 options.pathInputExplicit = true
-            case "help": usage()
-            case "version": version()
+            case "help": rejectInlineValue(); usage()
+            case "version": rejectInlineValue(); version()
             default: fail("unknown option: --\(name)")
             }
 
+            if !takesValue { rejectInlineValue() }
             i += 1
             continue
         }
@@ -293,6 +301,9 @@ func parseArguments() -> Options {
     case .convert:
         if !options.paths.isEmpty {
             fail("--convert accepts the archive path, not filesystem paths")
+        }
+        if options.jsonLines {
+            fail("--jsonl is not valid with --convert; conversion produces text")
         }
     case .copy:
         if options.paths.count != 2 {

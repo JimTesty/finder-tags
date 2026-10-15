@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 
 @main
 enum FinderColorTests {
@@ -23,7 +26,8 @@ enum FinderColorTests {
         }
         let decoded = try FileTagMetadata.decode(plist(["Custom\n3", "None\n0", "Odd\n99", "Negative\n-3", "Bare"]))
         expect(decoded.map { $0.color } == [3, 0, 99, -3, nil])
-        for invalid: Any in [["Bad\nwrong"], [""], ["Bad\nname\n3"], ["Not": "an array"]] {
+        for invalid: Any in [["Bad\nwrong"], [""], ["Bad\nname\n3"], ["Not": "an array"],
+                             ["Bad\r\nName\n3"], ["Bad\0Name\n3"], ["Bad\rName"], ["Bad\r\n3"]] {
             do {
                 _ = try FileTagMetadata.decode(plist(invalid))
                 preconditionFailure("accepted malformed tag metadata")
@@ -173,6 +177,155 @@ enum FinderColorTests {
             expect(try store.readTags(source) == original)
             expect(try store.readTags(destination) == original)
         }
+
+        let safety = work.appendingPathComponent("safety", isDirectory: true)
+        let safetyRoot = safety.appendingPathComponent("root", isDirectory: true)
+        let outside = safety.appendingPathComponent("outside", isDirectory: true)
+        try fileManager.createDirectory(at: safetyRoot, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: outside, withIntermediateDirectories: true)
+        let baseline = [StoredTag(name: "Keep", color: 0)]
+        func fixture(_ url: URL, tags: [StoredTag] = baseline) throws {
+            try Data().write(to: url)
+            try FileTagMetadata.write(tags, to: url)
+        }
+        let good = safetyRoot.appendingPathComponent("good")
+        let outsideFile = outside.appendingPathComponent("victim")
+        let unicodeFile = safety.appendingPathComponent("\u{0301}victim")
+        try fixture(good)
+        try fixture(outsideFile)
+        try fixture(unicodeFile)
+        try fileManager.createSymbolicLink(atPath: safetyRoot.appendingPathComponent("sub").path,
+                                           withDestinationPath: "../outside")
+        let safetyArchive = safety.appendingPathComponent("archive.jsonl")
+        func item(_ path: String, tags: [StoredTag] = [StoredTag(name: "Changed", color: 3)]) -> [String: Any] {
+            return ["type": "item", "kind": "file", "path": path, "tags": tags.map { $0.name },
+                    "colors": tags.map { $0.color.map { $0 as Any } ?? NSNull() }]
+        }
+        func safetyDocument(_ items: [[String: Any]], headerPatch: [String: Any] = [:]) throws {
+            var header = exportedRecords[0]
+            for (key, value) in headerPatch { header[key] = value }
+            let summary: [String: Any] = [
+                "type": "summary", "operation": "export", "visited": items.count,
+                "emitted": items.count, "tagged": items.count, "errors": 0, "warnings": 0
+            ]
+            try writeRecords([header, ["type": "root", "path": safetyRoot.path]] + items + [summary], to: safetyArchive)
+        }
+
+        try safetyDocument([item("good")])
+        var truncated = try records(String(contentsOf: safetyArchive, encoding: .utf8))
+        truncated.removeLast()
+        try writeRecords(truncated, to: safetyArchive)
+        _ = try run(["--restore", safetyArchive.path, "--no-backup"], status: 74)
+        expect(try store.readTags(good) == baseline)
+
+        // Reject escapes before even an earlier, valid record can change tags.
+        for path in ["../\u{0301}victim", "sub/victim"] {
+            try safetyDocument([item("good"), item(path)])
+            _ = try run(["--restore", safetyArchive.path, "--no-backup"], status: 74)
+            expect(try store.readTags(good) == baseline)
+            expect(try store.readTags(outsideFile) == baseline)
+            expect(try store.readTags(unicodeFile) == baseline)
+        }
+        // Explicit following remains supported with a matching archive mode.
+        try safetyDocument([item("sub/victim")], headerPatch: ["followSymlinks": true])
+        _ = try run(["--restore", safetyArchive.path, "-L", "--no-backup"])
+        expect(try store.readTags(outsideFile) == [StoredTag(name: "Changed", color: 3)])
+
+        let parentUndo = safety.appendingPathComponent("parent-undo.jsonl")
+        let throughParent = safetyRoot.appendingPathComponent("sub/victim")
+        _ = try run(["--set", "ViaParent", throughParent.path, "--backup", parentUndo.path])
+        _ = try run(["--restore", parentUndo.path, "--no-backup"])
+        expect(try store.readTags(outsideFile) == [StoredTag(name: "Changed", color: 3)])
+
+        // A real filename beginning with a combining character is not an escape.
+        let validUnicode = safetyRoot.appendingPathComponent("\u{0301}valid")
+        try fixture(validUnicode)
+        let unicodeExport = try run(["--export", safetyRoot.path, "--no-file-info"]).out
+        expect(try records(unicodeExport).contains { $0["path"] as? String == "\u{0301}valid" })
+
+        for patch: [String: Any] in [["version": 3.9], ["purpose": 42], ["followSymlinks": "true"],
+                                     ["followSymlinks": 1], ["fileInfo": []], ["taggedOnly": NSNull()]] {
+            try safetyDocument([item("good")], headerPatch: patch)
+            _ = try run(["--restore", safetyArchive.path, "--no-backup"], status: 74)
+            expect(try store.readTags(good) == baseline)
+        }
+        for patch: [String: Any] in [["size": true, "mtime": 0], ["size": 1.9, "mtime": 0],
+                                     ["size": 0, "mtime": true], ["destination": 1], ["targetExists": 1],
+                                     ["tags": ["Bad\r\nName"]]] {
+            var bad = item("good")
+            for (key, value) in patch { bad[key] = value }
+            try safetyDocument([item("good"), bad.merging(["path": "\u{0301}valid"]) { _, new in new }])
+            _ = try run(["--restore", safetyArchive.path, "--no-backup"], status: 74)
+            expect(try store.readTags(good) == baseline)
+        }
+
+        // Undo must restore an explicit missing suffix, including a color-only edit.
+        try FileTagMetadata.write([StoredTag(name: "Purple")], to: bare)
+        try FileTagMetadata.write([StoredTag(name: "Purple", color: 3)], to: bareCopy)
+        let nullUndo = safety.appendingPathComponent("null-undo.jsonl")
+        _ = try run(["--copy", bareCopy.path, bare.path, "--backup", nullUndo.path])
+        _ = try run(["--restore", nullUndo.path, "--no-backup"])
+        expect(try store.readTags(bare) == [StoredTag(name: "Purple")])
+
+        let alias = safetyRoot.appendingPathComponent("alias")
+        try fileManager.linkItem(at: good, to: alias)
+        try safetyDocument([item("good", tags: [StoredTag(name: "First", color: 3)]),
+                            item("alias", tags: [StoredTag(name: "Second", color: 6)])])
+        let aliasUndo = safety.appendingPathComponent("alias-undo.jsonl")
+        _ = try run(["--restore", safetyArchive.path, "--backup", aliasUndo.path])
+        _ = try run(["--restore", aliasUndo.path, "--no-backup"])
+        expect(try store.readTags(good) == baseline)
+
+        // Symlink aliases resolve to duplicate journal paths; both preimages
+        // must survive so reversing the journal reaches the original state.
+        let link = safetyRoot.appendingPathComponent("file-link")
+        try fileManager.createSymbolicLink(atPath: link.path, withDestinationPath: "good")
+        var linkItem = item("file-link", tags: [StoredTag(name: "Second", color: 6)])
+        linkItem["kind"] = "symlink"
+        try safetyDocument([item("good", tags: [StoredTag(name: "First", color: 3)]), linkItem],
+                           headerPatch: ["followSymlinks": true])
+        let linkUndo = safety.appendingPathComponent("link-undo.jsonl")
+        _ = try run(["--restore", safetyArchive.path, "-L", "--backup", linkUndo.path])
+        let journalItems = try records(String(contentsOf: linkUndo, encoding: .utf8))
+            .filter { $0["type"] as? String == "item" }
+        expect(journalItems.count == 2 && journalItems[0]["path"] as? String == journalItems[1]["path"] as? String)
+        try fileManager.removeItem(at: link)
+        try fileManager.createSymbolicLink(atPath: link.path, withDestinationPath: "../outside/victim")
+        _ = try run(["--restore", linkUndo.path, "-L", "--no-backup"])
+        expect(try store.readTags(good) == baseline)
+        expect(try store.readTags(outsideFile) == [StoredTag(name: "Changed", color: 3)])
+
+        let unsorted = [StoredTag(name: "B", color: 3), StoredTag(name: "A", color: 6)]
+        try safetyDocument([item("good", tags: unsorted)])
+        expect(try run(["--convert", safetyArchive.path, "--sorted-tags", "-N"]).out == "A,B\n")
+        _ = try run(["--restore", safetyArchive.path, "--sorted-tags", "--no-backup"])
+        expect(try store.readTags(good) == sortedStoredTags(unsorted))
+        _ = try run(["--convert", safetyArchive.path, "--jsonl"], status: 64)
+
+        // Exclusive backup creation must refuse both files and dangling links.
+        let protected = safety.appendingPathComponent("protected")
+        try Data("keep".utf8).write(to: protected)
+        let dangling = safety.appendingPathComponent("dangling-backup")
+        let absent = safety.appendingPathComponent("must-not-be-created")
+        try fileManager.createSymbolicLink(atPath: dangling.path, withDestinationPath: absent.path)
+        let beforeBackup = try store.readTags(good)
+        for backup in [protected, dangling] {
+            _ = try run(["--set", "Collision", good.path, "--backup", backup.path], status: 74)
+            expect(try store.readTags(good) == beforeBackup)
+        }
+        expect(try Data(contentsOf: protected) == Data("keep".utf8))
+        expect(!fileManager.fileExists(atPath: absent.path))
+
+        // Malformed raw metadata must fail before a mutation or undo write.
+        let malformedData = try plist(["Bad\0Name\n3"])
+        let setStatus = malformedData.withUnsafeBytes {
+            setxattr(good.path, "com.apple.metadata:_kMDItemUserTags", $0.baseAddress, $0.count, 0, 0)
+        }
+        expect(setStatus == 0)
+        let invalidUndo = safety.appendingPathComponent("invalid-undo.jsonl")
+        _ = try run(["--set", "Healthy", good.path, "--backup", invalidUndo.path], status: 74)
+        expect(!fileManager.fileExists(atPath: invalidUndo.path))
+        _ = try run(["--export", safetyRoot.path, "--no-file-info"], status: 74)
         #endif
         print("Finder color tests passed")
     }

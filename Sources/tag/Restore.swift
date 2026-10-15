@@ -32,18 +32,9 @@ struct RestoreEngine {
 
         warnAboutChangedSymlinks(&stats)
 
-        var destinations: [String: URL] = [:]
         for entry in document.items {
             do {
-                let destination = try destinationURL(for: entry.path)
-                if destinations[entry.path] != nil {
-                    // ArchiveReader already rejects conflicting duplicates. This
-                    // guard keeps the preflight invariant local to restore too.
-                    stats.errors += 1
-                    onError("duplicate restore path: \(entry.path)")
-                    continue
-                }
-                destinations[entry.path] = destination
+                _ = try destinationURL(for: entry.path)
             } catch {
                 stats.errors += 1
                 onError(error.localizedDescription)
@@ -51,13 +42,18 @@ struct RestoreEngine {
         }
         if stats.errors > 0 { return stats }
 
-        for entry in document.items {
+        // Undo records contain chronological preimages. Reverse them so aliases
+        // of the same file return to the state before the first mutation.
+        let items = document.header.purpose == "undo"
+            ? Array(document.items.reversed()) : document.items
+        for entry in items {
             if options.taggedOnly && (entry.tags == nil || entry.tags!.isEmpty) {
                 continue
             }
-            guard let logicalURL = destinations[entry.path] else { continue }
             stats.visited += 1
             do {
+                // Repeat path and parent checks immediately before this item.
+                let logicalURL = try destinationURL(for: entry.path)
                 // Use a direct existence check here. Foundation can cache a
                 // successful resource reachability result after a file has
                 // been removed, which would misclassify a missing archive
@@ -92,13 +88,15 @@ struct RestoreEngine {
 
                 let ioURL = tagIOURL(logicalURL, followSymlinks: options.followSymlinks)
                 let before = try store.readTags(ioURL)
-                // Older records lack per-file colors. Preserve matching live
-                // colors rather than applying a guessed header-wide palette.
-                let after = entry.storedTags!.map { tag in
-                    guard tag.color == nil else { return tag }
-                    return before.first { $0.name == tag.name } ?? tag
+                var after = entry.storedTags!
+                if entry.colors == nil {
+                    // Only a missing array uses the old name-only behavior.
+                    // Explicit null entries must restore the missing suffix.
+                    after = after.map { tag in before.first { $0.name == tag.name } ?? tag }
                 }
-                let change = TagChange(beforeTags: before, afterTags: after)
+                let change = sortedChangeIfRequested(
+                    TagChange(beforeTags: before, afterTags: after), options: options
+                )
                 let target = Target(
                     url: ioURL,
                     logicalURL: logicalURL,
@@ -137,20 +135,19 @@ struct RestoreEngine {
     }
 
     private func destinationURL(for path: String) throws -> URL {
-        // ArchiveReader validates this too. Repeating the lexical check here
-        // makes it impossible for a future reader change to turn a path into a
-        // destination outside the selected root.
-        if path.isEmpty || path.hasPrefix("/") || path == ".." {
+        try validateRelativeArchivePath(path)
+        let destination = destinationRoot.appendingPathComponent(path).standardizedFileURL
+        guard relativeLogicalPath(destination, to: destinationRoot) != nil else {
             throw ArchiveError.invalidPath(path)
         }
-        let components = path.split(separator: "/", omittingEmptySubsequences: false)
-        if components.contains(where: {
-            let component = String($0)
-            return component.isEmpty || component == "." || component == ".."
-        }) && path != "." {
-            throw ArchiveError.invalidPath(path)
+        if !options.followSymlinks {
+            var ancestor = destinationRoot
+            for component in path.utf8.split(separator: 47).dropLast() {
+                ancestor.appendPathComponent(String(decoding: component, as: UTF8.self))
+                if try checkedSymbolicLink(ancestor) { throw ArchiveError.symlinkAncestor(ancestor.path) }
+            }
         }
-        return destinationRoot.appendingPathComponent(path).standardizedFileURL
+        return destination
     }
 
     private func warnAboutChangedSymlinks(_ stats: inout ArchiveStats) {

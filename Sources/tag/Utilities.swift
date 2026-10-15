@@ -84,6 +84,17 @@ func tagIOURL(_ logicalURL: URL, followSymlinks: Bool) -> URL {
     return followSymlinks ? resolvedTagURL(logicalURL) : logicalURL.standardizedFileURL
 }
 
+// Filesystem separators must be compared as bytes, independently of graphemes
+// such as a slash followed by a combining character.
+func relativeLogicalPath(_ url: URL, to rootURL: URL) -> String? {
+    let path = url.standardizedFileURL.path
+    let root = rootURL.standardizedFileURL.path
+    if path.utf8.elementsEqual(root.utf8) { return "." }
+    let prefix = root.hasSuffix("/") ? root : root + "/"
+    guard path.utf8.starts(with: prefix.utf8) else { return nil }
+    return String(decoding: path.utf8.dropFirst(prefix.utf8.count), as: UTF8.self)
+}
+
 struct SymbolicLinkInfo {
     let destination: String
     let targetURL: URL
@@ -120,6 +131,17 @@ func isSymbolicLink(_ url: URL) -> Bool {
     // when the path itself is a symbolic link, without relying on resource
     // values that may describe the referent.
     return (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) != nil
+}
+
+func checkedSymbolicLink(_ url: URL) throws -> Bool {
+    var info = stat()
+    guard lstat(url.path, &info) == 0 else {
+        // Missing parents are handled as missing items by restore. Other
+        // inspection failures must not bypass its parent-symlink check.
+        if errno == ENOENT || errno == ENOTDIR { return false }
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSFilePathErrorKey: url.path])
+    }
+    return info.st_mode & mode_t(S_IFMT) == mode_t(S_IFLNK)
 }
 
 func formattedPath(
@@ -160,7 +182,8 @@ func readPathsFromStdin(_ mode: StdinPathMode) -> [String] {
     switch mode {
     case .lines:
         let text = String(decoding: data, as: UTF8.self)
-        return text.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).map(String.init)
+        return text.unicodeScalars.split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+            .map(String.init)
     case .nul:
         var result: [String] = []
         var start = data.startIndex

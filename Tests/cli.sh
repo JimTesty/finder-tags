@@ -196,9 +196,11 @@ if printf '%s\n' "$json_path" | grep -Fq '"absolutePath"'; then
     echo "JSONL unexpectedly repeated absolutePath" >&2
     exit 1
 fi
-printf '%s\n' "$json_path" | grep -Fq '"path":"a"'
+printf '%s\n' "$json_path" | grep -Fq '"path":"."'
 json_recursive=$("$bin" --jsonl -R "$work/tree")
 [ "$(printf '%s\n' "$json_recursive" | grep -c '"type":"root"')" -eq 1 ]
+printf '%s\n' "$json_recursive" | grep -Fq '"path":"."'
+printf '%s\n' "$json_recursive" | grep -Fq '"path":"root-file"'
 if printf '%s\n' "$json_recursive" | grep -q '"destination"'; then
     echo "default JSONL unexpectedly recorded symlink target metadata" >&2
     exit 1
@@ -215,6 +217,8 @@ printf '%s\n' "$json_follow" | grep -q '"kind":"symlink"'
 stdin_lines=$(printf '%s\n%s\n' "$work/a" "$work/b" | "$bin" --stdin -T)
 printf '%s\n' "$stdin_lines" | grep -Fxq "$work/a"
 printf '%s\n' "$stdin_lines" | grep -Fxq "$work/b"
+stdin_crlf=$(printf '%s\r\n%s\r\n' "$work/a" "$work/b" | "$bin" --stdin -T)
+[ "$stdin_crlf" = "$stdin_lines" ]
 [ -z "$(printf '' | "$bin" --stdin -T)" ]
 stdin_nul=$(printf '%s\0%s\0' "$work/a" "$work/space name" | "$bin" --stdin0 -T)
 printf '%s\n' "$stdin_nul" | grep -Fxq "$work/a"
@@ -306,6 +310,21 @@ if "$bin" --set "$cr_tag" --dry-run "$work/a" >/dev/null 2>"$work/cr.err"; then
     exit 1
 fi
 grep -q 'may not contain CR, LF, or NUL' "$work/cr.err"
+
+crlf_tag=$(printf 'Line one\r\nLine two')
+if "$bin" --set "$crlf_tag" --dry-run "$work/a" >/dev/null 2>"$work/crlf.err"; then
+    echo "expected CRLF-containing tag to fail" >&2
+    exit 1
+fi
+grep -q 'may not contain CR, LF, or NUL' "$work/crlf.err"
+
+for flag in follow-symlinks no-backup dry-run recursive help version; do
+    if "$bin" --set Safety "--$flag=false" "$work/a" >/dev/null 2>"$work/inline.err"; then
+        echo "expected a value on --$flag to fail" >&2
+        exit 1
+    fi
+    grep -q 'does not take an argument' "$work/inline.err"
+done
 
 # --usage requires TAGS.
 if "$bin" --usage >/dev/null 2>&1; then
@@ -688,8 +707,9 @@ if [ "$(uname -s)" = Darwin ]; then
     # An item without an archived tags field is deliberately skipped and
     # reported, rather than being mistaken for an empty tag array.
     skipped_archive="$work/skipped.jsonl"
-    printf '%s\n%s\n%s\n' "$header" "$root_record" \
-        '{"kind":"file","path":"alpha","type":"item"}' >"$skipped_archive"
+    printf '%s\n%s\n%s\n%s\n' "$header" "$root_record" \
+        '{"kind":"file","path":"alpha","type":"item"}' \
+        '{"type":"summary","operation":"export","visited":1,"emitted":1,"tagged":0,"errors":0,"warnings":0}' >"$skipped_archive"
     "$bin" --set SkipBaseline --no-backup "$restore_root/alpha"
     "$bin" --restore "$skipped_archive" --root "$restore_root" --no-backup \
         >"$work/skipped.out" 2>"$work/skipped.err"
@@ -718,8 +738,9 @@ if [ "$(uname -s)" = Darwin ]; then
     grep -q 'archive line' "$work/malformed.err"
 
     kind_archive="$work/kind-mismatch.jsonl"
-    printf '%s\n%s\n%s\n' "$header" "$root_record" \
-        '{"kind":"directory","path":"alpha","tags":["Hacked"],"type":"item"}' >"$kind_archive"
+    printf '%s\n%s\n%s\n%s\n' "$header" "$root_record" \
+        '{"kind":"directory","path":"alpha","tags":["Hacked"],"type":"item"}' \
+        '{"type":"summary","operation":"export","visited":1,"emitted":1,"tagged":1,"errors":0,"warnings":0}' >"$kind_archive"
     if "$bin" --restore "$kind_archive" --root "$restore_root" --no-backup \
         >"$work/kind.out" 2>"$work/kind.err"; then
         echo "kind-mismatch archive unexpectedly restored" >&2

@@ -1,6 +1,27 @@
 import Foundation
 import CoreFoundation
 
+func archiveInteger(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+          CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+    return Int(number.stringValue)
+}
+
+func archiveFiniteNumber(_ value: Any?) -> Double? {
+    guard let number = value as? NSNumber,
+          CFGetTypeID(number) != CFBooleanGetTypeID(),
+          number.doubleValue.isFinite else { return nil }
+    return number.doubleValue
+}
+
+func archiveBoolean(_ value: Any?, field: String, line: Int) throws -> Bool {
+    guard let value = value else { return false }
+    guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+        throw ArchiveError.invalidLine(line: line, message: "\(field) must be boolean")
+    }
+    return number.boolValue
+}
+
 // Colors align with the ordered tag names. JSON null means unavailable, which
 // is distinct from an explicit zero (no color). Keep unfamiliar integers intact.
 func tagColorNumbers(_ tags: [StoredTag]) -> [Any] {
@@ -15,9 +36,7 @@ func archiveItemColors(_ value: Any?, tags: [String]?, line: Int) throws -> [Int
     return try values.map { value in
         if value is NSNull { return nil }
         // Do not truncate fractional values or silently turn booleans into 0/1.
-        guard let number = value as? NSNumber,
-              CFGetTypeID(number) != CFBooleanGetTypeID(),
-              let integer = Int(number.stringValue) else {
+        guard let integer = archiveInteger(value) else {
             throw ArchiveError.invalidLine(line: line, message: "colors must contain integers or null")
         }
         return integer
@@ -44,23 +63,22 @@ func archiveHeader(from object: [String: Any], line: Int) throws -> ArchiveHeade
     guard object["format"] as? String == "jsonl" else {
         throw ArchiveError.invalidLine(line: line, message: "header format must be jsonl")
     }
-    guard let version = object["version"] as? NSNumber,
-          version.intValue == archiveFormatVersion else {
+    guard archiveInteger(object["version"]) == archiveFormatVersion else {
         throw ArchiveError.invalidLine(line: line, message: "unsupported or missing archive version")
     }
 
-    let purpose = object["purpose"] as? String ?? "export"
-    guard purpose == "export" || purpose == "undo" else {
-        throw ArchiveError.invalidHeader("unknown archive purpose: \(purpose)")
+    guard let purpose = (object["purpose"] ?? "export") as? String,
+          purpose == "export" || purpose == "undo" else {
+        throw ArchiveError.invalidLine(line: line, message: "purpose must be export or undo")
     }
 
     let tagColors = try archiveTagColors(object["tagColors"], line: line)
     let excludePatterns = try archiveExcludePatterns(object["exclude"], line: line)
     return ArchiveHeader(
         purpose: purpose,
-        followSymlinks: object["followSymlinks"] as? Bool ?? false,
-        fileInfo: object["fileInfo"] as? Bool ?? false,
-        taggedOnly: object["taggedOnly"] as? Bool ?? false,
+        followSymlinks: try archiveBoolean(object["followSymlinks"], field: "followSymlinks", line: line),
+        fileInfo: try archiveBoolean(object["fileInfo"], field: "fileInfo", line: line),
+        taggedOnly: try archiveBoolean(object["taggedOnly"], field: "taggedOnly", line: line),
         excludePatterns: excludePatterns,
         tagColors: tagColors
     )
@@ -90,10 +108,8 @@ private func archiveTagColors(_ value: Any?, line: Int) throws -> [TagColorInfo]
     var result: [TagColorInfo] = []
     for entry in values {
         guard let name = entry["name"] as? String,
-              let color = entry["color"] as? NSNumber,
               !name.isEmpty,
-              CFGetTypeID(color) != CFBooleanGetTypeID(),
-              let number = Int(color.stringValue), number >= 0
+              let number = archiveInteger(entry["color"]), number >= 0
         else {
             throw ArchiveError.invalidLine(line: line, message: "invalid tagColors entry")
         }
@@ -124,14 +140,14 @@ func archiveHeaderObject(
 }
 
 func validateRelativeArchivePath(_ path: String) throws {
-    guard !path.isEmpty, !path.hasPrefix("/"), !path.unicodeScalars.contains("\0") else {
+    guard !path.isEmpty, path.utf8.first != 47, !path.utf8.contains(0) else {
         throw ArchiveError.invalidPath(path)
     }
     if path == "." { return }
 
-    let components = path.split(separator: "/", omittingEmptySubsequences: false)
+    let components = path.utf8.split(separator: 47, omittingEmptySubsequences: false)
     if components.contains(where: {
-        let component = String($0)
+        let component = String(decoding: $0, as: UTF8.self)
         return component.isEmpty || component == "." || component == ".."
     }) {
         throw ArchiveError.invalidPath(path)
@@ -139,7 +155,7 @@ func validateRelativeArchivePath(_ path: String) throws {
 }
 
 func validateArchiveTag(_ tag: String) throws {
-    if tag.isEmpty || tag.contains("\n") || tag.contains("\r") || tag.unicodeScalars.contains("\0") {
+    if tag.isEmpty || containsInvalidTagCharacters(tag) {
         throw ArchiveError.invalidTags(tag)
     }
 }

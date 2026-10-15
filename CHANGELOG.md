@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Reject restore path escapes through Unicode separators or parent symlinks;
+  require the final summary on export archives and reject malformed field types.
+- Replay undo journals in reverse order, restore explicit null colors exactly,
+  and create backup files exclusively without overwriting existing paths.
+- Reject CR/LF/NUL in all tag-name inputs, including CRLF and stored metadata.
+- Keep launcher build output on stderr, honor sorted tags during restore and
+  conversion, reject operands on boolean switches, and accept CRLF stdin paths.
+- Make ordinary JSONL item paths consistently root-relative, with `.` for the
+  root item. Copy source paths are absolute; text conversion rejects JSONL mode.
 - Render each tag using its stored color number, including custom tags and
   explicit no-color values, without Finder preference or name-based guesses.
 - Preserve colors during copying and edits, including color-only copies. Save

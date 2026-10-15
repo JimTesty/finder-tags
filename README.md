@@ -133,18 +133,20 @@ Missing items and skipped items include per-path diagnostics. `--dry-run`
 performs the same reads and comparisons without changing tags; each dry-run
 clear is also marked in its per-path output.
 
-Before a real restore writes anything, the complete JSONL archive is read and
-validated. The header records the archive version, symlink following mode,
+Before a real restore writes anything, the whole JSONL archive is parsed and
+its header and item fields are validated. The header records the archive version, symlink following mode,
 file-info setting, tagged-only setting, and exclusions. Each item's `colors`
 array aligns with its `tags` array: integer numbers are preserved, including
-`0`, and `null` means unavailable. Color-only differences are restored and
-included in undo archives. Older version 3 archives without `colors` remain
+`0`, and `null` explicitly restores a missing color suffix. Color-only
+differences are restored and included in undo archives. Older version 3 archives without `colors` remain
 readable: restore retains known colors of matching live tags, and conversion
 leaves tags uncolored. The old header `tagColors` field remains accepted for
 compatibility but does not determine file colors.
 Item paths are relative and must not escape the selected root.
-Duplicate logical paths and malformed records are rejected before any tag is
-changed. This does not make filesystem changes transactional if a later
+Duplicate paths in exports and malformed records are rejected before any tag is
+changed. Export archives must end with a `summary` record; an archive cut off
+before it is rejected. Summary counts and exporter error totals are not yet
+validated. This does not make filesystem changes transactional if a later
 metadata write fails.
 
 `--file-info` adds each item's byte size and content modification time (`mtime`,
@@ -202,6 +204,10 @@ inode-based deduplication.
 Restore requires the same `-L` setting recorded by the archive. If a followed
 symlink now has a different literal destination, restore warns and follows the
 current target.
+Without `-L`, restore rejects paths through parent symlinks before writing and
+checks parents again before each item. These checks do not lock filesystem
+entries against concurrent replacement.
+Tag I/O for a listed symlink itself uses its referent, as in ordinary commands.
 `--no-follow-symlinks` is retained as an explicit defensive spelling.
 
 `--slash` appends `/` to directories and `@` to symlinks, like `ls -F`.
@@ -217,6 +223,11 @@ temporary directory. The archive path is printed to stderr when the first
 change needs it. Use `--no-backup` to disable this, `--backup PATH` to choose a
 path, or `--sync-backup` to sync each undo record before its mutation. Syncing
 is intentionally opt-in because it can be expensive.
+Backup paths are created exclusively and existing files or symlinks are refused.
+Undo journals record resolved file paths and allow repeated paths. They replay
+in reverse mutation order so multiple aliases of one file return to its original
+state, even if a symlink used for the edit later points elsewhere. Unlike
+exports, an unfinished undo journal does not require a final summary record.
 
 Export output can be piped through ordinary compressors, and restore can read
 such a pipeline through stdin. The default undo archive is a local temporary
@@ -421,7 +432,7 @@ printf '%s\n' file1 file2 | tag --stdin
 generate_paths | tag --stdin0 --set Reviewed
 ```
 
-`--stdin` is newline-delimited. `--stdin0` is NUL-delimited and is preferred for
+`--stdin` accepts LF and CRLF line endings. `--stdin0` is NUL-delimited and is preferred for
 arbitrary filenames. Stdin paths follow command-line paths and retain their
 input order. Explicitly requesting stdin and providing no paths processes zero
 files instead of falling back to the current directory.
@@ -462,12 +473,19 @@ mutation output. `--export` always uses the canonical JSONL archive format,
 whether or not `--jsonl` is written. Export streams a header, one root record,
 item records, and a final `summary` record.
 
+For ordinary JSONL output, item paths are relative to the current `root`
+record, including `.` for the root item itself. `--absolute` emits absolute
+logical item paths instead. Spotlight results and copy source paths are absolute.
+Text output retains its usual argument spelling. `--convert` produces text and
+rejects `--jsonl`/`--ndjson`.
+
 Example:
 
 ```json
 {"exclude":[],"fileInfo":true,"followSymlinks":false,"format":"jsonl","purpose":"export","taggedOnly":false,"type":"header","version":3}
 {"type":"root","path":"/tmp/tree"}
 {"colors":[3,0],"kind":"file","mtime":1780000000,"path":"file","size":1234,"tags":["First","Second"],"type":"item"}
+{"emitted":1,"errors":0,"operation":"export","tagged":1,"type":"summary","visited":1,"warnings":0}
 ```
 
 With `--file-info`, file records also contain numeric `size` and `mtime`
