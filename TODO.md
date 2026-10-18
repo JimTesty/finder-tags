@@ -82,6 +82,10 @@ more real-world use. Recursive traversal now sorts each directory's children
 by literal filename by default, so unchanged exports have stable item order
 unless --no-sort-files is used.
 
+* Export/restore tags stored on dangling symlinks. Listings read the link's own
+  tags, but archives currently omit unavailable referent tags while preserving
+  the link's size and timestamp. The archive needs to distinguish tags on the
+  link from tags on its target before restore can safely support both.
 * Add a restore comparison mode that lists and counts existing filesystem items
   omitted from the archive. It will need traversal ordering compatible with the
   archive before it can report that set cleanly; this is useful but not urgent

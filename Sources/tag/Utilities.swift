@@ -45,11 +45,28 @@ func fileMetadata(for target: Target) throws -> FileMetadata {
     // without -L. Use the same referent for displayed and archived file-info,
     // so a symlink's tags are not paired with the link's own byte length and
     // timestamp. -L still controls traversal and structural symlink metadata.
-    // resolvingSymlinksInPath can return the link itself for a dangling link.
-    // Start from its recorded destination so missing target info stays missing.
-    let url = symbolicLinkInfo(for: target.logicalURL)
-        .map { resolvedTagURL($0.targetURL) } ?? target.url
-    return try fileMetadata(for: url)
+    // A missing referent falls back to the link itself, just like tag display.
+    if let link = symbolicLinkInfo(for: target.logicalURL) {
+        if link.targetIsMissing {
+            var info = stat()
+            guard lstat(target.logicalURL.path, &info) == 0 else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [
+                    NSFilePathErrorKey: target.logicalURL.path
+                ])
+            }
+            #if canImport(Darwin)
+            let time = info.st_mtimespec
+            #else
+            let time = info.st_mtim
+            #endif
+            return FileMetadata(
+                size: Int64(info.st_size),
+                modificationTime: Double(time.tv_sec) + Double(time.tv_nsec) / 1_000_000_000
+            )
+        }
+        return try fileMetadata(for: resolvedTagURL(link.targetURL))
+    }
+    return try fileMetadata(for: target.url)
 }
 
 func fail(_ message: String, code: Int32 = ExitCode.usage) -> Never {
@@ -92,6 +109,7 @@ struct SymbolicLinkInfo {
     let destination: String
     let targetURL: URL
     let targetExists: Bool
+    let targetIsMissing: Bool
     let targetIsDirectory: Bool
 }
 
@@ -109,12 +127,16 @@ func symbolicLinkInfo(for url: URL) -> SymbolicLinkInfo? {
             .standardizedFileURL
     }
 
-    let exists = fileManager.fileExists(atPath: targetURL.path)
-    let isDirectory = (try? targetURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    var info = stat()
+    let exists = stat(targetURL.path, &info) == 0
+    // Permission failures and loops must not masquerade as missing targets.
+    let isMissing = !exists && (errno == ENOENT || errno == ENOTDIR)
+    let isDirectory = exists && info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR)
     return SymbolicLinkInfo(
         destination: destination,
         targetURL: targetURL,
         targetExists: exists,
+        targetIsMissing: isMissing,
         targetIsDirectory: isDirectory
     )
 }

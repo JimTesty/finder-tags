@@ -151,12 +151,6 @@ enum MetadataTests {
         expect(partial.contains { $0["path"] as? String == "imperfect" })
         expect(partial.last?["errors"] as? Int == 1)
 
-        let dangling = work.appendingPathComponent("dangling")
-        try fileManager.createSymbolicLink(atPath: dangling.path, withDestinationPath: "missing")
-        let missingInfo = try context.run(["--file-info", "--jsonl", dangling.path])
-        expect(try records(missingInfo.out).last?["kind"] as? String == "symlink")
-        expect(try records(missingInfo.out).last?["size"] == nil)
-        expect(missingInfo.err.contains("warning:") && missingInfo.err.contains("file info unavailable"))
         #endif
     }
 }

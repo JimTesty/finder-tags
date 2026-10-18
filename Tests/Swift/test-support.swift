@@ -67,20 +67,21 @@ func taggedFile(_ url: URL, tags: [StoredTag]) throws {
 }
 
 #if canImport(Darwin)
-func writeRawTagMetadata(_ data: Data, to url: URL) {
+func writeRawTagMetadata(_ data: Data, to url: URL, followSymlinks: Bool = true) {
     let status = data.withUnsafeBytes {
-        setxattr(url.path, "com.apple.metadata:_kMDItemUserTags", $0.baseAddress, $0.count, 0, 0)
+        setxattr(url.path, "com.apple.metadata:_kMDItemUserTags", $0.baseAddress, $0.count, 0, followSymlinks ? 0 : XATTR_NOFOLLOW)
     }
     expect(status == 0, "cannot write raw metadata fixture: \(url.path)")
 }
 
-func readRawTagMetadata(_ url: URL) -> Data {
+func readRawTagMetadata(_ url: URL, followSymlinks: Bool = true) -> Data {
     let attribute = "com.apple.metadata:_kMDItemUserTags"
-    let size = getxattr(url.path, attribute, nil, 0, 0, 0)
+    let flags: Int32 = followSymlinks ? 0 : XATTR_NOFOLLOW
+    let size = getxattr(url.path, attribute, nil, 0, 0, flags)
     expect(size >= 0, "cannot read raw metadata fixture: \(url.path)")
     var data = Data(count: size)
     let count = data.withUnsafeMutableBytes {
-        getxattr(url.path, attribute, $0.baseAddress, $0.count, 0, 0)
+        getxattr(url.path, attribute, $0.baseAddress, $0.count, 0, flags)
     }
     expect(count == size, "raw metadata fixture changed during read: \(url.path)")
     return data

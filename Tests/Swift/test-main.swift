@@ -9,6 +9,8 @@ enum RegressionTests {
         )
         try MetadataTests.run(context)
         print("Metadata tests passed")
+        try FileInfoTests.run(context)
+        print("File info tests passed")
         try UnicodeTests.run(context)
         print("Unicode tests passed")
         try FinderColorTests.run(context)

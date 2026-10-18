@@ -13,17 +13,20 @@ enum FileTagMetadata {
         try readState(url, onWarning: onWarning)?.tags
     }
 
-    static func readState(_ url: URL, onWarning: (String) -> Void = reportWarning) throws -> TagRead? {
+    static func readState(
+        _ url: URL, followSymlinks: Bool = true, onWarning: (String) -> Void = reportWarning
+    ) throws -> TagRead? {
         #if canImport(Darwin)
+        let flags: Int32 = followSymlinks ? 0 : XATTR_NOFOLLOW
         while true {
-            let size = getxattr(url.path, attribute, nil, 0, 0, 0)
+            let size = getxattr(url.path, attribute, nil, 0, 0, flags)
             if size < 0 {
                 if errno == ENOATTR || errno == ENOTSUP { return nil }
                 throw posixError(url)
             }
             var data = Data(count: size)
             let count = data.withUnsafeMutableBytes {
-                getxattr(url.path, attribute, $0.baseAddress, $0.count, 0, 0)
+                getxattr(url.path, attribute, $0.baseAddress, $0.count, 0, flags)
             }
             if count < 0 {
                 if errno == ERANGE { continue } // Attribute grew between reads.

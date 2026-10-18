@@ -152,7 +152,7 @@ final class App {
                     }
                 }
 
-                let metadata = self.optionalMetadata(for: target) { message in
+                let metadata = self.optionalMetadata(for: target, warnAboutSymlinkFallback: true) { message in
                     writer.noteWarning()
                     self.warn(message)
                 }
@@ -239,13 +239,21 @@ final class App {
     }
 
     private func optionalMetadata(
-        for target: Target, onWarning: (String) -> Void = reportWarning
+        for target: Target, warnAboutSymlinkFallback: Bool = false,
+        onWarning: (String) -> Void = reportWarning
     ) -> FileMetadata? {
         guard options.fileInfo else { return nil }
         do {
-            return try fileMetadata(for: target)
+            let metadata = try fileMetadata(for: target)
+            // Display tag reads already announce this fallback. Export keeps
+            // unavailable referent tags separate from the link's own tags.
+            if warnAboutSymlinkFallback,
+               symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true {
+                onWarning("\(target.absolutePath): symlink target not found; using symlink's own file info")
+            }
+            return metadata
         } catch {
-            onWarning("\(target.absolutePath): file info unavailable; omitting size and modification time: \(error.localizedDescription)")
+            onWarning("\(target.absolutePath): file info unavailable: \(error.localizedDescription)")
             return nil
         }
     }
@@ -298,7 +306,7 @@ final class App {
     }
 
     private func emitMatchingTarget(_ target: Target, query: TagQuery) throws {
-        let tags = try store.readTags(target.url)
+        let tags = try store.readTagsForDisplay(target)
         guard queryMatches(tags, query: query) else { return }
         let metadata = optionalMetadata(for: target)
         try output.emitFile(target, tags: tags, metadata: metadata)
@@ -320,7 +328,7 @@ final class App {
 
         traversal.forEachTarget { target in
             do {
-                let tags = try store.readTags(target.url)
+                let tags = try store.readTagsForDisplay(target)
                 if queryMatches(tags, query: query) {
                     counter.add(tags)
                 }
@@ -348,7 +356,7 @@ final class App {
                     // Spotlight's complete predicate determines membership.
                     // Read the current value only for display and metadata
                     // ordering, without applying a second live-tag filter.
-                    let tags = try store.readTags(target.url)
+                    let tags = try store.readTagsForDisplay(target)
                     let metadata = optionalMetadata(for: target)
                     try output.emitFile(target, tags: tags, metadata: metadata)
                 } catch {
@@ -374,16 +382,7 @@ final class App {
 
                 switch options.operation {
                 case .list:
-                    let tags: [StoredTag]
-                    do {
-                        tags = try store.readTags(target.url)
-                    } catch {
-                        if let link = symbolicLinkInfo(for: target.logicalURL), !link.targetExists {
-                            tags = []
-                        } else {
-                            throw error
-                        }
-                    }
+                    let tags = try store.readTagsForDisplay(target)
                     if !options.taggedOnly || !tags.isEmpty {
                         let metadata = optionalMetadata(for: target)
                         try output.emitFile(target, tags: tags, metadata: metadata)

@@ -80,9 +80,10 @@ struct TextRenderer {
         let compactTagPadding = options.compactTags ? max(0, 3 - tags.count) : 0
         let pathDisplayWidth = name.map { displayWidth($0) }
         let decoratedName: String?
-        if let name = name, let metadata = metadata {
-            let sizeText = fileInfoSizeText(metadata.size, isDirectory: isDirectory)
-            let decoration = "[\(fileInfoDateText(metadata.modificationTime)) \(sizeText)]"
+        if let name = name, options.fileInfo || metadata != nil {
+            let sizeText = metadata.map { fileInfoSizeText($0.size, isDirectory: isDirectory) } ?? "   ---"
+            let dateText = metadata.map { fileInfoDateText($0.modificationTime) } ?? "--------"
+            let decoration = "[\(dateText) \(sizeText)]"
             let coloredDecoration = colors.isEnabled
                 ? "\u{001B}[32m\(decoration)\u{001B}[m"
                 : decoration

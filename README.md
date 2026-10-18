@@ -189,7 +189,10 @@ includes those spaces in its per-file minimum width.
 For an existing symlink, size and mtime come from its target even without
 `--follow-symlinks`, matching the target tags that Foundation commonly returns.
 `--follow-symlinks` still controls recursive traversal and structural symlink
-metadata in archives. A dangling symlink has unavailable target metadata.
+metadata in archives. When a target is missing, listings use the symlink's own
+timestamp, byte size, and tags, with a warning. If file info is unavailable,
+text output shows `[--------    ---]`; JSONL omits the unavailable fields.
+Exports retain a broken link's file info but omit its unavailable target tags.
 The human date is for display only; use JSONL/archive values for stable
 change detection.
 
@@ -556,9 +559,10 @@ collapse to one with a warning; case-distinct names remain separate.
 An unreadable plist, a non-array payload, or a filesystem read failure is still
 an error, never an inferred empty tag list. Foundation supplies legacy label
 metadata when the per-tag xattr is absent. Failures to read optional file size
-or modification time produce warnings and omit those fields while retaining
-the item's tags. Warnings go to stderr and do not by themselves cause a failing
-exit status; export and restore summaries count metadata recovery warnings.
+or modification time produce warnings, with placeholders in text and omitted
+fields in JSONL, while retaining the item's tags. Warnings go to stderr and do
+not by themselves cause a failing exit status; export and restore summaries
+count metadata recovery warnings.
 
 Every destructive operation reads target metadata before writing. `--copy`
 completes both source and destination reads before any destination write. Every
