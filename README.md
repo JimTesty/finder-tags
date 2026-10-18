@@ -85,7 +85,7 @@ tag --move Urgent --after Review file # neighbor-relative move
 tag -r 'Work,Old' file               # remove matching tags
 tag -r '*' file                      # remove all tags
 tag -s 'First,Second' file           # replace tags in exactly this order
-tag --fix file                      # persist tag repairs; report fixed/deleted counts
+tag --fix file                      # repair invalid tag names
 tag --fix --dry-run -R directory     # preview repairs throughout a directory
 tag --copy src dst                   # destructively copy tag array/order
 tag --copy src dst --dry-run         # preview copy, do not write
@@ -118,29 +118,12 @@ has different or unavailable colors; `--verbose` reports conflicting numbers.
 
 ## Repair stored tags
 
-`tag --fix myfile` persists the tag repairs described under reliability behavior
-without needing a replacement tag list. Valid names, colors, and order are
-preserved; healthy metadata is left untouched. `--sorted-tags` can explicitly
-request sorting as well. Use `--dry-run` to preview, `-R` to recurse, and the
-usual `--backup`/`--no-backup` options to control undo records. Explicit paths
-are required.
+`tag --fix myfile` repairs invalid tag names and removes empty tags, preserving
+valid tags, colors, and order. Use `--dry-run` to preview and `-R` to recurse.
+Healthy metadata is left untouched unless `--sorted-tags` requests sorting.
 
-The summary reports nonempty entries repaired as **fixed**, and empty entries
-removed as **deleted**, for example `4 tags fixed, 2 deleted`. Each entry counts
-once even if several characters or fields needed repair. The totals include
-successful file updates; failed files contribute to the error count. Dry runs
-report proposed repairs. Sorting alone does not count as a tag repair.
-
-Text summaries go to stderr. `--jsonl` emits per-file mutation records followed
-by a summary with `tagsFixed`, `tagsDeleted`, `filesUpdated`, `unchanged`,
-`skipped`, `errors`, `visited`, and `dryRun`.
-
-Ordinary mutations also persist repairs when their requested tag arrays already
-match the recovered tags. For example, `tag --set Yellow myfile` removes a
-stored empty tag beside `Yellow`, and records the repair as a change. `--fix`
-still reports unreadable or non-array metadata as an error instead of guessing
-a replacement. Undo stores recovered tags rather than the original malformed
-bytes.
+See [Reliability behavior](#reliability-behavior) for repair rules and undo
+limitations.
 
 ## Export and restore
 

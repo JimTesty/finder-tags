@@ -40,7 +40,7 @@ func usage(code: Int32 = 0) -> Never {
           --prepend TAGS         Add new tags at first/left/bottom
       -r, --remove TAGS          Remove matching tags; '*' removes all tags
       -s, --set TAGS             Replace all tags in the specified order
-          --fix                  Persist tag repairs; report fixed/deleted counts
+          --fix                  Repair invalid tag names
           --copy SRC DST         Copy SRC's ordered tag names and colors to DST
       -m, --match TAGS           List traversed files matching TAGS
           --filter TAGS          Match tags with list-style output

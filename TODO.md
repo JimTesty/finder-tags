@@ -1,5 +1,11 @@
 # Future work
 
+## Help-page cleanup
+
+* Simplify `tag -h` / `--help`: reduce density and repetition, keep command
+  descriptions short and action-focused, and leave detailed behavior in the
+  manual or README. Defer the broader help-page redesign until a later pass.
+
 ## Imperfect-data recovery audit (2026-10-18)
 
 Tag entries are now recovered individually, with warnings. The remaining

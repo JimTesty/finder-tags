@@ -10,7 +10,7 @@ _arguments \
   '--prepend[add tags at beginning]:tags:' \
   '(-r --remove)'{-r,--remove}'[remove tags]:tags:' \
   '(-s --set)'{-s,--set}'[replace tags]:tags:' \
-  '--fix[persist tag repairs and report counts]' \
+  '--fix[repair invalid tag names]' \
   '--copy[copy ordered tags]:source:_files:destination:_files' \
   '(-m --match)'{-m,--match}'[match tags]:tags:' \
   '--filter[match tags with list-style output]:tags:' \
