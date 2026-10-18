@@ -93,7 +93,8 @@ struct RestoreEngine {
                 }
 
                 let ioURL = tagIOURL(logicalURL, followSymlinks: options.followSymlinks)
-                let before = try store.readTags(ioURL)
+                let state = try store.readState(ioURL)
+                let before = state.tags
                 var after = entry.storedTags!
                 if entry.colors == nil {
                     // Only a missing array uses the old name-only behavior.
@@ -101,7 +102,7 @@ struct RestoreEngine {
                     after = after.map { tag in before.first { $0.name == tag.name } ?? tag }
                 }
                 let change = sortedChangeIfRequested(
-                    TagChange(beforeTags: before, afterTags: after), options: options
+                    TagChange(beforeTags: before, afterTags: after, repairs: state.repairs), options: options
                 )
                 let target = Target(
                     url: ioURL,

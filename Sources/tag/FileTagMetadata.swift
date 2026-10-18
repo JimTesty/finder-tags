@@ -10,6 +10,10 @@ enum FileTagMetadata {
     private static let attribute = "com.apple.metadata:_kMDItemUserTags"
 
     static func read(_ url: URL, onWarning: (String) -> Void = reportWarning) throws -> [StoredTag]? {
+        try readState(url, onWarning: onWarning)?.tags
+    }
+
+    static func readState(_ url: URL, onWarning: (String) -> Void = reportWarning) throws -> TagRead? {
         #if canImport(Darwin)
         while true {
             let size = getxattr(url.path, attribute, nil, 0, 0, 0)
@@ -28,7 +32,7 @@ enum FileTagMetadata {
             }
             if count > size { continue }
             data.count = count
-            return try decode(data) { onWarning("\(url.path): \($0)") }
+            return try decodeState(data) { onWarning("\(url.path): \($0)") }
         }
         #else
         return nil
@@ -36,26 +40,38 @@ enum FileTagMetadata {
     }
 
     static func decode(_ data: Data, onWarning: (String) -> Void = reportWarning) throws -> [StoredTag] {
+        try decodeState(data, onWarning: onWarning).tags
+    }
+
+    static func decodeState(_ data: Data, onWarning: (String) -> Void = reportWarning) throws -> TagRead {
         let object = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
         guard let values = object as? [Any] else {
             throw invalid("tag metadata is not an array")
         }
-        return values.enumerated().compactMap { index, entry in
+        var repairs = TagRepairs()
+        let tags: [StoredTag] = values.enumerated().compactMap { index, entry in
             guard let value = entry as? String else {
                 let value = tagNameText(entry) { onWarning("stored tag at index \(index): \($0)") }
-                return repairedTagName(value, onWarning: {
+                guard let name = repairedTagName(value, onWarning: {
                     onWarning("stored tag at index \(index): \($0)")
-                }).map { StoredTag(name: $0) }
+                }) else {
+                    repairs.deleted += 1
+                    return nil
+                }
+                repairs.fixed += 1
+                return StoredTag(name: name)
             }
             let scalars = value.unicodeScalars
             let rawName: String
             let color: Int?
+            var malformedSuffix = false
             if let newline = scalars.lastIndex(of: "\n") {
                 let suffix = String(scalars[scalars.index(after: newline)...])
                 color = Int(suffix)
                 if color != nil {
                     rawName = String(scalars[..<newline])
                 } else {
+                    malformedSuffix = true
                     onWarning("invalid stored color suffix in tag '\(value)'; preserving the whole value with color unavailable")
                     rawName = value
                 }
@@ -63,17 +79,32 @@ enum FileTagMetadata {
                 rawName = value
                 color = nil
             }
-            guard let name = repairedTagName(rawName, onWarning: onWarning) else { return nil }
+            guard let name = repairedTagName(rawName, onWarning: onWarning) else {
+                repairs.deleted += 1
+                return nil
+            }
+            if malformedSuffix || name != rawName { repairs.fixed += 1 }
             // Unknown integer colors are data, not a reason to discard a tag.
             return StoredTag(name: name, color: color)
         }
+        return TagRead(tags: tags, repairs: repairs)
     }
 
     static func usableTags(_ tags: [StoredTag], onWarning: (String) -> Void) -> [StoredTag] {
-        tags.compactMap { tag in
-            guard let name = repairedTagName(tag.name, onWarning: onWarning) else { return nil }
+        repairTags(tags, onWarning: onWarning).tags
+    }
+
+    static func repairTags(_ tags: [StoredTag], onWarning: (String) -> Void) -> TagRead {
+        var repairs = TagRepairs()
+        let tags: [StoredTag] = tags.compactMap { tag in
+            guard let name = repairedTagName(tag.name, onWarning: onWarning) else {
+                repairs.deleted += 1
+                return nil
+            }
+            if name != tag.name { repairs.fixed += 1 }
             return StoredTag(name: name, color: tag.color)
         }
+        return TagRead(tags: tags, repairs: repairs)
     }
 
     static func write(_ tags: [StoredTag], to url: URL, onWarning: (String) -> Void = reportWarning) throws {

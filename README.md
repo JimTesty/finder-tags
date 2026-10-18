@@ -85,6 +85,8 @@ tag --move Urgent --after Review file # neighbor-relative move
 tag -r 'Work,Old' file               # remove matching tags
 tag -r '*' file                      # remove all tags
 tag -s 'First,Second' file           # replace tags in exactly this order
+tag --fix file                      # persist tag repairs; report fixed/deleted counts
+tag --fix --dry-run -R directory     # preview repairs throughout a directory
 tag --copy src dst                   # destructively copy tag array/order
 tag --copy src dst --dry-run         # preview copy, do not write
 
@@ -113,6 +115,32 @@ means uncolored; missing or unfamiliar numbers are displayed without color.
 Copying and editing preserve existing numbers. macOS chooses initial colors
 only for newly added names. `--usage` leaves a total uncolored if the same name
 has different or unavailable colors; `--verbose` reports conflicting numbers.
+
+## Repair stored tags
+
+`tag --fix myfile` persists the tag repairs described under reliability behavior
+without needing a replacement tag list. Valid names, colors, and order are
+preserved; healthy metadata is left untouched. `--sorted-tags` can explicitly
+request sorting as well. Use `--dry-run` to preview, `-R` to recurse, and the
+usual `--backup`/`--no-backup` options to control undo records. Explicit paths
+are required.
+
+The summary reports nonempty entries repaired as **fixed**, and empty entries
+removed as **deleted**, for example `4 tags fixed, 2 deleted`. Each entry counts
+once even if several characters or fields needed repair. The totals include
+successful file updates; failed files contribute to the error count. Dry runs
+report proposed repairs. Sorting alone does not count as a tag repair.
+
+Text summaries go to stderr. `--jsonl` emits per-file mutation records followed
+by a summary with `tagsFixed`, `tagsDeleted`, `filesUpdated`, `unchanged`,
+`skipped`, `errors`, `visited`, and `dryRun`.
+
+Ordinary mutations also persist repairs when their requested tag arrays already
+match the recovered tags. For example, `tag --set Yellow myfile` removes a
+stored empty tag beside `Yellow`, and records the repair as a change. `--fix`
+still reports unreadable or non-array metadata as an error instead of guessing
+a replacement. Undo stores recovered tags rather than the original malformed
+bytes.
 
 ## Export and restore
 
@@ -466,7 +494,7 @@ encountered directory symlink.
 
 ## `--dry-run`
 
-Valid with `--add`, `--remove`, `--set`, `--move`, `--copy`, and `--restore`. It
+Valid with `--add`, `--remove`, `--set`, `--fix`, `--move`, `--copy`, and `--restore`. It
 performs the normal metadata reads and computes the exact before/after arrays,
 but does not write.
 
@@ -509,7 +537,9 @@ fields.
 For `--usage`, records contain `tag`, `count`, the distinct stored `colors`, and
 `hasUnknownColor` for observations without a number. Mutations emit before/after
 records after a successful write; dry runs emit the same shape with
-`"dryRun":true`.
+`"dryRun":true`. Their `metadataRepairs` object counts `fixed` and `deleted`
+entries independently of requested tag edits. `changed` is true for a persisted
+metadata repair even when the recovered before/after tag arrays are identical.
 
 Text-only switches such as color, filename suppression, one-per-line, slash
 decoration, and NUL termination do not change the JSONL schema. `--reverse` is
@@ -531,8 +561,9 @@ color, rather than losing its suffix. Unknown integer colors are preserved.
 Valid tags, order, and colors remain usable even when neighboring entries are
 imperfect. If all entries are empty, the recovered list has no tags.
 
-Reads and dry runs do not rewrite metadata. An actual tag change writes the
-recovered names and colors; undo archives contain this recovered preimage,
+Reads and dry runs do not rewrite metadata. Mutations persist necessary repairs
+even if the recovered tags already match the request; `--fix` performs those
+repairs directly. Undo archives contain this recovered preimage,
 not the original malformed bytes. Repairs can produce duplicate names; those
 entries are preserved, and operations requiring a unique match can still report
 ambiguity.

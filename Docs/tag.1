@@ -17,6 +17,9 @@ tag \- manipulate macOS Finder tags while preserving tag order
 .B tag --set
 .I TAGS path ...
 .br
+.B tag --fix
+.I path ...
+.br
 .B tag --match
 .I TAGS
 .RI [ path ...]
@@ -100,6 +103,19 @@ Remove matching tags. A TAGS value of * removes all tags.
 .TP
 .BR -s , " --set " TAGS
 Replace the complete tag array.
+.TP
+.B --fix
+Persist repairs to imperfect tag metadata, preserving valid names, colors, and
+order. Healthy metadata is left untouched unless --sorted-tags requests sorting.
+Explicit paths are required; --dry-run, recursion, and backup options apply.
+The summary counts nonempty entries repaired as fixed and empty entries removed
+as deleted. Each entry counts once; failed writes do not increase repair totals.
+Dry runs report proposed counts. Text summaries go to stderr; --jsonl emits
+per-file records and a final summary with tagsFixed and tagsDeleted.
+Other mutations also persist repairs when the requested tags already match the
+recovered tags, for example --set Yellow removes an empty entry beside Yellow.
+Unreadable or non-array metadata remains an error. Undo retains recovered tags,
+not original malformed bytes.
 .TP
 .B --copy SOURCE DESTINATION
 Replace DESTINATION's ordered tag names and stored colors with SOURCE's tags.

@@ -31,6 +31,11 @@ enum MetadataTests {
         expect(extremes.map { $0.color } == [Int.min, Int.max, Int.min])
         let collision = try FileTagMetadata.decode(plist(["Same\rName\n3", "Same\0Name\n6"])) { _ in }
         expect(collision == [StoredTag(name: "Same�Name", color: 3), StoredTag(name: "Same�Name", color: 6)])
+        let repairState = try FileTagMetadata.decodeState(plist(["", "Bad\r\nName\n3", "Bad\ncolor", 42] as [Any])) { _ in }
+        expect(repairState.repairs.fixed == 3 && repairState.repairs.deleted == 1)
+        expect(repairState.needsRepair && repairState.repairs.total == 4)
+        let healthyState = try FileTagMetadata.decodeState(plist(["Odd\n99", "Bare"])) { _ in }
+        expect(!healthyState.needsRepair && healthyState.repairs.total == 0)
 
         for invalid in [try plist(["Not": "an array"]), Data([0xff, 0x00, 0x01])] {
             do {

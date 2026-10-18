@@ -39,6 +39,8 @@ final class App {
             runUsage(query)
         case .find(let query):
             runFind(query)
+        case .fix:
+            runFix()
         case .list, .match, .filter, .add, .remove, .set, .move:
             runTraversal()
         }
@@ -69,6 +71,8 @@ final class App {
             info("removing tags from traversed files")
         case .set:
             info("setting tags on traversed files")
+        case .fix:
+            info("repairing stored tags on traversed files")
         case .copy:
             info("copying tags between files")
         case .match:
@@ -421,7 +425,7 @@ final class App {
                     )
                     try performMutation("move", target: target, change: change)
 
-                case .copy, .usage, .find, .export, .restore, .convert:
+                case .fix, .copy, .usage, .find, .export, .restore, .convert:
                     preconditionFailure("operation handled outside traversal")
                 }
             } catch {
@@ -430,17 +434,51 @@ final class App {
         }
     }
 
+    private func runFix() {
+        var stats = FixStats()
+        let traversal = Traversal(options: options, onError: { message in
+            stats.errors += 1
+            self.report(message)
+        })
+        traversal.forEachTarget { target in
+            stats.visited += 1
+            do {
+                let change = try store.fixChange(on: target.url)
+                if options.taggedOnly && change.beforeTags.isEmpty {
+                    stats.skipped += 1
+                    return
+                }
+                let result = try performMutation("fix", target: target, change: change)
+                if result.hasChanges {
+                    stats.filesUpdated += 1
+                    stats.repairs.add(result.repairs)
+                } else {
+                    stats.unchanged += 1
+                }
+            } catch {
+                stats.errors += 1
+                report("\(target.absolutePath): \(error.localizedDescription)")
+            }
+        }
+        do {
+            try output.emitFixSummary(stats)
+        } catch {
+            report("writing fix summary: \(error.localizedDescription)")
+        }
+    }
+
+    @discardableResult
     private func performMutation(
         _ operation: String,
         target: Target,
         change rawChange: TagChange,
         source: Target? = nil
-    ) throws {
+    ) throws -> TagChange {
         var change = sortedChangeIfRequested(rawChange, options: options)
         if !options.dryRun && change.hasChanges {
             try recordUndo(target: target, tags: change.beforeTags)
             let after = try store.apply(change, to: target.url)
-            change = TagChange(beforeTags: change.beforeTags, afterTags: after)
+            change = TagChange(beforeTags: change.beforeTags, afterTags: after, repairs: change.repairs)
         }
         try output.emitChange(
             operation: operation,
@@ -449,6 +487,7 @@ final class App {
             source: source,
             dryRun: options.dryRun
         )
+        return change
     }
 
     private func finishUndo() {

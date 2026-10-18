@@ -41,6 +41,7 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- '--no-sort-files'
 "$bin" --help | grep -q -- '--before TAG'
 "$bin" --help | grep -q -- '--filter TAGS'
+"$bin" --help | grep -q -- '--fix'
 "$bin" --help | grep -q -- '--absolute'
 "$bin" --help | grep -q -- '--stdin0'
 "$bin" --help | grep -q -- '--no-follow-symlinks'

@@ -30,7 +30,7 @@ func sortedChangeIfRequested(_ change: TagChange, options: Options) -> TagChange
     if !options.sortedTags { return change }
     return TagChange(
         beforeTags: change.beforeTags, afterTags: sortedStoredTags(change.afterTags),
-        initialColorNames: change.initialColorNames
+        initialColorNames: change.initialColorNames, repairs: change.repairs
     )
 }
 

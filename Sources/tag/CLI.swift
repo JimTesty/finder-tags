@@ -151,6 +151,8 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
                 setOperation(.remove(parseTagList(operand())), options: &options)
             case "set":
                 setOperation(.set(parseTagList(operand())), options: &options)
+            case "fix":
+                setOperation(.fix, options: &options)
             case "match":
                 setOperation(.match(parseTagQuery(operand())), options: &options)
             case "filter":
@@ -315,7 +317,7 @@ private func validateAndApplyDefaults(_ options: inout Options) {
         if options.paths.count != 2 {
             fail("--copy requires exactly SOURCE and DESTINATION")
         }
-    case .add, .remove, .set, .move:
+    case .add, .remove, .set, .fix, .move:
         if options.paths.isEmpty {
             fail("this operation requires at least one explicit path")
         }
@@ -330,7 +332,7 @@ private func validateAndApplyDefaults(_ options: inout Options) {
 
     if !options.excludePatterns.isEmpty {
         switch options.operation {
-        case .list, .export, .match, .filter, .usage, .add, .remove, .set, .move:
+        case .list, .export, .match, .filter, .usage, .add, .remove, .set, .fix, .move:
             break
         default:
             fail("--exclude is only valid with filesystem traversal operations")
@@ -339,7 +341,7 @@ private func validateAndApplyDefaults(_ options: inout Options) {
 
     if !options.sortFiles {
         switch options.operation {
-        case .list, .export, .match, .filter, .usage, .find, .add, .remove, .set, .move:
+        case .list, .export, .match, .filter, .usage, .find, .add, .remove, .set, .fix, .move:
             break
         default:
             fail("--no-sort-files is only valid with filesystem traversal or Spotlight --find")

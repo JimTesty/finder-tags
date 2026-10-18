@@ -13,6 +13,7 @@ func usage(code: Int32 = 0) -> Never {
       \(name) -a | --add TAGS [placement] [options] path ...
       \(name) -r | --remove TAGS [options] path ...
       \(name) -s | --set TAGS [options] path ...
+      \(name) --fix [options] path ...
       \(name) -m | --match TAGS [options] [path ...]
       \(name) --filter TAGS [options] [path ...]
       \(name) -u | --usage TAGS [options] [path ...]
@@ -27,7 +28,7 @@ func usage(code: Int32 = 0) -> Never {
     Mutation TAGS uses a CSV-like comma-separated grammar. Shell quoting still
     works as usual, and quotes inside TAGS allow literal commas, for example:
       tag --set 'Red,"Project, Alpha","Needs review"' file
-    CR, LF, and NUL are not valid inside tag names.
+    CR, LF, and NUL in tag names are replaced with �, with warnings.
 
     operations:
       -l, --list                 List tags (default)
@@ -39,6 +40,7 @@ func usage(code: Int32 = 0) -> Never {
           --prepend TAGS         Add new tags at first/left/bottom
       -r, --remove TAGS          Remove matching tags; '*' removes all tags
       -s, --set TAGS             Replace all tags in the specified order
+          --fix                  Persist tag repairs; report fixed/deleted counts
           --copy SRC DST         Copy SRC's ordered tag names and colors to DST
       -m, --match TAGS           List traversed files matching TAGS
           --filter TAGS          Match tags with list-style output

@@ -133,7 +133,8 @@ final class Output {
             }
             let sourceText = source.map { " from \($0.displayPath)" } ?? ""
             let action = dryRun ? "would \(operation)" : operation
-            eprint("\(programName): info: \(action) \(target.displayPath)\(sourceText): \(transition)")
+            let repairNote = change.needsRepair ? " (repair stored metadata)" : ""
+            eprint("\(programName): info: \(action) \(target.displayPath)\(sourceText): \(transition)\(repairNote)")
         }
 
         if options.jsonLines {
@@ -146,6 +147,7 @@ final class Output {
             object["afterColors"] = tagColorNumbers(change.afterTags)
             object["changed"] = change.hasChanges
             object["dryRun"] = dryRun
+            object["metadataRepairs"] = ["fixed": change.repairs.fixed, "deleted": change.repairs.deleted]
             if let source = source { object["source"] = source.absolutePath }
             try jsonRecord(object)
             return
@@ -164,7 +166,29 @@ final class Output {
         let clearNote = change.hasChanges && change.after.isEmpty
             ? " (would clear tags)"
             : ""
-        record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)\(clearNote)")
+        let repairNote = change.needsRepair
+            ? " (would fix \(change.repairs.fixed) tags and delete \(change.repairs.deleted))"
+            : ""
+        record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)\(clearNote)\(repairNote)")
+    }
+
+    func emitFixSummary(_ stats: FixStats) throws {
+        if options.jsonLines {
+            try jsonRecord([
+                "type": "summary", "operation": "fix", "dryRun": options.dryRun,
+                "tagsFixed": stats.repairs.fixed,
+                "tagsDeleted": stats.repairs.deleted, "filesUpdated": stats.filesUpdated,
+                "unchanged": stats.unchanged, "skipped": stats.skipped,
+                "errors": stats.errors, "visited": stats.visited
+            ])
+            return
+        }
+        let action = options.dryRun
+            ? "would fix \(stats.repairs.fixed) tags and delete \(stats.repairs.deleted)"
+            : "\(stats.repairs.fixed) tags fixed, \(stats.repairs.deleted) deleted"
+        let fileAction = options.dryRun ? "would be updated" : "updated"
+        let files = stats.filesUpdated == 1 ? "file" : "files"
+        eprint("\(programName): fix: \(action); \(stats.filesUpdated) \(files) \(fileAction), \(stats.unchanged) unchanged, \(stats.skipped) skipped, \(stats.errors) errors (\(stats.visited) visited)")
     }
 
     private func verboseTags(_ tags: [StoredTag]) -> String {

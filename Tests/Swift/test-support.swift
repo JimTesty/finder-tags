@@ -73,6 +73,18 @@ func writeRawTagMetadata(_ data: Data, to url: URL) {
     }
     expect(status == 0, "cannot write raw metadata fixture: \(url.path)")
 }
+
+func readRawTagMetadata(_ url: URL) -> Data {
+    let attribute = "com.apple.metadata:_kMDItemUserTags"
+    let size = getxattr(url.path, attribute, nil, 0, 0, 0)
+    expect(size >= 0, "cannot read raw metadata fixture: \(url.path)")
+    var data = Data(count: size)
+    let count = data.withUnsafeMutableBytes {
+        getxattr(url.path, attribute, $0.baseAddress, $0.count, 0, 0)
+    }
+    expect(count == size, "raw metadata fixture changed during read: \(url.path)")
+    return data
+}
 #endif
 
 func archiveItem(_ path: String, tags: [StoredTag] = [StoredTag(name: "Changed", color: 3)]) -> [String: Any] {

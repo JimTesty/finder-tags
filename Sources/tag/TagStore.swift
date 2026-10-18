@@ -2,6 +2,7 @@ import Foundation
 
 enum TagStoreError: LocalizedError {
     case verificationFailed(path: String, expected: [StoredTag], actual: [StoredTag])
+    case metadataStillNeedsRepair(path: String)
     case ambiguousCaseMatch(tag: String, matches: [String])
     case tagNotFound(tag: String)
     case anchorNotFound(tag: String)
@@ -11,6 +12,8 @@ enum TagStoreError: LocalizedError {
         switch self {
         case let .verificationFailed(path, expected, actual):
             return "tag write verification failed for \(path): expected \(expected), read back \(actual)"
+        case let .metadataStillNeedsRepair(path):
+            return "tag write verification failed for \(path): read-back metadata still needs repair"
         case let .ambiguousCaseMatch(tag, matches):
             return "case-insensitive tag '\(tag)' is ambiguous among \(matches); use --case-sensitive or exact casing"
         case let .tagNotFound(tag):
@@ -31,14 +34,18 @@ struct TagStore {
     }
 
     func readTags(_ url: URL) throws -> [StoredTag] {
-        if let tags = try FileTagMetadata.read(url, onWarning: onWarning) { return tags }
+        try readState(url).tags
+    }
+
+    func readState(_ url: URL) throws -> TagRead {
+        if let state = try FileTagMetadata.readState(url, onWarning: onWarning) { return state }
         // A successful read with no tag value means "no tags". Any resource
         // value error throws and must never be converted into an empty array.
         let values = try url.resourceValues(forKeys: [.tagNamesKey, .labelNumberKey])
         let names = values.tagNames ?? []
         // A legacy Finder label describes one tag, not every tag on a file.
         let tags = names.map { StoredTag(name: $0, color: names.count == 1 ? values.labelNumber : nil) }
-        return FileTagMetadata.usableTags(tags) { onWarning("\(url.path): \($0)") }
+        return FileTagMetadata.repairTags(tags) { onWarning("\(url.path): \($0)") }
     }
 
     private func write(_ tags: [StoredTag], to url: URL, initialColorNames: Set<String>) throws -> [StoredTag] {
@@ -71,7 +78,9 @@ struct TagStore {
 
         var freshURL = url
         freshURL.removeAllCachedResourceValues()
-        let actual = try readTags(freshURL)
+        let state = try readState(freshURL)
+        if state.needsRepair { throw TagStoreError.metadataStillNeedsRepair(path: url.path) }
+        let actual = state.tags
         if actual != finalTags {
             throw TagStoreError.verificationFailed(
                 path: url.path,
@@ -88,7 +97,8 @@ struct TagStore {
         caseSensitive: Bool,
         position: PositionSpec?
     ) throws -> TagChange {
-        let existing = try readTags(url)
+        let state = try readState(url)
+        let existing = state.tags
         var revised = existing
         var missing: [StoredTag] = []
 
@@ -138,7 +148,7 @@ struct TagStore {
         }
         return TagChange(
             beforeTags: existing, afterTags: revised,
-            initialColorNames: Set(missing.map { $0.name })
+            initialColorNames: Set(missing.map { $0.name }), repairs: state.repairs
         )
     }
 
@@ -147,7 +157,8 @@ struct TagStore {
         from url: URL,
         caseSensitive: Bool
     ) throws -> TagChange {
-        let existing = try readTags(url)
+        let state = try readState(url)
+        let existing = state.tags
         let revised: [StoredTag]
 
         if requested.contains("*") {
@@ -159,20 +170,27 @@ struct TagStore {
                 })
             }
         }
-        return TagChange(beforeTags: existing, afterTags: revised)
+        return TagChange(beforeTags: existing, afterTags: revised, repairs: state.repairs)
     }
 
     func setChange(_ requested: [String], on url: URL) throws -> TagChange {
         // Even destructive set reads first so a metadata read failure cannot be
         // misinterpreted as "the file has no tags".
-        let existing = try readTags(url)
+        let state = try readState(url)
+        let existing = state.tags
         let revised = requested.map { name in
             existing.first { $0.name == name } ?? StoredTag(name: name)
         }
         return TagChange(
             beforeTags: existing, afterTags: revised,
-            initialColorNames: Set(requested.filter { name in !existing.contains { $0.name == name } })
+            initialColorNames: Set(requested.filter { name in !existing.contains { $0.name == name } }),
+            repairs: state.repairs
         )
+    }
+
+    func fixChange(on url: URL) throws -> TagChange {
+        let state = try readState(url)
+        return TagChange(beforeTags: state.tags, afterTags: state.tags, repairs: state.repairs)
     }
 
     func moveChange(
@@ -181,7 +199,8 @@ struct TagStore {
         on url: URL,
         caseSensitive: Bool
     ) throws -> TagChange {
-        let existing = try readTags(url)
+        let state = try readState(url)
+        let existing = state.tags
         let index = try uniqueMatchingIndex(
             tag: tag,
             in: existing.map { $0.name },
@@ -197,14 +216,14 @@ struct TagStore {
             caseSensitive: caseSensitive
         )
         revised.insert(moved, at: insertion)
-        return TagChange(beforeTags: existing, afterTags: revised)
+        return TagChange(beforeTags: existing, afterTags: revised, repairs: state.repairs)
     }
 
     func copyChange(from source: URL, to destination: URL) throws -> TagChange {
         // Fully complete both reads before any possible destination write.
         let sourceTags = try readTags(source)
-        let destinationTags = try readTags(destination)
-        return TagChange(beforeTags: destinationTags, afterTags: sourceTags)
+        let destinationState = try readState(destination)
+        return TagChange(beforeTags: destinationState.tags, afterTags: sourceTags, repairs: destinationState.repairs)
     }
 
     @discardableResult

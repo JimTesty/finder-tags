@@ -16,6 +16,7 @@ enum Operation {
     case add([String])
     case remove([String])
     case set([String])
+    case fix
     case copy
     case match(TagQuery)
     case filter(TagQuery)
@@ -114,7 +115,7 @@ struct Options {
 
     var isMutating: Bool {
         switch operation {
-        case .add, .remove, .set, .copy, .move, .restore: return true
+        case .add, .remove, .set, .fix, .copy, .move, .restore: return true
         default: return false
         }
     }
@@ -150,14 +151,44 @@ struct StoredTag: Equatable {
     }
 }
 
+struct TagRepairs {
+    var fixed = 0
+    var deleted = 0
+
+    var total: Int { fixed + deleted }
+
+    mutating func add(_ other: TagRepairs) {
+        fixed += other.fixed
+        deleted += other.deleted
+    }
+}
+
+struct TagRead {
+    let tags: [StoredTag]
+    var repairs = TagRepairs()
+
+    var needsRepair: Bool { repairs.total > 0 }
+}
+
 struct TagChange {
     let beforeTags: [StoredTag]
     let afterTags: [StoredTag]
     var initialColorNames: Set<String> = []
+    var repairs = TagRepairs()
 
     var before: [String] { beforeTags.map { $0.name } }
     var after: [String] { afterTags.map { $0.name } }
-    var hasChanges: Bool { beforeTags != afterTags }
+    var needsRepair: Bool { repairs.total > 0 }
+    var hasChanges: Bool { needsRepair || beforeTags != afterTags }
+}
+
+struct FixStats {
+    var visited = 0
+    var filesUpdated = 0
+    var unchanged = 0
+    var skipped = 0
+    var errors = 0
+    var repairs = TagRepairs()
 }
 
 struct UsageEntry {

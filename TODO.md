@@ -8,8 +8,8 @@ stopping points and silent fallbacks need these policies or larger changes:
 * **Unreadable tag payloads** (`FileTagMetadata.read/decode`,
   `TagStore.readTags`): invalid plists, non-array roots, and filesystem read
   errors still fail that file; traversal continues with others. There is no
-  trustworthy array to recover. Consider an explicit recovery command that
-  saves the raw bytes before trying Foundation's name-only view. Never infer
+  trustworthy array to recover. Consider extending `--fix` with an explicit
+  recovery mode that saves raw bytes before trying Foundation's name-only view. Never infer
   "no tags" from a failed read before an edit.
 * **Exact undo of malformed metadata** (`UndoWriter`, `TagChange`): undo saves
   the recovered tags, not discarded empty entries or the original illegal

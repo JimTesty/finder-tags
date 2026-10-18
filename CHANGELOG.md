@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Persist metadata repairs during mutations even when recovered before/after
+  tags match. Add `--fix` with fixed/deleted counts, dry-run previews, traversal,
+  and backup support. Verify that written metadata no longer needs repair.
 - Consolidate text rendering, separate CLI parsing from option validation, and
   organize Swift regression suites by feature with shared test helpers.
 - Escape control characters and backslashes in text listings, previews, and
