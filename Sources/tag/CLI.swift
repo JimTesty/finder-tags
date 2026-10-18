@@ -168,8 +168,7 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
                 if inlineValue != nil {
                     fail("--move does not take '=...'; use --move TAG POSITION")
                 }
-                let tag = requireValue("--move", args: args, index: &i)
-                validateSingleTagOperand(tag)
+                let tag = validatedSingleTagOperand(requireValue("--move", args: args, index: &i))
                 var position: PositionSpec? = nil
                 if i + 1 < args.count && !args[i + 1].hasPrefix("-") {
                     position = parsePosition(requireValue("--move", args: args, index: &i))
@@ -178,12 +177,10 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
             case "at":
                 setPosition(parsePosition(operand()), options: &options, option: "--at")
             case "before":
-                let tag = operand()
-                validateSingleTagOperand(tag)
+                let tag = validatedSingleTagOperand(operand())
                 setPosition(.before(tag), options: &options, option: "--before")
             case "after":
-                let tag = operand()
-                validateSingleTagOperand(tag)
+                let tag = validatedSingleTagOperand(operand())
                 setPosition(.after(tag), options: &options, option: "--after")
             case "sorted-tags", "sort-tags": options.sortedTags = true
             case "color":

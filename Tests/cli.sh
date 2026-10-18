@@ -302,25 +302,23 @@ fi
 
 newline_tag='Line one
 Line two'
-if "$bin" --set "$newline_tag" --dry-run "$work/a" >/dev/null 2>"$work/newline.err"; then
-    echo "expected newline-containing tag to fail" >&2
-    exit 1
-fi
-grep -q 'may not contain CR, LF, or NUL' "$work/newline.err"
+"$bin" --set "$newline_tag" --dry-run --jsonl "$work/a" >"$work/newline.out" 2>"$work/newline.err"
+grep -Fq '"after":["Line one�Line two"]' "$work/newline.out"
+grep -Fq 'replaced with �' "$work/newline.err"
 
 cr_tag=$(printf 'Line one\rLine two')
-if "$bin" --set "$cr_tag" --dry-run "$work/a" >/dev/null 2>"$work/cr.err"; then
-    echo "expected CR-containing tag to fail" >&2
-    exit 1
-fi
-grep -q 'may not contain CR, LF, or NUL' "$work/cr.err"
+"$bin" --set "$cr_tag" --dry-run --jsonl "$work/a" >"$work/cr.out" 2>"$work/cr.err"
+grep -Fq '"after":["Line one�Line two"]' "$work/cr.out"
+grep -Fq 'replaced with �' "$work/cr.err"
 
 crlf_tag=$(printf 'Line one\r\nLine two')
-if "$bin" --set "$crlf_tag" --dry-run "$work/a" >/dev/null 2>"$work/crlf.err"; then
-    echo "expected CRLF-containing tag to fail" >&2
-    exit 1
-fi
-grep -q 'may not contain CR, LF, or NUL' "$work/crlf.err"
+"$bin" --set "$crlf_tag" --dry-run --jsonl "$work/a" >"$work/crlf.out" 2>"$work/crlf.err"
+grep -Fq '"after":["Line one��Line two"]' "$work/crlf.out"
+grep -Fq 'replaced with �' "$work/crlf.err"
+edge_tag=$(printf '\rStart\r')
+"$bin" --set "$edge_tag" --dry-run --jsonl "$work/a" >"$work/edge.out" 2>"$work/edge.err"
+grep -Fq '"after":["�Start�"]' "$work/edge.out"
+grep -Fq 'replaced with �' "$work/edge.err"
 
 for flag in follow-symlinks no-backup dry-run recursive help version; do
     if "$bin" --set Safety "--$flag=false" "$work/a" >/dev/null 2>"$work/inline.err"; then
@@ -518,8 +516,7 @@ if [ "$(uname -s)" = Darwin ]; then
     "$bin" --remove Orange --no-backup "$work/a"
     [ -z "$("$bin" -N "$work/a")" ]
 
-    # Quoted comma-containing tags round-trip. Foundation does not reliably
-    # round-trip CR/LF inside Finder tag names, so those inputs are rejected.
+    # Quoted comma-containing tags round-trip.
     "$bin" --set '"Project, Alpha","Needs review"' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'Project, Alpha,Needs review' ]
     "$bin" --match '"Project, Alpha"' "$work/a" | grep -Fxq "$work/a"

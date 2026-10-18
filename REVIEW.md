@@ -1,6 +1,6 @@
 # Source review and development notes
 
-Last reviewed: 2026-10-15
+Last reviewed: 2026-10-18
 
 This is a lightweight source review, not a security audit. The code has shell
 coverage and macOS integration tests, but the project is still **not thoroughly
@@ -81,8 +81,8 @@ would make deterministic output and mutation/error behavior more complicated.
 
 Quoted input supports commas inside tag names, but default output still uses
 commas between tags. A tag containing a comma is therefore ambiguous in that
-text format. CR, LF, and NUL are rejected in tag-name input because Foundation
-does not reliably round-trip them as Finder tags.
+text format. CR, LF, and NUL in tag names are visibly replaced with U+FFFD and
+reported with warnings because Foundation does not reliably round-trip them.
 
 `--jsonl` is the archival and recommended machine-readable format because JSON
 escaping preserves comma-containing tags and path strings structurally.
@@ -127,9 +127,14 @@ in copies and archives. Case-distinct tags can have different colors. Usage
 totals with conflicting or unavailable colors are uncolored rather than
 choosing whichever file happened to be visited first.
 
-A future macOS version could change the private xattr encoding. Malformed or
-unreadable metadata is reported as an error; it is not silently treated as no
-tags. Old archives without per-item numbers cannot recover historical colors.
+A future macOS version could change the private xattr encoding. Readable arrays
+are recovered entry by entry with warnings: empty names are ignored, CR/LF/NUL
+are replaced with U+FFFD, and non-string entries become text. An invalid color
+suffix is kept as part of the repaired name with color unavailable. Unreadable
+or non-array metadata still fails instead of being treated as no tags. Reads do
+not rewrite the original data; subsequent changes persist recovered tags, and
+undo records cannot reconstruct discarded empty entries or malformed bytes.
+Old archives without per-item numbers cannot recover historical colors.
 
 ### 12. Colored tags can visually spill across soft-wrapped lines
 
@@ -161,6 +166,9 @@ Spotlight-backed implementation.
 ### 14. Export/restore is not transactional
 
 Restore parses and validates all archive records before the first tag write.
+Archive tag entries use the same visible repairs as live metadata, removing
+an empty name together with its corresponding color. Other malformed fields
+still reject the document; remaining recovery work is recorded in `TODO.md`.
 It validates path separators as bytes, rejects parent symlinks without `-L`,
 and repeats destination checks immediately before comparing and changing each item. It
 does not lock files or roll back earlier changes if a later file fails. A

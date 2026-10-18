@@ -101,13 +101,40 @@ enum ArchiveTests {
         }
         for patch: [String: Any] in [["size": true, "mtime": 0], ["size": 1.9, "mtime": 0],
                                      ["size": 0, "mtime": true], ["destination": 1], ["targetExists": 1],
-                                     ["tags": ["Bad\r\nName"]]] {
+                                     ["tags": "not an array"]] {
             var bad = archiveItem("good")
             for (key, value) in patch { bad[key] = value }
             try safetyDocument([archiveItem("good"), bad.merging(["path": "\u{0301}valid"]) { _, new in new }])
             _ = try context.run(["--restore", safetyArchive.path, "--no-backup"], status: 74)
             expect(try store.readTags(good) == baseline)
         }
+
+        var imperfect = archiveItem("good")
+        imperfect["tags"] = ["", "CR\r\nName", 42, "Tail", "Name\n3"] as [Any]
+        imperfect["colors"] = [2, 3, 99, NSNull(), 0] as [Any]
+        try safetyDocument([imperfect])
+        let recovered = [StoredTag(name: "CR��Name", color: 3), StoredTag(name: "42", color: 99),
+                         StoredTag(name: "Tail"), StoredTag(name: "Name�3", color: 0)]
+        var warnings: [String] = []
+        let document = try ArchiveReader(onWarning: { warnings.append($0) }).read(path: safetyArchive.path)
+        expect(document.items.first?.storedTags == recovered)
+        expect(warnings.count == 4 && warnings.allSatisfy { $0.contains("archive line 3, item 'good'") })
+        let repairedDisplay = try context.run(["--convert", safetyArchive.path, "-N"])
+        expect(repairedDisplay.out == "CR��Name,42,Tail,Name�3\n" && repairedDisplay.err.contains("replaced with �"))
+        let restored = try records(context.run(["--restore", safetyArchive.path, "--jsonl", "--no-backup"]).out)
+        expect(restored.last?["warnings"] as? Int == 4 && restored.last?["restored"] as? Int == 1)
+        expect(try store.readTags(good) == recovered)
+
+        // Missing colors keep the older name-only behavior after empty removal.
+        imperfect.removeValue(forKey: "colors")
+        try safetyDocument([imperfect])
+        let nameOnly = try ArchiveReader(onWarning: { _ in }).read(path: safetyArchive.path).items.first!
+        expect(nameOnly.colors == nil && nameOnly.tags == recovered.map { $0.name })
+
+        try safetyDocument([archiveItem("good", tags: [StoredTag(name: "", color: 5)])])
+        let cleared = try records(context.run(["--restore", safetyArchive.path, "--jsonl", "--no-backup"]).out)
+        expect(cleared.last?["cleared"] as? Int == 1 && cleared.last?["warnings"] as? Int == 1)
+        expect(try store.readTags(good).isEmpty)
 
         let unsorted = [StoredTag(name: "B", color: 3), StoredTag(name: "A", color: 6)]
         try safetyDocument([archiveItem("good", tags: unsorted)])

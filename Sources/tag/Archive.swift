@@ -167,6 +167,8 @@ private struct ArchiveBuilder {
 }
 
 struct ArchiveReader {
+    var onWarning: (String) -> Void = reportWarning
+
     func read(path: String) throws -> ArchiveDocument {
         let data: Data
         if path == "-" {
@@ -259,22 +261,28 @@ struct ArchiveReader {
             throw ArchiveError.invalidLine(line: line, message: "item has an invalid kind")
         }
 
-        let tags: [String]?
-        if let rawTags = object["tags"] {
-            guard let values = rawTags as? [Any] else {
+        let rawTags: [Any]?
+        if let value = object["tags"] {
+            guard let values = value as? [Any] else {
                 throw ArchiveError.invalidLine(line: line, message: "tags is not an array")
             }
-            var parsed: [String] = []
-            for value in values {
-                guard let tag = value as? String else {
-                    throw ArchiveError.invalidLine(line: line, message: "tags must contain only strings")
-                }
-                parsed.append(tag)
-            }
-            tags = parsed
+            rawTags = values
         } else {
-            tags = nil
+            rawTags = nil
         }
+        // Validate alignment against the original entries, then filter names
+        // and their colors together. An empty name must not shift later colors.
+        let rawColors = try archiveItemColors(object["colors"], tagCount: rawTags?.count, line: line)
+        let parsedTags = rawTags?.enumerated().compactMap { index, value -> StoredTag? in
+            let warn = { (message: String) in
+                onWarning("archive line \(line), item '\(path)', tag \(index): \(message)")
+            }
+            let text = tagNameText(value, onWarning: warn)
+            guard let name = repairedTagName(text, onWarning: warn) else { return nil }
+            return StoredTag(name: name, color: rawColors?[index])
+        }
+        let tags = parsedTags?.map { $0.name }
+        let colors = rawColors == nil ? nil : parsedTags?.map { $0.color }
 
         let metadata = try jsonMetadata(object, line: line)
         let destination: String?
@@ -304,7 +312,6 @@ struct ArchiveReader {
             targetKind = nil
         }
 
-        let colors = try archiveItemColors(object["colors"], tags: tags, line: line)
         return ArchiveItem(
             path: path,
             kind: kind,

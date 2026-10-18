@@ -19,7 +19,7 @@ final class Output {
         if options.reverse { tags.reverse() }
 
         if options.jsonLines {
-            emitJSONState(for: target)
+            try emitJSONState(for: target)
             var object = try pathObject(target)
             object["tags"] = tags.map { $0.name }
             object["colors"] = tagColorNumbers(tags)
@@ -137,7 +137,7 @@ final class Output {
         }
 
         if options.jsonLines {
-            emitJSONState(for: target)
+            try emitJSONState(for: target)
             var object = try pathObject(target)
             object["operation"] = operation
             object["before"] = change.before
@@ -201,7 +201,11 @@ final class Output {
 
         var isDirectory = false
         if options.slashDirectories {
-            isDirectory = try target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+            do {
+                isDirectory = try target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+            } catch {
+                reportWarning("\(target.absolutePath): cannot determine directory suffix; showing path without suffix: \(error.localizedDescription)")
+            }
         }
         return renderer.path(target.displayPath, isDirectory: isDirectory)
     }
@@ -252,13 +256,10 @@ final class Output {
             : .file
     }
 
-    private func emitJSONState(for target: Target) {
+    private func emitJSONState(for target: Target) throws {
         guard let root = target.rootPath, root != lastJSONRoot else { return }
+        try jsonRecord(["type": "root", "path": root])
         lastJSONRoot = root
-        let object: [String: Any] = ["type": "root", "path": root]
-        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return }
-        FileHandle.standardOutput.write(data)
-        FileHandle.standardOutput.write(Data([10]))
     }
 
     private func jsonRecord(_ object: [String: Any]) throws {

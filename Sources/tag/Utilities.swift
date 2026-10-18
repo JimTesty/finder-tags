@@ -13,6 +13,10 @@ func eprint(_ message: String) {
     FileHandle.standardError.write(Data((escapedDisplayText(message) + "\n").utf8))
 }
 
+func reportWarning(_ message: String) {
+    eprint("\(programName): warning: \(message)")
+}
+
 func fileMetadata(for url: URL) throws -> FileMetadata {
     let values = try url.resourceValues(forKeys: [
         .isDirectoryKey, .fileSizeKey, .contentModificationDateKey
@@ -41,9 +45,10 @@ func fileMetadata(for target: Target) throws -> FileMetadata {
     // without -L. Use the same referent for displayed and archived file-info,
     // so a symlink's tags are not paired with the link's own byte length and
     // timestamp. -L still controls traversal and structural symlink metadata.
-    let url = isSymbolicLink(target.logicalURL)
-        ? resolvedTagURL(target.logicalURL)
-        : target.url
+    // resolvingSymlinksInPath can return the link itself for a dangling link.
+    // Start from its recorded destination so missing target info stays missing.
+    let url = symbolicLinkInfo(for: target.logicalURL)
+        .map { resolvedTagURL($0.targetURL) } ?? target.url
     return try fileMetadata(for: url)
 }
 

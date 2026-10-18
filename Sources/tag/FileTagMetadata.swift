@@ -9,7 +9,7 @@ import Darwin
 enum FileTagMetadata {
     private static let attribute = "com.apple.metadata:_kMDItemUserTags"
 
-    static func read(_ url: URL) throws -> [StoredTag]? {
+    static func read(_ url: URL, onWarning: (String) -> Void = reportWarning) throws -> [StoredTag]? {
         #if canImport(Darwin)
         while true {
             let size = getxattr(url.path, attribute, nil, 0, 0, 0)
@@ -28,39 +28,56 @@ enum FileTagMetadata {
             }
             if count > size { continue }
             data.count = count
-            return try decode(data)
+            return try decode(data) { onWarning("\(url.path): \($0)") }
         }
         #else
         return nil
         #endif
     }
 
-    static func decode(_ data: Data) throws -> [StoredTag] {
+    static func decode(_ data: Data, onWarning: (String) -> Void = reportWarning) throws -> [StoredTag] {
         let object = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
-        guard let values = object as? [String] else {
-            throw invalid("tag metadata is not an array of strings")
+        guard let values = object as? [Any] else {
+            throw invalid("tag metadata is not an array")
         }
-        return try values.map { value in
+        return values.enumerated().compactMap { index, entry in
+            guard let value = entry as? String else {
+                let value = tagNameText(entry) { onWarning("stored tag at index \(index): \($0)") }
+                return repairedTagName(value, onWarning: {
+                    onWarning("stored tag at index \(index): \($0)")
+                }).map { StoredTag(name: $0) }
+            }
             let scalars = value.unicodeScalars
-            guard let newline = scalars.lastIndex(of: "\n") else {
-                guard !value.isEmpty, !containsInvalidTagCharacters(value) else {
-                    throw invalid("invalid stored tag: '\(value)'")
+            let rawName: String
+            let color: Int?
+            if let newline = scalars.lastIndex(of: "\n") {
+                let suffix = String(scalars[scalars.index(after: newline)...])
+                color = Int(suffix)
+                if color != nil {
+                    rawName = String(scalars[..<newline])
+                } else {
+                    onWarning("invalid stored color suffix in tag '\(value)'; preserving the whole value with color unavailable")
+                    rawName = value
                 }
-                return StoredTag(name: value)
+            } else {
+                rawName = value
+                color = nil
             }
-            let name = String(scalars[..<newline])
-            let suffix = String(scalars[scalars.index(after: newline)...])
-            guard !name.isEmpty, !containsInvalidTagCharacters(name), let color = Int(suffix) else {
-                throw invalid("invalid stored tag: '\(value)'")
-            }
+            guard let name = repairedTagName(rawName, onWarning: onWarning) else { return nil }
+            // Unknown integer colors are data, not a reason to discard a tag.
             return StoredTag(name: name, color: color)
         }
     }
 
-    static func write(_ tags: [StoredTag], to url: URL) throws {
-        for tag in tags where tag.name.isEmpty || containsInvalidTagCharacters(tag.name) {
-            throw invalid("invalid stored tag name: '\(tag.name)'")
+    static func usableTags(_ tags: [StoredTag], onWarning: (String) -> Void) -> [StoredTag] {
+        tags.compactMap { tag in
+            guard let name = repairedTagName(tag.name, onWarning: onWarning) else { return nil }
+            return StoredTag(name: name, color: tag.color)
         }
+    }
+
+    static func write(_ tags: [StoredTag], to url: URL, onWarning: (String) -> Void = reportWarning) throws {
+        let tags = usableTags(tags) { onWarning("\(url.path): \($0)") }
         #if canImport(Darwin)
         let values = tags.map { tag in
             tag.color.map { tag.name + "\n" + String($0) } ?? tag.name

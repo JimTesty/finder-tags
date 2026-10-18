@@ -1,5 +1,63 @@
 # Future work
 
+## Imperfect-data recovery audit (2026-10-18)
+
+Tag entries are now recovered individually, with warnings. The remaining
+stopping points and silent fallbacks need these policies or larger changes:
+
+* **Unreadable tag payloads** (`FileTagMetadata.read/decode`,
+  `TagStore.readTags`): invalid plists, non-array roots, and filesystem read
+  errors still fail that file; traversal continues with others. There is no
+  trustworthy array to recover. Consider an explicit recovery command that
+  saves the raw bytes before trying Foundation's name-only view. Never infer
+  "no tags" from a failed read before an edit.
+* **Exact undo of malformed metadata** (`UndoWriter`, `TagChange`): undo saves
+  the recovered tags, not discarded empty entries or the original illegal
+  characters, non-string values, and malformed suffixes. Exact recovery needs
+  an additional raw-xattr preimage in the journal and a corresponding restore
+  path. Reads and dry runs currently leave the original bytes alone.
+* **Archive fields beyond tag names** (`ArchiveReader`, `ArchiveFormat`): bad
+  size/mtime, informational header palette/exclusions, color types/counts,
+  item kinds, symlink fields, duplicate export paths, unsupported records,
+  invalid UTF-8/JSON, header/root/order/version errors, and missing export
+  summaries can still reject the whole document. Consider omitting bad
+  informational fields and recovering independently valid records with
+  diagnostics. Do not guess color alignment, restore destinations, or a new
+  format's meaning. Coordinate this with the completion/journal work below.
+* **Restore preflight** (`RestoreEngine.run/destinationURL`): one unsafe path
+  or parent-symlink inspection failure prevents all writes. A future partial
+  recovery policy could reject that item and retain safe items; path escape
+  checks and follow-symlink mode agreement must remain mandatory. Once
+  preflight passes, individual missing/type-changed/unreadable items already
+  report errors and allow the rest to continue.
+* **Ambiguous or unavailable edit targets** (`TagStore.addChange`, movement
+  and insertion matching): one ambiguous requested addition or missing anchor
+  can stop the file's edit. Consider independent additions when their placement
+  remains clear. Duplicate names, including collisions created by repairs,
+  are retained with their colors; operations needing one match still require
+  an unambiguous choice. Invalid indexes are not clamped.
+* **Optional platform writes** (`TagStore.write`): failure to assign an initial
+  color or synchronize the legacy Finder label still fails the edit, possibly
+  after partial platform writes. Determine when preserving the primary tag
+  array can proceed with a warning. Undo-write failures and read-back
+  verification mismatches must remain errors.
+* **File-type fallbacks** (`Output.itemKind`, `symbolicLinkInfo`,
+  `isSymbolicLink`): some `try?` failures still become "file", "not a symlink",
+  or "not a directory". Introduce explicit unavailable results and warnings
+  where they affect output; never bypass restore's checked parent inspection.
+  Directory enumeration/type failures already allow sibling work to continue
+  but cannot recover inaccessible children. Spotlight startup/platform errors
+  still stop that search; malformed individual results now warn and continue.
+* **Path input encoding** (`readPathsFromStdin`): invalid UTF-8 is currently
+  replaced silently before lookup. Decide between warning/skipping each bad
+  path and supporting byte-preserving filesystem paths; avoid silently acting
+  on a different name. Truncated or ambiguous tag/query syntax and missing
+  required operands remain command errors rather than partial instructions.
+* **Output I/O** (`Output`, archive/undo writers): older nonthrowing FileHandle
+  write/close APIs can terminate or hide underlying write failures. Move to
+  throwing APIs with explicit diagnostics and a policy for stopping after a
+  broken output stream or failed journal write.
+
 ## Deferred audit work (2026-10-15)
 
 * Full summary accounting and interrupted undo-journal recovery. Export archives

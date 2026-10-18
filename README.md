@@ -142,8 +142,12 @@ differences are restored and included in undo archives. Older version 3 archives
 readable: restore retains known colors of matching live tags, and conversion
 leaves tags uncolored. The old header `tagColors` field remains accepted for
 compatibility but does not determine file colors.
+Archive tag entries use the same warning-and-repair rules as live metadata.
+Removing an empty name also removes its corresponding color entry; other
+names retain their original colors. Color-array types and alignment are still
+validated before recovery.
 Item paths are relative and must not escape the selected root.
-Duplicate paths in exports and malformed records are rejected before any tag is
+Duplicate paths in exports and other malformed records are rejected before any tag is
 changed. Export archives must end with a `summary` record; an archive cut off
 before it is rejected. Summary counts and exporter error totals are not yet
 validated. This does not make filesystem changes transactional if a later
@@ -338,9 +342,10 @@ That represents exactly three tags. A doubled quote inside a quoted component
 represents one literal quote, CSV-style. Unquoted components have surrounding
 whitespace trimmed; whitespace inside quoted components is preserved.
 
-Tag names containing CR, LF, or NUL are rejected. In particular, Foundation's
-Finder-tag API can accept a write containing a newline but read back only the
-prefix, so treating such a write as successful would silently corrupt the tag.
+Each CR, LF, or NUL in a supplied or stored tag name is replaced with `�`
+(U+FFFD), with a warning showing the original and repaired names. CRLF becomes
+two replacement characters. Foundation cannot reliably round-trip these
+characters inside Finder tag names. Empty tag-list entries are ignored.
 
 The normal comma-separated **list** output is inherently ambiguous when tag
 names contain commas. Use `--jsonl` for machine consumption or
@@ -518,9 +523,26 @@ colored.
 
 ## Reliability behavior
 
-A successful metadata read with no tags means "no tags". Failed reads or
-malformed stored tag data are **never** interpreted as an empty tag list.
-Foundation supplies legacy label metadata when the per-tag xattr is absent.
+A readable tag array is processed entry by entry. Empty names are ignored with
+a warning; CR/LF/NUL are replaced with `�`. Non-string entries become text tags
+using their descriptions, with a warning. When a stored newline suffix is not
+an integer color, the whole string is kept as a repaired name with unavailable
+color, rather than losing its suffix. Unknown integer colors are preserved.
+Valid tags, order, and colors remain usable even when neighboring entries are
+imperfect. If all entries are empty, the recovered list has no tags.
+
+Reads and dry runs do not rewrite metadata. An actual tag change writes the
+recovered names and colors; undo archives contain this recovered preimage,
+not the original malformed bytes. Repairs can produce duplicate names; those
+entries are preserved, and operations requiring a unique match can still report
+ambiguity.
+
+An unreadable plist, a non-array payload, or a filesystem read failure is still
+an error, never an inferred empty tag list. Foundation supplies legacy label
+metadata when the per-tag xattr is absent. Failures to read optional file size
+or modification time produce warnings and omit those fields while retaining
+the item's tags. Warnings go to stderr and do not by themselves cause a failing
+exit status; export and restore summaries count metadata recovery warnings.
 
 Every destructive operation reads target metadata before writing. `--copy`
 completes both source and destination reads before any destination write. Every

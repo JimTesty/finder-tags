@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 
 let colorFixtureTags = [
     StoredTag(name: "Yellow", color: 5), StoredTag(name: "Purple", color: 3),
@@ -62,6 +65,15 @@ func taggedFile(_ url: URL, tags: [StoredTag]) throws {
     try Data().write(to: url)
     try FileTagMetadata.write(tags, to: url)
 }
+
+#if canImport(Darwin)
+func writeRawTagMetadata(_ data: Data, to url: URL) {
+    let status = data.withUnsafeBytes {
+        setxattr(url.path, "com.apple.metadata:_kMDItemUserTags", $0.baseAddress, $0.count, 0, 0)
+    }
+    expect(status == 0, "cannot write raw metadata fixture: \(url.path)")
+}
+#endif
 
 func archiveItem(_ path: String, tags: [StoredTag] = [StoredTag(name: "Changed", color: 3)]) -> [String: Any] {
     ["type": "item", "kind": "file", "path": path, "tags": tags.map { $0.name },

@@ -24,21 +24,27 @@ enum TagStoreError: LocalizedError {
 }
 
 struct TagStore {
+    var onWarning: (String) -> Void = reportWarning
+
     func read(_ url: URL) throws -> [String] {
         try readTags(url).map { $0.name }
     }
 
     func readTags(_ url: URL) throws -> [StoredTag] {
-        if let tags = try FileTagMetadata.read(url) { return tags }
+        if let tags = try FileTagMetadata.read(url, onWarning: onWarning) { return tags }
         // A successful read with no tag value means "no tags". Any resource
         // value error throws and must never be converted into an empty array.
         let values = try url.resourceValues(forKeys: [.tagNamesKey, .labelNumberKey])
         let names = values.tagNames ?? []
         // A legacy Finder label describes one tag, not every tag on a file.
-        return names.map { StoredTag(name: $0, color: names.count == 1 ? values.labelNumber : nil) }
+        let tags = names.map { StoredTag(name: $0, color: names.count == 1 ? values.labelNumber : nil) }
+        return FileTagMetadata.usableTags(tags) { onWarning("\(url.path): \($0)") }
     }
 
     private func write(_ tags: [StoredTag], to url: URL, initialColorNames: Set<String>) throws -> [StoredTag] {
+        // Repair before Foundation's initial-color/label writes as well as the
+        // xattr write, so all writes and verification use the same usable data.
+        let tags = FileTagMetadata.usableTags(tags) { onWarning("\(url.path): \($0)") }
         var finalTags = tags
         if !initialColorNames.isEmpty {
             // Only new/unknown names need macOS to choose an initial color.
@@ -58,7 +64,7 @@ struct TagStore {
         // rewrite the tag array, so restore the full per-tag values afterward.
         let label = finalTags.reversed().compactMap { $0.color }.first { (1...7).contains($0) } ?? 0
         try (url as NSURL).setResourceValue(label, forKey: .labelNumberKey)
-        try FileTagMetadata.write(finalTags, to: url)
+        try FileTagMetadata.write(finalTags, to: url, onWarning: onWarning)
         #else
         try (url as NSURL).setResourceValue(finalTags.map { $0.name }, forKey: .tagNamesKey)
         #endif

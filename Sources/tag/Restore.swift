@@ -42,6 +42,12 @@ struct RestoreEngine {
         }
         if stats.errors > 0 { return stats }
 
+        var store = self.store
+        store.onWarning = { message in
+            stats.warnings += 1
+            onWarning(message)
+        }
+
         // Undo records contain chronological preimages. Reverse them so aliases
         // of the same file return to the state before the first mutation.
         let items = document.header.purpose == "undo"

@@ -28,9 +28,9 @@ func tagColorNumbers(_ tags: [StoredTag]) -> [Any] {
     tags.map { tag -> Any in tag.color.map { $0 as Any } ?? NSNull() }
 }
 
-func archiveItemColors(_ value: Any?, tags: [String]?, line: Int) throws -> [Int?]? {
+func archiveItemColors(_ value: Any?, tagCount: Int?, line: Int) throws -> [Int?]? {
     guard let value = value else { return nil } // Older version 3 archives.
-    guard let tags = tags, let values = value as? [Any], values.count == tags.count else {
+    guard let tagCount = tagCount, let values = value as? [Any], values.count == tagCount else {
         throw ArchiveError.invalidLine(line: line, message: "colors must align with the tags array")
     }
     return try values.map { value in

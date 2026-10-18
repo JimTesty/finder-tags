@@ -114,6 +114,10 @@ final class App {
             }
 
             let writer = ArchiveWriter(options: options)
+            let exportStore = TagStore(onWarning: { message in
+                writer.noteWarning()
+                self.warn(message)
+            })
             try writer.emitRoot(rootURL)
             let traversal = Traversal(
                 options: options,
@@ -125,7 +129,7 @@ final class App {
             traversal.forEachTarget { target in
                 let tags: [StoredTag]?
                 do {
-                    tags = try self.store.readTags(target.url)
+                    tags = try exportStore.readTags(target.url)
                 } catch {
                     // Foundation may not expose a usable tag value for a
                     // symlink itself, or for a dangling target with -L.
@@ -144,17 +148,9 @@ final class App {
                     }
                 }
 
-                let metadata: FileMetadata?
-                if options.fileInfo {
-                    do {
-                        metadata = try fileMetadata(for: target)
-                    } catch {
-                        metadata = nil
-                        writer.noteWarning()
-                        self.warn("\(target.absolutePath): file size or modification time is unavailable")
-                    }
-                } else {
-                    metadata = nil
+                let metadata = self.optionalMetadata(for: target) { message in
+                    writer.noteWarning()
+                    self.warn(message)
                 }
                 do {
                     try writer.emitTarget(target, tags: tags, metadata: metadata)
@@ -176,7 +172,11 @@ final class App {
         }
 
         do {
-            let document = try ArchiveReader().read(path: archivePath)
+            var archiveWarnings = 0
+            let document = try ArchiveReader(onWarning: { message in
+                archiveWarnings += 1
+                self.warn(message)
+            }).read(path: archivePath)
             guard document.header.followSymlinks == options.followSymlinks else {
                 throw ArchiveError.modeMismatch(
                     archive: document.header.followSymlinks,
@@ -198,7 +198,8 @@ final class App {
                     try self.recordUndo(target: target, tags: tags)
                 }
             )
-            let stats = engine.run()
+            var stats = engine.run()
+            stats.warnings += archiveWarnings
             try output.emitSummary(stats, operation: "restore")
         } catch {
             report("restore failed: \(error.localizedDescription)")
@@ -230,7 +231,19 @@ final class App {
     }
 
     private func warn(_ message: String) {
-        eprint("\(programName): warning: \(message)")
+        reportWarning(message)
+    }
+
+    private func optionalMetadata(
+        for target: Target, onWarning: (String) -> Void = reportWarning
+    ) -> FileMetadata? {
+        guard options.fileInfo else { return nil }
+        do {
+            return try fileMetadata(for: target)
+        } catch {
+            onWarning("\(target.absolutePath): file info unavailable; omitting size and modification time: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private func explicitTarget(_ path: String) -> Target {
@@ -283,9 +296,7 @@ final class App {
     private func emitMatchingTarget(_ target: Target, query: TagQuery) throws {
         let tags = try store.readTags(target.url)
         guard queryMatches(tags, query: query) else { return }
-        let metadata = options.fileInfo
-            ? try fileMetadata(for: target)
-            : nil
+        let metadata = optionalMetadata(for: target)
         try output.emitFile(target, tags: tags, metadata: metadata)
     }
 
@@ -334,9 +345,7 @@ final class App {
                     // Read the current value only for display and metadata
                     // ordering, without applying a second live-tag filter.
                     let tags = try store.readTags(target.url)
-                    let metadata = options.fileInfo
-                        ? try fileMetadata(for: target)
-                        : nil
+                    let metadata = optionalMetadata(for: target)
                     try output.emitFile(target, tags: tags, metadata: metadata)
                 } catch {
                     report("\(target.absolutePath): \(error.localizedDescription)")
@@ -372,9 +381,7 @@ final class App {
                         }
                     }
                     if !options.taggedOnly || !tags.isEmpty {
-                        let metadata = options.fileInfo
-                            ? try fileMetadata(for: target)
-                            : nil
+                        let metadata = optionalMetadata(for: target)
                         try output.emitFile(target, tags: tags, metadata: metadata)
                     }
 

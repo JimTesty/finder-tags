@@ -45,8 +45,11 @@ struct SpotlightSearch {
 
         for index in 0..<metadataQuery.resultCount {
             guard let item = metadataQuery.result(at: index) as? NSMetadataItem,
-                  let path = item.value(forAttribute: "kMDItemPath") as? String
-            else { continue }
+                  let path = item.value(forAttribute: "kMDItemPath") as? String,
+                  !path.isEmpty, !path.utf8.contains(0) else {
+                reportWarning("Spotlight result \(index) has no usable file path; ignoring it")
+                continue
+            }
 
             let logicalURL = URL(fileURLWithPath: path).standardizedFileURL
             let ioURL = tagIOURL(logicalURL, followSymlinks: options.followSymlinks)

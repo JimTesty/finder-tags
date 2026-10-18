@@ -53,13 +53,31 @@ func containsInvalidTagCharacters(_ tag: String) -> Bool {
     tag.unicodeScalars.contains { $0.value == 0 || $0.value == 10 || $0.value == 13 }
 }
 
-private func validateTagName(_ tag: String) {
-    // NSURLTagNamesKey does not round-trip line breaks reliably on macOS: a
-    // write can succeed but a subsequent read returns only the prefix before
-    // the newline. Reject values we know cannot be represented faithfully.
-    if containsInvalidTagCharacters(tag) {
-        fail("tag names may not contain CR, LF, or NUL characters")
+func tagNameText(_ value: Any, onWarning: (String) -> Void) -> String {
+    if let name = value as? String { return name }
+    let name = String(describing: value)
+    onWarning("non-string tag (\(type(of: value))) converted to text: '\(name)'")
+    return name
+}
+
+func repairedTagName(_ tag: String, onWarning: (String) -> Void) -> String? {
+    guard !tag.isEmpty else {
+        onWarning("ignoring empty tag name")
+        return nil
     }
+    guard containsInvalidTagCharacters(tag) else { return tag }
+    let replacement: Unicode.Scalar = "\u{FFFD}"
+    let scalars = tag.unicodeScalars.map { scalar in
+        scalar.value == 0 || scalar.value == 10 || scalar.value == 13 ? replacement : scalar
+    }
+    let repaired = String(String.UnicodeScalarView(scalars))
+    onWarning("tag name '\(tag)': CR, LF, or NUL replaced with � (U+FFFD); using '\(repaired)'")
+    return repaired
+}
+
+private func isTagSyntaxWhitespace(_ character: Character) -> Bool {
+    // CR/LF belong to the name and need a visible repair, even at its edges.
+    character.isWhitespace && !containsInvalidTagCharacters(String(character))
 }
 
 // Parse a small CSV-like tag grammar. Shell quotes around the whole argument
@@ -76,15 +94,15 @@ func parseTagList(_ raw: String) -> [String] {
     var i = 0
 
     func appendTag(_ value: String, quoted: Bool) {
-        let tag = quoted ? value : value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if tag.isEmpty { return }
-        validateTagName(tag)
-        // Preserve case-only variants. Only exact duplicates are redundant.
-        if exactSeen.insert(tag).inserted { result.append(tag) }
+        let value = quoted ? value : value.trimmingCharacters(in: .whitespaces)
+        guard let tag = repairedTagName(value, onWarning: reportWarning) else { return }
+        // Only identical input names are redundant. Distinct names can collide
+        // after repair; retain both instead of silently merging their data.
+        if exactSeen.insert(value).inserted { result.append(tag) }
     }
 
     while i < chars.count {
-        while i < chars.count && chars[i].isWhitespace { i += 1 }
+        while i < chars.count && isTagSyntaxWhitespace(chars[i]) { i += 1 }
 
         var value = ""
         var quoted = false
@@ -113,7 +131,7 @@ func parseTagList(_ raw: String) -> [String] {
             }
 
             if !closed { fail("unterminated quoted tag in TAGS") }
-            while i < chars.count && chars[i].isWhitespace { i += 1 }
+            while i < chars.count && isTagSyntaxWhitespace(chars[i]) { i += 1 }
             if i < chars.count && chars[i] != "," {
                 fail("unexpected text after quoted tag; separate tags with commas")
             }
@@ -249,8 +267,7 @@ private struct TagQueryParser {
 
             if !closed { fail("unterminated quoted tag in TAGS") }
             guard !value.isEmpty else { fail("tag name must not be empty") }
-            validateTagName(value)
-            return value
+            return repairedTagName(value, onWarning: reportWarning)!
         }
 
         var value = ""
@@ -274,10 +291,9 @@ private struct TagQueryParser {
             }
         }
 
-        let tag = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tag = value.trimmingCharacters(in: .whitespaces)
         guard !tag.isEmpty else { fail("tag name must not be empty") }
-        validateTagName(tag)
-        return tag
+        return repairedTagName(tag, onWarning: reportWarning)!
     }
 
     private var atEnd: Bool { index >= chars.count }
@@ -285,7 +301,7 @@ private struct TagQueryParser {
     private var current: Character { chars[index] }
 
     private mutating func skipWhitespace() {
-        while !atEnd && current.isWhitespace { index += 1 }
+        while !atEnd && isTagSyntaxWhitespace(current) { index += 1 }
     }
 }
 
@@ -294,9 +310,9 @@ func parseTagQuery(_ raw: String) -> TagQuery {
     return parser.parse()
 }
 
-func validateSingleTagOperand(_ tag: String) {
+func validatedSingleTagOperand(_ tag: String) -> String {
     if tag.isEmpty { fail("tag name must not be empty") }
-    validateTagName(tag)
+    return repairedTagName(tag, onWarning: reportWarning)!
 }
 
 func tagQueryMatches(_ stored: [String], query: TagQuery, caseSensitive: Bool) -> Bool {

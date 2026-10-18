@@ -239,6 +239,8 @@ file sizes below 0.05 MB as ~0MB, sizes from 0.05 MB to below 0.95 MB rounded
 to one decimal without a leading zero (for example, .5MB), and sizes of at
 least 0.95 MB rounded to the nearest whole MB. MB uses decimal units
 (1 MB = 1,000,000 bytes). Directories are shown as ---.
+Unavailable size or modification time produces a warning; the item is still
+shown without these fields.
 .TP
 .B --no-file-info
 Omit size and modification-time fields from export output.
@@ -332,8 +334,13 @@ Query TAGS for --match, --filter, --usage, and --find use the same expression
 grammar: comma means AND, | means OR, a leading - means NOT, and parentheses
 override the precedence comma < | < -. Quote operator characters inside a tag,
 or escape a pipe in an unquoted tag as \\|.
-Tag names containing CR, LF, or NUL are rejected because Foundation does not
-reliably round-trip them as Finder tags.
+Each CR, LF, or NUL in a supplied or stored tag name is replaced with the visible
+replacement character (U+FFFD), with a warning showing the repair. CRLF becomes
+two replacement characters. Empty tag-list entries are ignored. Non-string
+stored entries become text tags with warnings. An invalid stored color suffix
+is preserved as part of the repaired name with color unavailable. Unreadable
+or non-array tag metadata still reports an error. Reads and dry runs do not
+rewrite metadata; subsequent tag changes and undo records use recovered tags.
 .SH FILES
 See the finder-tags README and REVIEW.md for detailed behavior, reliability
 notes, compatibility differences, archive syntax, and JSONL fields.

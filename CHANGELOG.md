@@ -11,7 +11,14 @@
   require the final summary on export archives and reject malformed field types.
 - Replay undo journals in reverse order, restore explicit null colors exactly,
   and create backup files exclusively without overwriting existing paths.
-- Reject CR/LF/NUL in all tag-name inputs, including CRLF and stored metadata.
+- Recover imperfect tag entries individually with warnings: replace each
+  CR/LF/NUL with U+FFFD, ignore empty names, convert non-string entries to text,
+  and preserve malformed color suffixes as part of the repaired name. Apply
+  name repairs to command-line operands and archive tags too, preserving
+  each retained archive tag's aligned color.
+- Keep tag output when optional file info or directory suffixes are unavailable,
+  report skipped malformed Spotlight results, and count metadata warnings in
+  export/restore summaries. Omit dangling symlinks' unavailable target file info.
 - Keep launcher build output on stderr, honor sorted tags during restore and
   conversion, reject operands on boolean switches, and accept CRLF stdin paths.
 - Make ordinary JSONL item paths consistently root-relative, with `.` for the
