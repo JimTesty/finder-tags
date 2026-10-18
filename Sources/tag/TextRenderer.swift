@@ -37,7 +37,10 @@ struct TextRenderer {
         return colors.render(text(name), color: tag.color)
     }
 
-    func path(_ path: String, isDirectory: Bool = false, isSymlink: Bool = false) -> String {
+    func path(
+        _ path: String, isDirectory: Bool = false, isSymlink: Bool = false,
+        isBrokenSymlink: Bool = false
+    ) -> String {
         var result = text(path)
         if options.slashDirectories {
             if isSymlink {
@@ -45,6 +48,9 @@ struct TextRenderer {
             } else if isDirectory && !path.hasSuffix("/") {
                 result += "/"
             }
+        }
+        if isBrokenSymlink && !options.nulTerminate {
+            result += " " + colors.renderBrokenSymlink("[BROKEN SYMLINK]")
         }
         return result
     }
@@ -54,11 +60,7 @@ struct TextRenderer {
         if options.slashDirectories && targetExists == true && targetIsDirectory && !destination.hasSuffix("/") {
             destination += "/"
         }
-        var result = " -> " + text(destination)
-        if targetExists == false {
-            result += " " + colors.renderMissing("(NOT FOUND)")
-        }
-        return result
+        return " -> " + text(destination)
     }
 
     func fileRecords(

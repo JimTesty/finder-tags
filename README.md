@@ -190,8 +190,10 @@ For an existing symlink, size and mtime come from its target even without
 `--follow-symlinks`, matching the target tags that Foundation commonly returns.
 `--follow-symlinks` still controls recursive traversal and structural symlink
 metadata in archives. When a target is missing, listings use the symlink's own
-timestamp, byte size, and tags, with a warning. If file info is unavailable,
-text output shows `[--------    ---]`; JSONL omits the unavailable fields.
+timestamp, byte size, and tags. Text filenames receive `[BROKEN SYMLINK]`, and
+one final warning counts the affected symlinks. NUL-separated filenames stay
+literal. If file info is unavailable, text output shows `[--------    ---]`;
+JSONL omits the unavailable fields.
 Exports retain a broken link's file info but omit its unavailable target tags.
 The human date is for display only; use JSONL/archive values for stable
 change detection.
@@ -230,9 +232,10 @@ Tag I/O for a listed symlink itself uses its referent, as in ordinary commands.
 
 `--slash` appends `/` to directories and `@` to symlinks, like `ls -F`.
 `--print-symlinks` additionally prints the link's stored destination, for
-example `link@ -> ../target/`; the target slash follows `--slash`, and missing
-targets are marked `(NOT FOUND)` in red when color is enabled. Printing a
-symlink target does not cause traversal or tag I/O to follow it.
+example `link@ -> ../target/`; the target slash follows `--slash`. Missing
+targets add `[BROKEN SYMLINK]` to the filename, bold with a red background when
+color is enabled. Printing a symlink target does not cause traversal or tag I/O
+to follow it.
 When converting an archive that did not record target information, the
 converter reports that the target was not recorded rather than guessing.
 

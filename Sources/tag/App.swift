@@ -6,6 +6,7 @@ final class App {
     private let output: Output
     private var undoWriter: UndoWriter?
     private var hadError = false
+    private var brokenSymlinks = Set<String>()
 
     init(options: Options) {
         self.options = options
@@ -46,6 +47,7 @@ final class App {
         }
 
         finishUndo()
+        reportBrokenSymlinks()
         return hadError ? ExitCode.ioError : 0
     }
 
@@ -131,6 +133,10 @@ final class App {
                 }
             )
             traversal.forEachTarget { target in
+                let isBroken = symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true
+                if isBroken && self.noteBrokenSymlink(target) {
+                    writer.noteWarning()
+                }
                 let tags: [StoredTag]?
                 do {
                     tags = try exportStore.readTags(target.url)
@@ -142,8 +148,10 @@ final class App {
                     // Keep the item so -L archives retain the link structure.
                     if isSymbolicLink(target.logicalURL) {
                         tags = nil
-                        writer.noteWarning()
-                        self.warn("\(target.absolutePath): tags unavailable for symlink; recording the item without tags")
+                        if !isBroken {
+                            writer.noteWarning()
+                            self.warn("\(target.absolutePath): tags unavailable for symlink; recording the item without tags")
+                        }
                     } else {
                         writer.stats.errors += 1
                         writer.stats.visited += 1
@@ -152,7 +160,7 @@ final class App {
                     }
                 }
 
-                let metadata = self.optionalMetadata(for: target, warnAboutSymlinkFallback: true) { message in
+                let metadata = self.optionalMetadata(for: target) { message in
                     writer.noteWarning()
                     self.warn(message)
                 }
@@ -238,18 +246,44 @@ final class App {
         reportWarning(message)
     }
 
+    @discardableResult
+    private func noteBrokenSymlink(_ target: Target) -> Bool {
+        brokenSymlinks.insert(target.logicalURL.path).inserted
+    }
+
+    private func reportBrokenSymlinks() {
+        let count = brokenSymlinks.count
+        guard count > 0 else { return }
+        let links = count == 1 ? "symlink" : "symlinks"
+        let targets = count == 1 ? "target" : "targets"
+        var message = "\(count) \(links) with non-existent \(targets)"
+        if case .export = options.operation, !options.fileInfo {
+            message += "; target tags omitted"
+        } else {
+            let owner = count == 1 ? "its" : "their"
+            message += "; using \(owner) own file info"
+        }
+        warn(message)
+    }
+
+    private func readTagsForDisplay(_ target: Target) throws -> [StoredTag] {
+        if symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true {
+            noteBrokenSymlink(target)
+            // Display can read the link itself; edits still require a readable
+            // referent because their writes follow the symlink.
+            return try store.readState(target.logicalURL, followSymlinks: false).tags
+        }
+        return try store.readTags(target.url)
+    }
+
     private func optionalMetadata(
-        for target: Target, warnAboutSymlinkFallback: Bool = false,
-        onWarning: (String) -> Void = reportWarning
+        for target: Target, onWarning: (String) -> Void = reportWarning
     ) -> FileMetadata? {
         guard options.fileInfo else { return nil }
         do {
             let metadata = try fileMetadata(for: target)
-            // Display tag reads already announce this fallback. Export keeps
-            // unavailable referent tags separate from the link's own tags.
-            if warnAboutSymlinkFallback,
-               symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true {
-                onWarning("\(target.absolutePath): symlink target not found; using symlink's own file info")
+            if symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true {
+                noteBrokenSymlink(target)
             }
             return metadata
         } catch {
@@ -306,7 +340,7 @@ final class App {
     }
 
     private func emitMatchingTarget(_ target: Target, query: TagQuery) throws {
-        let tags = try store.readTagsForDisplay(target)
+        let tags = try readTagsForDisplay(target)
         guard queryMatches(tags, query: query) else { return }
         let metadata = optionalMetadata(for: target)
         try output.emitFile(target, tags: tags, metadata: metadata)
@@ -328,7 +362,7 @@ final class App {
 
         traversal.forEachTarget { target in
             do {
-                let tags = try store.readTagsForDisplay(target)
+                let tags = try readTagsForDisplay(target)
                 if queryMatches(tags, query: query) {
                     counter.add(tags)
                 }
@@ -356,7 +390,7 @@ final class App {
                     // Spotlight's complete predicate determines membership.
                     // Read the current value only for display and metadata
                     // ordering, without applying a second live-tag filter.
-                    let tags = try store.readTagsForDisplay(target)
+                    let tags = try readTagsForDisplay(target)
                     let metadata = optionalMetadata(for: target)
                     try output.emitFile(target, tags: tags, metadata: metadata)
                 } catch {
@@ -382,7 +416,7 @@ final class App {
 
                 switch options.operation {
                 case .list:
-                    let tags = try store.readTagsForDisplay(target)
+                    let tags = try readTagsForDisplay(target)
                     if !options.taggedOnly || !tags.isEmpty {
                         let metadata = optionalMetadata(for: target)
                         try output.emitFile(target, tags: tags, metadata: metadata)

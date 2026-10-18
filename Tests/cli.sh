@@ -165,7 +165,7 @@ fi
 [ "$(cd "$work/tree" && "$bin" --slash link)" = 'link@' ]
 [ "$(cd "$work/tree" && "$bin" --print-symlinks link)" = 'link -> real' ]
 [ "$(cd "$work/tree" && "$bin" --slash --print-symlinks link)" = 'link@ -> real/' ]
-[ "$(cd "$work/tree" && "$bin" --slash --print-symlinks dangling)" = 'dangling@ -> missing (NOT FOUND)' ]
+[ "$(cd "$work/tree" && "$bin" --slash --print-symlinks dangling)" = 'dangling@ [BROKEN SYMLINK] -> missing' ]
 # macOS tag lookup may follow an existing symlink even without -L. File-info
 # follows the same target, rather than reporting the link text's byte length.
 nofollow_link_info=$("$bin" --file-info --no-tags "$work/tree/file-link")
@@ -181,8 +181,8 @@ fi
 esc=$(printf '\033')
 colored_symlink=$(cd "$work/tree" && "$bin" --color=force --slash --print-symlinks dangling)
 case "$colored_symlink" in
-    *"$esc[31m(NOT FOUND)$esc[m"*) ;;
-    *) echo "missing symlink target was not colored red" >&2; exit 1 ;;
+    *"$esc[41;1m[BROKEN SYMLINK]$esc[m"*) ;;
+    *) echo "broken symlink marker was not bold with a red background" >&2; exit 1 ;;
 esac
 
 # Hidden files are skipped unless -A is present.

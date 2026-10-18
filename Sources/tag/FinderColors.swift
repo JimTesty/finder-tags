@@ -32,9 +32,9 @@ struct FinderColors {
         return escape + text + "\u{001B}[m"
     }
 
-    func renderMissing(_ text: String) -> String {
+    func renderBrokenSymlink(_ text: String) -> String {
         guard isEnabled else { return text }
-        return "\u{001B}[31m\(text)\u{001B}[m"
+        return "\u{001B}[41;1m\(text)\u{001B}[m"
     }
 
     private static let ansiByCode: [Int: String] = [

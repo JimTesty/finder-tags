@@ -72,8 +72,9 @@ enum TextDisplayTests {
         try writeRecords(objects, to: archive)
         let purple = "\u{1b}[48;5;129m", reset = "\u{1b}[m"
         let converted = try context.run(["--convert", archive.path, "--print-symlinks", "--space-indent", "--color=force"])
-        expect(converted.out == escapedDisplayText(name) + " -> " + escapedDisplayText(missing.lastPathComponent)
-            + " \u{1b}[31m(NOT FOUND)" + reset + "  " + purple + escapedDisplayText(tag) + reset + "\n")
+        expect(converted.out == escapedDisplayText(name) + " \u{1b}[41;1m[BROKEN SYMLINK]" + reset
+            + " -> " + escapedDisplayText(missing.lastPathComponent)
+            + "  " + purple + escapedDisplayText(tag) + reset + "\n")
         expect(try context.run(["--convert", archive.path, "-0", "--no-name"]).out == tag + "\0")
         expect(try context.run(["--convert", archive.path, "--no-name", "--compact-tags", "--color=force"]).out
             == purple + #"\u{1b}"# + reset + "\n")

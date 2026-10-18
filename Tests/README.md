@@ -13,6 +13,8 @@ The repair suite checks raw xattr bytes after otherwise unchanged mutations,
 
 The file info suite checks missing-field placeholders and broken symlinks,
 including the link's own timestamp, tags, and colors, with and without `-L`.
+It also checks the final warning count, marker colors and tag alignment, and
+literal filenames in JSONL and NUL-separated output.
 
 The Unicode suite covers Chinese and other scripts, combining accents,
 supplementary-plane CJK, and emoji. It checks decoding, parsing, selective

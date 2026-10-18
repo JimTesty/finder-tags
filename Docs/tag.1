@@ -218,11 +218,12 @@ Append / to directory names and @ to symlink names.
 .TP
 .B --print-symlinks
 Print each symlink's stored destination. A directory target receives a
-trailing / when --slash is also specified; missing targets are marked NOT
-FOUND.
+trailing / when --slash is also specified. Missing targets add [BROKEN SYMLINK]
+to the filename, bold with a red background when color is enabled.
 .TP
 .BR -0 , " --null"
 Terminate text records with NUL and leave names unescaped. --nul is an alias.
+Broken-symlink markers are omitted to keep filenames literal.
 .TP
 .B --absolute
 Display absolute logical paths.
@@ -241,8 +242,8 @@ Include each listed, matched, found, or exported item's byte size and content
 modification time. Export enables this by default. JSONL uses numeric size and mtime fields;
 restore ignores these fields. For an existing symlink, size and mtime come
 from its target even without -L, matching Finder's usual tag lookup; -L still
-controls traversal and structural archive symlink metadata. A missing target
-produces a warning; listings use the symlink's own timestamp, size, and tags.
+controls traversal and structural archive symlink metadata. Missing targets
+use the symlink's own timestamp, size, and tags, with one final warning count.
 Text output shows
 file sizes below 0.05 MB as ~0MB, sizes from 0.05 MB to below 0.95 MB rounded
 to one decimal without a leading zero (for example, .5MB), and sizes of at

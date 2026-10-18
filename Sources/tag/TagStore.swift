@@ -37,16 +37,6 @@ struct TagStore {
         try readState(url).tags
     }
 
-    // Read-only display may use a dangling link's own metadata. Edits keep
-    // requiring a readable referent, since writes still follow the symlink.
-    func readTagsForDisplay(_ target: Target) throws -> [StoredTag] {
-        if symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true {
-            onWarning("\(target.absolutePath): symlink target not found; using symlink's own metadata")
-            return try readState(target.logicalURL, followSymlinks: false).tags
-        }
-        return try readTags(target.url)
-    }
-
     func readState(_ url: URL, followSymlinks: Bool = true) throws -> TagRead {
         if let state = try FileTagMetadata.readState(url, followSymlinks: followSymlinks, onWarning: onWarning) { return state }
         // A successful read with no tag value means "no tags". Any resource

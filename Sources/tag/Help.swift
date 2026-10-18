@@ -152,8 +152,8 @@ func usage(code: Int32 = 0) -> Never {
     (or -L) resolves symlinks, follows symlinked directories, and records
     structural target information in archive output, but never embeds target
     tags inside a symlink record. --print-symlinks displays the literal stored
-    link destination without changing traversal; dangling targets are marked
-    NOT FOUND.
+    link destination without changing traversal; broken links are marked
+    [BROKEN SYMLINK] on the filename (except in NUL-separated output).
 
     Export archives are always JSONL, include untagged items by default, and
     preserve stored tag order and color numbers. --reverse is ignored during export. --file-info

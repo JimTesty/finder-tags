@@ -28,6 +28,7 @@ enum FileInfoTests {
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "yyyyMMdd"
         let date = formatter.string(from: Date(timeIntervalSince1970: timestamp))
+        let singleWarning = "tag: warning: 1 symlink with non-existent target; using its own file info\n"
 
         for (index, destination) in destinations.enumerated() {
             let link = root.appendingPathComponent("dangling-\(index)")
@@ -50,8 +51,8 @@ enum FileInfoTests {
                 expect(record["kind"] as? String == "symlink")
                 expect(record["size"] as? Int == destination.utf8.count)
                 expect(abs((record["mtime"] as! Double) - timestamp) < 0.000001)
-                expect(result.err.contains("symlink target not found; using symlink's own metadata"))
-                expect(result.err.split(separator: "\n").count == 1)
+                expect(result.err == singleWarning)
+                expect(record["path"] as? String == ".")
                 #if canImport(Darwin)
                 expect(record["tags"] as? [String] == ["LinkOnly", "中文"])
                 expect(record["colors"] as? [Int] == [3, 5])
@@ -59,10 +60,22 @@ enum FileInfoTests {
             }
             let text = try context.run(["--file-info", "--no-tags", "--print-symlinks", link.path])
             expect(text.out.hasPrefix("[\(date)   ~0MB] "))
-            expect(text.out.contains(" -> \(destination) (NOT FOUND)"))
+            expect(text.out.contains("\(link.path) [BROKEN SYMLINK] -> \(destination)\n"))
+            expect(text.err == singleWarning)
+            let literal = try context.run(["-0T", link.path])
+            expect(literal.out == link.path + "\0" && literal.err == singleWarning)
             #if canImport(Darwin)
             let filtered = try context.run(["--filter", "LinkOnly", "--file-info", "--jsonl", link.path])
             expect(try records(filtered.out).last?["tags"] as? [String] == ["LinkOnly", "中文"])
+            let width = link.path.count + 30
+            let decoratedName = link.path + " [BROKEN SYMLINK]"
+            let expected = "[\(date)   ~0MB] " + decoratedName
+                + String(repeating: " ", count: width - decoratedName.count + 2) + "LinkOnly,中文\n"
+            let aligned = try context.run(["--file-info", "--align-tags", String(width), link.path])
+            expect(aligned.out == expected && aligned.err == singleWarning)
+            let colored = try context.run(["--file-info", "--align-tags", String(width), "--color=force", link.path])
+            expect(colored.out.contains(" \u{1b}[41;1m[BROKEN SYMLINK]\u{1b}[m"))
+            expect(colored.out.replacingOccurrences(of: "\u{1b}\\[[0-9;]*m", with: "", options: .regularExpression) == expected)
             expect(readRawTagMetadata(link, followSymlinks: false) == ownTags)
             #endif
         }
@@ -86,14 +99,31 @@ enum FileInfoTests {
         try fileManager.createSymbolicLink(atPath: loop.path, withDestinationPath: "loop")
         expect(symbolicLinkInfo(for: loop)?.targetIsMissing == false)
 
+        let recursive = try context.run(["-RT", "--file-info", root.path])
+        expect(recursive.out.components(separatedBy: "[BROKEN SYMLINK]").count - 1 == 4)
+        expect(recursive.err == "tag: warning: 4 symlinks with non-existent targets; using their own file info\n")
+
         #if canImport(Darwin)
+        // Other warnings remain visible; the broken-link count is the last line.
+        let imperfect = root.appendingPathComponent("dangling-0")
+        writeRawTagMetadata(try plist(["", "LinkOnly\n3"]), to: imperfect, followSymlinks: false)
+        let repaired = try context.run(["--file-info", imperfect.path])
+        expect(repaired.err.contains("ignoring empty tag") && repaired.err.hasSuffix(singleWarning))
+        expect(repaired.err.split(separator: "\n").count == 2)
+        writeRawTagMetadata(try plist(["LinkOnly\n3", "中文\n5"]), to: imperfect, followSymlinks: false)
+
         // An export can preserve link file info, but must not offer the link's
         // own tags for restoration onto a referent that might appear later.
         let exported = try context.run(["--export", root.path])
         let exportedRecords = try records(exported.out)
         let broken = exportedRecords.first { $0["path"] as? String == "dangling-0" }!
         expect(broken["tags"] == nil && broken["mtime"] as? Double == timestamp)
-        expect(exported.err.contains("symlink target not found; using symlink's own file info"))
+        expect(exported.err.hasSuffix(recursive.err))
+        expect(!exported.err.contains("tags unavailable for symlink"))
+        expect(exportedRecords.last?["warnings"] as? Int == 4)
+        expect(exported.err.split(separator: "\n").filter { $0.contains("warning:") }.count == 1)
+        let noInfo = try context.run(["--export", "--no-file-info", root.path])
+        expect(noInfo.err.hasSuffix("tag: warning: 4 symlinks with non-existent targets; target tags omitted\n"))
         let archive = work.appendingPathComponent("export.jsonl")
         try Data(exported.out.utf8).write(to: archive)
         let converted = try context.run(["--convert", archive.path, "--no-tags"])

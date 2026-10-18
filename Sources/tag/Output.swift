@@ -213,9 +213,11 @@ final class Output {
     }
 
     private func formattedPath(for target: Target) throws -> String {
-        if isSymbolicLink(target.logicalURL) {
-            var path = renderer.path(target.displayPath, isSymlink: true)
-            if options.printSymlinks, let link = symbolicLinkInfo(for: target.logicalURL) {
+        if let link = symbolicLinkInfo(for: target.logicalURL) {
+            var path = renderer.path(
+                target.displayPath, isSymlink: true, isBrokenSymlink: link.targetIsMissing
+            )
+            if options.printSymlinks {
                 path += renderer.symlinkDestination(
                     link.destination, targetExists: link.targetExists, targetIsDirectory: link.targetIsDirectory
                 )
@@ -236,7 +238,9 @@ final class Output {
 
     private func formattedArchivePath(_ item: ArchiveItem) -> String {
         let path = renderer.path(
-            item.path, isDirectory: item.kind == .directory && item.path != ".", isSymlink: item.kind == .symlink
+            item.path, isDirectory: item.kind == .directory && item.path != ".",
+            isSymlink: item.kind == .symlink,
+            isBrokenSymlink: item.kind == .symlink && item.symlinkTargetExists == false
         )
         guard options.printSymlinks, item.kind == .symlink else { return path }
         return path + renderer.symlinkDestination(
