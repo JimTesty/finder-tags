@@ -281,7 +281,11 @@ struct ArchiveReader {
             guard let name = repairedTagName(text, onWarning: warn) else { return nil }
             return StoredTag(name: name, color: rawColors?[index])
         }
-        let tags = parsedTags?.map { $0.name }
+        let tags = parsedTags.map { entries in
+            uniqueTagNames(entries.map { $0.name }) { index, name in
+                onWarning("archive line \(line), item '\(path)': duplicate tag name '\(entries[index].name)' renamed to '\(name)'")
+            }
+        }
         let colors = rawColors == nil ? nil : parsedTags?.map { $0.color }
 
         let metadata = try jsonMetadata(object, line: line)

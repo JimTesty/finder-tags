@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Rename duplicate tag names with repeated U+FFFD suffixes, preserving order
+  and colors and avoiding existing names. Warn on renames, count each repaired
+  entry once, and warn when identical command-line tags are collapsed.
 - Persist metadata repairs during mutations even when recovered before/after
   tags match. Add `--fix` with fixed/deleted counts, dry-run previews, traversal,
   and backup support. Verify that written metadata no longer needs repair.

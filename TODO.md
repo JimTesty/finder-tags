@@ -39,9 +39,9 @@ stopping points and silent fallbacks need these policies or larger changes:
 * **Ambiguous or unavailable edit targets** (`TagStore.addChange`, movement
   and insertion matching): one ambiguous requested addition or missing anchor
   can stop the file's edit. Consider independent additions when their placement
-  remains clear. Duplicate names, including collisions created by repairs,
-  are retained with their colors; operations needing one match still require
-  an unambiguous choice. Invalid indexes are not clamped.
+  remains clear. Exact duplicate names are now renamed during recovery;
+  case-insensitive matches among case-distinct names can still be ambiguous.
+  Invalid indexes are not clamped.
 * **Optional platform writes** (`TagStore.write`): failure to assign an initial
   color or synchronize the legacy Finder label still fails the edit, possibly
   after partial platform writes. Determine when preserving the primary tag

@@ -30,7 +30,24 @@ enum MetadataTests {
         let extremes = try FileTagMetadata.decode(plist(["Min\n\(Int.min)", "Max\n\(Int.max)", "Min\n\(Int.min)"]))
         expect(extremes.map { $0.color } == [Int.min, Int.max, Int.min])
         let collision = try FileTagMetadata.decode(plist(["Same\rName\n3", "Same\0Name\n6"])) { _ in }
-        expect(collision == [StoredTag(name: "Same�Name", color: 3), StoredTag(name: "Same�Name", color: 6)])
+        expect(collision == [StoredTag(name: "Same�Name", color: 3), StoredTag(name: "Same�Name�", color: 6)])
+        warnings = []
+        let duplicates = try FileTagMetadata.decodeState(plist(["Yellow\n5", "Yellow\n3", "Yellow\n0"])) { warnings.append($0) }
+        expect(duplicates.tags == [StoredTag(name: "Yellow", color: 5), StoredTag(name: "Yellow�", color: 3), StoredTag(name: "Yellow��", color: 0)])
+        expect(duplicates.repairs.fixed == 2 && duplicates.repairs.deleted == 0)
+        expect(warnings.count == 2 && warnings.allSatisfy { $0.contains("duplicate tag name") && $0.contains("renamed to") })
+        let reserved = try FileTagMetadata.decodeState(plist(["Yellow\n5", "Yellow\n3", "Yellow�\n0", "Yellow��", "Yellow\n99"])) { _ in }
+        expect(reserved.tags.map { $0.name } == ["Yellow", "Yellow���", "Yellow�", "Yellow��", "Yellow����"])
+        expect(reserved.tags.map { $0.color } == [5, 3, 0, nil, 99])
+        expect(reserved.repairs.fixed == 2)
+        let multipleRepairs = try FileTagMetadata.decodeState(plist(["", "Same�Name\n3", "Same\rName\n6", "Same\0Name\n0"])) { _ in }
+        expect(multipleRepairs.tags.map { $0.name } == ["Same�Name", "Same�Name�", "Same�Name��"])
+        expect(multipleRepairs.repairs.fixed == 2 && multipleRepairs.repairs.deleted == 1)
+        let convertedCollision = try FileTagMetadata.decodeState(plist([42, "42", ""] as [Any])) { _ in }
+        expect(convertedCollision.tags.map { $0.name } == ["42", "42�"])
+        expect(convertedCollision.repairs.fixed == 2 && convertedCollision.repairs.deleted == 1)
+        let caseVariants = try FileTagMetadata.decodeState(plist(["Yellow\n5", "yellow\n3"])) { _ in }
+        expect(caseVariants.tags.map { $0.name } == ["Yellow", "yellow"] && !caseVariants.needsRepair)
         let repairState = try FileTagMetadata.decodeState(plist(["", "Bad\r\nName\n3", "Bad\ncolor", 42] as [Any])) { _ in }
         expect(repairState.repairs.fixed == 3 && repairState.repairs.deleted == 1)
         expect(repairState.needsRepair && repairState.repairs.total == 4)

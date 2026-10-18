@@ -547,9 +547,11 @@ imperfect. If all entries are empty, the recovered list has no tags.
 Reads and dry runs do not rewrite metadata. Mutations persist necessary repairs
 even if the recovered tags already match the request; `--fix` performs those
 repairs directly. Undo archives contain this recovered preimage,
-not the original malformed bytes. Repairs can produce duplicate names; those
-entries are preserved, and operations requiring a unique match can still report
-ambiguity.
+not the original malformed bytes. Duplicate names are made unique by appending
+`�` repeatedly: `Yellow,Yellow,Yellow` becomes `Yellow,Yellow�,Yellow��`.
+Existing suffixed names are reserved, and each entry keeps its color and order.
+Renames produce warnings and count as fixes. Identical command-line entries
+collapse to one with a warning; case-distinct names remain separate.
 
 An unreadable plist, a non-array payload, or a filesystem read failure is still
 an error, never an inferred empty tag list. Foundation supplies legacy label

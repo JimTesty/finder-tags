@@ -35,6 +35,39 @@ enum RepairTests {
             expect(readRawTagMetadata(file) == clean && !fileManager.fileExists(atPath: unusedUndo.path))
         }
 
+        let duplicateRaw = try plist(["Yellow\n5", "Yellow\n3", "Yellow\n0"])
+        let uniqueNames = ["Yellow", "Yellow�", "Yellow��"]
+        writeRawTagMetadata(duplicateRaw, to: file)
+        let listedDuplicates = try context.run(["--jsonl", file.path])
+        expect(try records(listedDuplicates.out).last?["tags"] as? [String] == uniqueNames)
+        expect(listedDuplicates.err.contains("duplicate tag name 'Yellow' renamed to 'Yellow��'"))
+        expect(readRawTagMetadata(file) == duplicateRaw)
+        let duplicateUndo = work.appendingPathComponent("duplicate-undo.jsonl")
+        let duplicatePreview = try records(context.run(["--fix", file.path, "--dry-run", "--jsonl", "--backup", duplicateUndo.path]).out)
+        expect(duplicatePreview.last?["tagsFixed"] as? Int == 2 && duplicatePreview.last?["tagsDeleted"] as? Int == 0)
+        expect(readRawTagMetadata(file) == duplicateRaw && !fileManager.fileExists(atPath: duplicateUndo.path))
+        let fixedDuplicates = try records(context.run(["--fix", file.path, "--jsonl", "--backup", duplicateUndo.path]).out)
+        expect(fixedDuplicates.last?["tagsFixed"] as? Int == 2 && fixedDuplicates.last?["tagsDeleted"] as? Int == 0)
+        let rawUnique = try PropertyListSerialization.propertyList(from: readRawTagMetadata(file), format: nil) as? [String]
+        expect(rawUnique == ["Yellow\n5", "Yellow�\n3", "Yellow��\n0"])
+        expect(try ArchiveReader().read(path: duplicateUndo.path).items.first?.tags == uniqueNames)
+        let cleanDuplicates = readRawTagMetadata(file)
+        let repeatedFix = try records(context.run(["--fix", file.path, "--jsonl", "--no-backup"]).out)
+        expect(repeatedFix.last?["tagsFixed"] as? Int == 0 && readRawTagMetadata(file) == cleanDuplicates)
+        let usage = try records(context.run(["--usage", "*", file.path, "--jsonl"]).out)
+        expect(usage.compactMap { $0["tag"] as? String } == uniqueNames)
+        expect(usage.allSatisfy { $0["count"] as? Int == 1 })
+        _ = try context.run(["--move", "Yellow�", "first", file.path, "--no-backup"])
+        expect(try FileTagMetadata.read(file)?.first == StoredTag(name: "Yellow�", color: 3))
+
+        let repeatedInput = try context.run(["--set", "Yellow,Yellow,Yellow", file.path, "--dry-run", "--jsonl"])
+        expect(try records(repeatedInput.out).last?["after"] as? [String] == ["Yellow"])
+        expect(repeatedInput.err.components(separatedBy: "duplicate command-line tag 'Yellow' ignored").count == 3)
+        let repairedInput = try context.run(["--set", "Line\rTag,Line\nTag,Line�Tag�", file.path, "--jsonl", "--no-backup"])
+        expect(try records(repairedInput.out).last?["after"] as? [String] == ["Line�Tag", "Line�Tag��", "Line�Tag�"])
+        expect(repairedInput.err.contains("duplicate repaired command-line tag 'Line�Tag' renamed to 'Line�Tag��'"))
+        expect(try FileTagMetadata.readState(file)?.needsRepair == false)
+
         // Multiple illegal characters and multiple warnings still count once
         // per changed entry. Unknown integer colors remain ordinary data.
         let imperfect = try plist(["Yellow\n5", "", "Bad\0Name\n3", "Wrong\ncolor", 42, "\n5", "CR\r\nName\n99"] as [Any])

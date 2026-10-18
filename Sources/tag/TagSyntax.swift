@@ -75,6 +75,24 @@ func repairedTagName(_ tag: String, onWarning: (String) -> Void) -> String? {
     return repaired
 }
 
+func uniqueTagNames(_ names: [String], onRename: (Int, String) -> Void) -> [String] {
+    // Reserve every supplied name, including later entries, so a generated
+    // suffix cannot take a distinct tag's existing name. Case variants remain
+    // distinct, just as they are elsewhere in tag storage.
+    var reserved = Set(names)
+    var seen = Set<String>()
+    var nextCandidates: [String: String] = [:]
+    return names.enumerated().map { index, name in
+        if seen.insert(name).inserted { return name }
+        var candidate = nextCandidates[name] ?? name + "�"
+        while reserved.contains(candidate) { candidate += "�" }
+        reserved.insert(candidate)
+        nextCandidates[name] = candidate + "�"
+        onRename(index, candidate)
+        return candidate
+    }
+}
+
 private func isTagSyntaxWhitespace(_ character: Character) -> Bool {
     // CR/LF belong to the name and need a visible repair, even at its edges.
     character.isWhitespace && !containsInvalidTagCharacters(String(character))
@@ -96,9 +114,11 @@ func parseTagList(_ raw: String) -> [String] {
     func appendTag(_ value: String, quoted: Bool) {
         let value = quoted ? value : value.trimmingCharacters(in: .whitespaces)
         guard let tag = repairedTagName(value, onWarning: reportWarning) else { return }
-        // Only identical input names are redundant. Distinct names can collide
-        // after repair; retain both instead of silently merging their data.
-        if exactSeen.insert(value).inserted { result.append(tag) }
+        if exactSeen.insert(value).inserted {
+            result.append(tag)
+        } else {
+            reportWarning("duplicate command-line tag '\(value)' ignored")
+        }
     }
 
     while i < chars.count {
@@ -149,7 +169,9 @@ func parseTagList(_ raw: String) -> [String] {
         }
     }
 
-    return result
+    return uniqueTagNames(result) { index, name in
+        reportWarning("duplicate repaired command-line tag '\(result[index])' renamed to '\(name)'")
+    }
 }
 
 private struct TagQueryParser {

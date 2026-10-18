@@ -135,6 +135,8 @@ or non-array metadata still fails instead of being treated as no tags. Reads do
 not rewrite the original data; mutations persist recovered tags even when their
 requested arrays already match. `--fix` persists repairs directly. In either case,
 undo records cannot reconstruct discarded empty entries or malformed bytes.
+Exact duplicate names are renamed with repeated U+FFFD suffixes while retaining
+their individual colors and order; existing suffixed names are reserved.
 Old archives without per-item numbers cannot recover historical colors.
 
 ### 12. Colored tags can visually spill across soft-wrapped lines

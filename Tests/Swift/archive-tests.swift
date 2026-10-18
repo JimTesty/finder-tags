@@ -136,6 +136,20 @@ enum ArchiveTests {
         expect(cleared.last?["cleared"] as? Int == 1 && cleared.last?["warnings"] as? Int == 1)
         expect(try store.readTags(good).isEmpty)
 
+        var duplicates = archiveItem("good")
+        duplicates["tags"] = ["", "Yellow", "Yellow", "Yellow�", "Yellow"]
+        duplicates["colors"] = [7, 5, 3, 0, 99]
+        try safetyDocument([duplicates])
+        warnings = []
+        let duplicateDocument = try ArchiveReader(onWarning: { warnings.append($0) }).read(path: safetyArchive.path)
+        let unique = [StoredTag(name: "Yellow", color: 5), StoredTag(name: "Yellow��", color: 3),
+                      StoredTag(name: "Yellow�", color: 0), StoredTag(name: "Yellow���", color: 99)]
+        expect(duplicateDocument.items.first?.storedTags == unique && warnings.count == 3)
+        expect(try context.run(["--convert", safetyArchive.path, "-N"]).out == "Yellow,Yellow��,Yellow�,Yellow���\n")
+        let restoredDuplicates = try records(context.run(["--restore", safetyArchive.path, "--jsonl", "--no-backup"]).out)
+        expect(restoredDuplicates.last?["warnings"] as? Int == 3 && restoredDuplicates.last?["restored"] as? Int == 1)
+        expect(try store.readTags(good) == unique)
+
         let unsorted = [StoredTag(name: "B", color: 3), StoredTag(name: "A", color: 6)]
         try safetyDocument([archiveItem("good", tags: unsorted)])
         expect(try context.run(["--convert", safetyArchive.path, "--sorted-tags", "-N"]).out == "A,B\n")

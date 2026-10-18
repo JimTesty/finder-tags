@@ -48,30 +48,23 @@ enum FileTagMetadata {
         guard let values = object as? [Any] else {
             throw invalid("tag metadata is not an array")
         }
-        var repairs = TagRepairs()
-        let tags: [StoredTag] = values.enumerated().compactMap { index, entry in
+        var initiallyFixed = Set<Int>()
+        let tags: [StoredTag] = values.enumerated().map { index, entry in
             guard let value = entry as? String else {
                 let value = tagNameText(entry) { onWarning("stored tag at index \(index): \($0)") }
-                guard let name = repairedTagName(value, onWarning: {
-                    onWarning("stored tag at index \(index): \($0)")
-                }) else {
-                    repairs.deleted += 1
-                    return nil
-                }
-                repairs.fixed += 1
-                return StoredTag(name: name)
+                initiallyFixed.insert(index)
+                return StoredTag(name: value)
             }
             let scalars = value.unicodeScalars
             let rawName: String
             let color: Int?
-            var malformedSuffix = false
             if let newline = scalars.lastIndex(of: "\n") {
                 let suffix = String(scalars[scalars.index(after: newline)...])
                 color = Int(suffix)
                 if color != nil {
                     rawName = String(scalars[..<newline])
                 } else {
-                    malformedSuffix = true
+                    initiallyFixed.insert(index)
                     onWarning("invalid stored color suffix in tag '\(value)'; preserving the whole value with color unavailable")
                     rawName = value
                 }
@@ -79,32 +72,40 @@ enum FileTagMetadata {
                 rawName = value
                 color = nil
             }
-            guard let name = repairedTagName(rawName, onWarning: onWarning) else {
-                repairs.deleted += 1
-                return nil
-            }
-            if malformedSuffix || name != rawName { repairs.fixed += 1 }
             // Unknown integer colors are data, not a reason to discard a tag.
-            return StoredTag(name: name, color: color)
+            return StoredTag(name: rawName, color: color)
         }
-        return TagRead(tags: tags, repairs: repairs)
+        return repairTags(tags, initiallyFixed: initiallyFixed, onWarning: onWarning)
     }
 
     static func usableTags(_ tags: [StoredTag], onWarning: (String) -> Void) -> [StoredTag] {
         repairTags(tags, onWarning: onWarning).tags
     }
 
-    static func repairTags(_ tags: [StoredTag], onWarning: (String) -> Void) -> TagRead {
-        var repairs = TagRepairs()
-        let tags: [StoredTag] = tags.compactMap { tag in
+    static func repairTags(
+        _ tags: [StoredTag], initiallyFixed: Set<Int> = [], onWarning: (String) -> Void
+    ) -> TagRead {
+        var fixed = initiallyFixed
+        var deleted = 0
+        var sourceIndices: [Int] = []
+        let names: [String] = tags.enumerated().compactMap { index, tag in
             guard let name = repairedTagName(tag.name, onWarning: onWarning) else {
-                repairs.deleted += 1
+                fixed.remove(index)
+                deleted += 1
                 return nil
             }
-            if name != tag.name { repairs.fixed += 1 }
-            return StoredTag(name: name, color: tag.color)
+            sourceIndices.append(index)
+            if name != tag.name { fixed.insert(index) }
+            return name
         }
-        return TagRead(tags: tags, repairs: repairs)
+        let uniqueNames = uniqueTagNames(names) { index, name in
+            fixed.insert(sourceIndices[index])
+            onWarning("duplicate tag name '\(names[index])' renamed to '\(name)'")
+        }
+        let recovered = uniqueNames.enumerated().map { index, name in
+            StoredTag(name: name, color: tags[sourceIndices[index]].color)
+        }
+        return TagRead(tags: recovered, repairs: TagRepairs(fixed: fixed.count, deleted: deleted))
     }
 
     static func write(_ tags: [StoredTag], to url: URL, onWarning: (String) -> Void = reportWarning) throws {
