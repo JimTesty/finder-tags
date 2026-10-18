@@ -2,7 +2,7 @@
 
 Run `make test` to build the CLI and run `cli.sh`.
 
-`Swift/test-main.swift` runs the metadata, Finder color, text display, repair,
+`Swift/test-main.swift` runs the metadata, Unicode, Finder color, text display, repair,
 archive, and undo suites. `Swift/test-support.swift` provides shared assertions, CLI
 execution, JSONL helpers, and fixtures. The runner compiles all production
 sources except the CLI's `main.swift`; files under `Swift/` are included
@@ -10,6 +10,10 @@ automatically. Use distinct `-tests.swift` filenames for feature suites.
 
 The repair suite checks raw xattr bytes after otherwise unchanged mutations,
 `--fix` counts, dry runs, backups, repeat runs, copying, restore, and recursion.
+
+The Unicode suite covers Chinese and other scripts, combining accents,
+supplementary-plane CJK, and emoji. It checks decoding, parsing, selective
+repairs, and macOS tag writes, copying, export/restore, and `--fix` preservation.
 
 The shell suite covers parsing, traversal, formatting, and macOS tag operations.
 Swift metadata decoding and rendering checks are portable; tests requiring real
