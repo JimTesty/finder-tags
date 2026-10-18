@@ -21,6 +21,8 @@ supplementary-plane CJK, and emoji. It checks decoding, parsing, selective
 repairs, and macOS tag writes, copying, export/restore, and `--fix` preservation.
 
 The shell suite covers parsing, traversal, formatting, and macOS tag operations.
+The text display suite checks diagnostic prefix colors, parser warnings, and
+escaping of control characters in messages and executable names.
 Swift metadata decoding and rendering checks are portable; tests requiring real
 Finder metadata run only on macOS. `directory-order.swift` is a separate helper
 for comparing traversal against Foundation's native directory order.

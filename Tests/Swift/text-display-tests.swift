@@ -43,6 +43,38 @@ enum TextDisplayTests {
         expect(optionError.contains(#"--bad\t\u{1b}[2J"#))
         expectSafeDiagnostic(optionError)
 
+        let red = "\u{1b}[31;1m", reset = "\u{1b}[m"
+        let errorPrefix = red + "tag:" + reset + " "
+        let warningPrefix = red + "tag: warning:" + reset + " "
+        let coloredError = try context.run(["--color=force", "--no-tags", missing.path], status: 74).err
+        expect(coloredError == red + "tag:" + reset + error.dropFirst("tag:".count))
+        let coloredOptionError = try context.run(["--color=force", "--bad\t\u{1b}[2J"], status: 64).err
+        expect(coloredOptionError.hasPrefix(errorPrefix))
+        expect(coloredOptionError.contains(#"--bad\t\u{1b}[2J"#))
+        for mode in ["auto", "never"] {
+            expect(try context.run(["--color=\(mode)", "--no-tags", missing.path], status: 74).err == error)
+        }
+
+        // Parser warnings use the final color choice, even if it follows TAGS.
+        let repairArgs = ["--set", "Bad\rName", "--dry-run", "--jsonl", file.path]
+        let coloredWarning = try context.run(repairArgs + ["--color=force"])
+        expect(coloredWarning.err.hasPrefix(warningPrefix))
+        expect(!coloredWarning.out.contains("\u{1b}"))
+        expect(try records(coloredWarning.out).last?["after"] as? [String] == ["Bad�Name"])
+        let plainWarning = try context.run(["--color=force"] + repairArgs + ["--color=never"])
+        expect(!plainWarning.err.contains("\u{1b}"))
+        expectSafeDiagnostic(plainWarning.err)
+        let parserFailure = try context.run(["--color=force", "--set", "Bad\rName", "--unknown"], status: 64)
+        expect(parserFailure.err.hasPrefix(warningPrefix))
+        expect(parserFailure.err.contains("\n" + errorPrefix + "unknown option:"))
+        let helpWarning = try context.run(["--color=force", "--set", "Bad\rName", "--help"])
+        expect(helpWarning.err.hasPrefix(warningPrefix) && !helpWarning.out.contains("\u{1b}"))
+
+        let broken = work.appendingPathComponent("broken")
+        try fileManager.createSymbolicLink(atPath: broken.path, withDestinationPath: missing.lastPathComponent)
+        let brokenWarning = try context.run(["--color=force", "--no-tags", broken.path])
+        expect(brokenWarning.err == warningPrefix + "1 symlink with non-existent target; using its own file info\n")
+
         let alias = work.appendingPathComponent("tag\t\u{1b}[2J\\n")
         try fileManager.createSymbolicLink(atPath: alias.path, withDestinationPath: context.binary.path)
         let aliasName = escapedDisplayText(alias.lastPathComponent)
@@ -50,6 +82,8 @@ enum TextDisplayTests {
         let help = try context.run(["--help"], executable: alias).out
         expect(help.hasPrefix(aliasName + " - "))
         expect(!help.contains("\u{1b}"))
+        let aliasError = try context.run(["--color=force", "--unknown"], status: 64, executable: alias)
+        expect(aliasError.err.hasPrefix(red + aliasName + ":" + reset + " "))
 
         let tag = "\u{1b}[2J\tPurple\\n"
         let dry = try context.run(["--set", tag, "--dry-run", "--verbose", file.path])
@@ -70,7 +104,7 @@ enum TextDisplayTests {
             ["type": "summary"]
         ]
         try writeRecords(objects, to: archive)
-        let purple = "\u{1b}[48;5;129m", reset = "\u{1b}[m"
+        let purple = "\u{1b}[48;5;129m"
         let converted = try context.run(["--convert", archive.path, "--print-symlinks", "--space-indent", "--color=force"])
         expect(converted.out == escapedDisplayText(name) + " \u{1b}[41;1m[BROKEN SYMLINK]" + reset
             + " -> " + escapedDisplayText(missing.lastPathComponent)

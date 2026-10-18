@@ -5,13 +5,9 @@ import Darwin
 import Glibc
 #endif
 
-func stdoutIsTerminal() -> Bool {
-    return isatty(STDOUT_FILENO) == 1
-}
-
-func colorIsEnabled(_ mode: ColorMode) -> Bool {
+func colorIsEnabled(_ mode: ColorMode, descriptor: Int32 = STDOUT_FILENO) -> Bool {
     switch mode {
-    case .auto: return stdoutIsTerminal()
+    case .auto: return isatty(descriptor) == 1
     case .always: return true
     case .never: return false
     }

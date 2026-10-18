@@ -176,7 +176,8 @@ Display each tag's stored color when stdout is a terminal. Names and Finder
 preferences do not determine displayed colors. Zero, unavailable, and unknown
 color numbers are displayed uncolored.
 The explicit modes are auto/yes, always/force, and no/none/never; JSONL is
-never colored.
+never colored. Error and warning prefixes use bold red; automatic mode checks
+whether stderr is a terminal for diagnostics.
 .TP
 .BR -n , " --filename"
 Show filenames. --name is an alias.

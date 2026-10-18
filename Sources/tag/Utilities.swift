@@ -14,7 +14,11 @@ func eprint(_ message: String) {
 }
 
 func reportWarning(_ message: String) {
-    eprint("\(programName): warning: \(message)")
+    Diagnostics.warning(message)
+}
+
+func reportError(_ message: String) {
+    Diagnostics.error(message)
 }
 
 func fileMetadata(for url: URL) throws -> FileMetadata {
@@ -70,7 +74,7 @@ func fileMetadata(for target: Target) throws -> FileMetadata {
 }
 
 func fail(_ message: String, code: Int32 = ExitCode.usage) -> Never {
-    eprint("\(programName): \(message)")
+    reportError(message)
     exit(code)
 }
 

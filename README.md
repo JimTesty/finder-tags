@@ -538,7 +538,8 @@ ignored during export so archives always contain natural tag order. Use
 For text output, bare `--color` and `--color=yes` mean automatic terminal
 coloring. `--color=always` and `--color=force` force ANSI colors, while
 `--color=no`, `--color=none`, and `--color=never` disable them. JSONL is never
-colored.
+colored. Error and warning prefixes use bold red; automatic mode checks
+stderr's terminal status for diagnostics.
 
 ## Reliability behavior
 

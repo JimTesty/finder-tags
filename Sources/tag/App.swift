@@ -10,6 +10,7 @@ final class App {
 
     init(options: Options) {
         self.options = options
+        Diagnostics.colorMode = options.colorMode
         self.output = Output(
             options: options,
             colors: FinderColors(
@@ -203,9 +204,7 @@ final class App {
                 store: store,
                 output: output,
                 onError: report,
-                onWarning: { message in
-                    eprint("\(programName): warning: \(message)")
-                },
+                onWarning: reportWarning,
                 beforeMutation: { target, tags in
                     try self.recordUndo(target: target, tags: tags)
                 }
@@ -238,7 +237,7 @@ final class App {
     }
 
     private func report(_ message: String) {
-        eprint("\(programName): \(message)")
+        reportError(message)
         hadError = true
     }
 

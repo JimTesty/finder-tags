@@ -63,6 +63,7 @@ private func applyShortFlag(_ ch: Character, options: inout Options) {
     case "l": setOperation(.list, options: &options)
     case "c":
         options.colorMode = .auto
+        Diagnostics.colorMode = options.colorMode
         options.colorWasSet = true
     case "V": options.reverse = true; options.reverseWasSet = true
     case "C": options.caseSensitive = true
@@ -85,7 +86,11 @@ private func applyShortFlag(_ ch: Character, options: inout Options) {
 }
 
 func parseArguments() -> Options {
+    // Wait for the final color setting before printing recoverable warnings.
+    Diagnostics.beginParsing()
     var options = parseCommandLineArguments(Array(CommandLine.arguments.dropFirst()))
+    Diagnostics.colorMode = options.colorMode
+    Diagnostics.finishParsing()
     if let mode = options.stdinPathMode {
         options.paths.append(contentsOf: readPathsFromStdin(mode))
     }
@@ -188,6 +193,7 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
             case "color":
                 takesValue = true
                 options.colorMode = inlineValue.map(parseColorMode) ?? .auto
+                Diagnostics.colorMode = options.colorMode
                 options.colorWasSet = true
             case "reverse": options.reverse = true; options.reverseWasSet = true
             case "case-sensitive": options.caseSensitive = true
@@ -204,6 +210,7 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
             case "compact-tags":
                 options.compactTags = true
                 if !options.colorWasSet { options.colorMode = .auto }
+                Diagnostics.colorMode = options.colorMode
                 options.reverse = true
                 options.reverseWasSet = true
             case "all", "dot-files": options.includeHidden = true

@@ -1,6 +1,7 @@
 import Foundation
 
 func usage(code: Int32 = 0) -> Never {
+    Diagnostics.finishParsing()
     let name = escapedDisplayText(programName)
     let text = """
     \(name) - manipulate macOS Finder tags while preserving tag order
@@ -190,6 +191,7 @@ func usage(code: Int32 = 0) -> Never {
 }
 
 func version() -> Never {
+    Diagnostics.finishParsing()
     print("\(escapedDisplayText(programName)) \(programVersion)")
     exit(0)
 }
