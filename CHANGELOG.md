@@ -2,6 +2,8 @@
 
 ## 9.0 -- Unreleased
 
+- Add `--del` and `--delete` as synonyms for `--remove`, available in shell
+  completions and documentation without expanding the brief help.
 - Default backup to off for explicit command-line mutation targets, and to on
   for the whole operation with recursive or entered traversal, stdin path
   input, or restore. Recursive flags enable backup even with file-only paths;

@@ -8,7 +8,7 @@ _arguments \
   '(-a --add)'{-a,--add}'[add tags]:tags:' \
   '--append[add tags at end]:tags:' \
   '--prepend[add tags at beginning]:tags:' \
-  '(-r --remove)'{-r,--remove}'[remove tags]:tags:' \
+  '(-r --remove --del --delete)'{-r,--remove,--del,--delete}'[remove tags]:tags:' \
   '(-s --set)'{-s,--set}'[replace tags]:tags:' \
   '--fix[repair invalid tag names]' \
   '--copy[copy ordered tags]:source:_files:destination:_files' \

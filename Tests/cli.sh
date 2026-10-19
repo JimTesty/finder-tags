@@ -297,6 +297,18 @@ printf '%s\n' "$quoted" | grep -Fq '"after":["Orange","Project, Alpha","Needs re
 # Ordinary shell quoting is naturally accepted too.
 "$bin" --set "Orange" --dry-run --jsonl "$work/a" | grep -Fq '"after":["Orange"]'
 
+# Removal aliases accept both operand forms and preserve canonical output.
+remove_preview=$("$bin" --remove Missing --dry-run --jsonl "$work/a")
+for alias in del delete; do
+    [ "$("$bin" "--$alias" Missing --dry-run --jsonl "$work/a")" = "$remove_preview" ]
+    [ "$("$bin" "--$alias=Missing" --dry-run --jsonl "$work/a")" = "$remove_preview" ]
+    if "$bin" "--$alias" >/dev/null 2>"$work/remove-alias.err"; then
+        echo "expected --$alias without TAGS to fail" >&2
+        exit 1
+    fi
+    grep -q -- "--$alias requires an argument" "$work/remove-alias.err"
+done
+
 if "$bin" --set '"unterminated' --dry-run "$work/a" >/dev/null 2>&1; then
     echo "expected malformed quoted TAGS to fail" >&2
     exit 1
@@ -461,8 +473,11 @@ if [ "$(uname -s)" = Darwin ]; then
     [ "$("$bin" -N "$work/a")" = 'First,Second,Third' ]
     [ "$("$bin" -VN "$work/a")" = 'Third,Second,First' ]
 
-    "$bin" --remove 'Second' --no-backup "$work/a"
-    [ "$("$bin" -N "$work/a")" = 'First,Third' ]
+    for removal in --remove --del --delete; do
+        "$bin" --set 'First,Second,Third' --no-backup "$work/a"
+        "$bin" "$removal" 'Second' --no-backup "$work/a"
+        [ "$("$bin" -N "$work/a")" = 'First,Third' ]
+    done
 
     "$bin" --copy "$work/a" "$work/b" --no-backup
     [ "$("$bin" -N "$work/b")" = 'First,Third' ]

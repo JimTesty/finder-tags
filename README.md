@@ -591,11 +591,12 @@ partially complete if a later file fails. See `REVIEW.md` for details.
 
 ## Option names and backward compatibility
 
-Clearer long names are preferred while corresponding `jdberry/tag` names remain
-aliases:
+Clearer long names are preferred. Compatibility aliases from `jdberry/tag`
+and convenience synonyms are also supported:
 
-| Preferred | Compatible alias | Short |
+| Preferred | Aliases | Short |
 |---|---|---|
+| `--remove` | `--del`, `--delete` | `-r` |
 | `--filename` | `--name` | `-n` |
 | `--no-filename` | `--no-name` | `-N` |
 | `--one-per-line` | `--garrulous` | `-g` |

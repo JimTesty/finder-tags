@@ -152,7 +152,7 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
             case "prepend":
                 setOperation(.add(parseTagList(operand())), options: &options)
                 setPosition(.first, options: &options, option: "--prepend")
-            case "remove":
+            case "remove", "del", "delete":
                 setOperation(.remove(parseTagList(operand())), options: &options)
             case "set":
                 setOperation(.set(parseTagList(operand())), options: &options)
