@@ -57,7 +57,7 @@ struct Options {
     var operationWasSet = false
     var helpRequests = 0
 
-    var colorMode: ColorMode = .never
+    var colorMode: ColorMode = .auto
     var colorWasSet = false
     // Preserve the full balance so repeated -q and -v cancel one for one.
     var verbosity = 0

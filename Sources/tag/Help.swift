@@ -32,7 +32,7 @@ private func briefHelp(name: String) -> String {
       -e, --enter                Enter listed directories
       -R, --recursive            Enter directories recursively
       -A, --all                  Include hidden files and directories
-      -c, --color[=yes/no]       Show tag colors
+      -c, --color[=yes/no]       Color tags and other output (default: auto)
           --file-info            Show file size and modification time
           --tagged-only          Process only files with tags
           --sorted-tags          Sort displayed or written tags
@@ -115,7 +115,7 @@ private func detailedHelp(name: String) -> String {
                                  (default matching is case-insensitive)
 
     output:
-      -c, --color[=yes/no]       Display known Finder tag colors when appropriate
+      -c, --color[=yes/no]       Color tags and other output (default: auto)
           --no-color             Alias for --color=off
       -n, --filename             Show filenames
       -N, --no-filename          Hide filenames
@@ -239,8 +239,10 @@ private func detailedHelp(name: String) -> String {
     output; its --reverse, --slash, --space-indent, --align-tags, and --color options affect
     only that display. Restore follows symlink targets only with the same
     --follow-symlinks setting recorded in the archive.
-    --color settings: auto = terminal detection; yes/on/always/force = always;
-    no/off/never/none = disabled. Bare --color and -c use auto.
+    --color controls tags, file-info decorations, broken-link markers, and
+    diagnostic prefixes. Settings: auto = terminal detection (default);
+    yes/on/always/force = always; no/off/never/none = disabled.
+    Bare --color and -c use auto. Diagnostics check stderr independently.
     JSONL is never colored.
 
     Defaults match jdberry/tag where practical: list/filter show filename+tags;

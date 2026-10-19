@@ -127,6 +127,13 @@ enum TextDisplayTests {
         // Real stored names and color numbers must remain unchanged by display.
         let stored = [StoredTag(name: tag, color: 3)]
         try FileTagMetadata.write(stored, to: file)
+        let terminal = try context.runInTerminal(["--file-info", "--space-indent", file.path])
+        expect(terminal.contains(purple + escapedDisplayText(tag) + reset))
+        expect(terminal.contains("\u{1b}[32m["))
+        expect(try !context.runInTerminal(["--no-color", "--file-info", file.path]).contains("\u{1b}"))
+        expect(try context.runInTerminal(["--unknown"], status: 64).contains(errorPrefix))
+        expect(try !context.runInTerminal(["--no-color", "--unknown"], status: 64).contains("\u{1b}"))
+        expect(try !context.runInTerminal(["--jsonl", file.path]).contains("\u{1b}"))
         for mode in ["force", "always", "yes", "on"] {
             expect(try context.run(["--no-name", "--color=\(mode)", file.path]).out
                 == purple + escapedDisplayText(tag) + reset + "\n")

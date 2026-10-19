@@ -568,7 +568,9 @@ decoration, and NUL termination do not change the JSONL schema. `--reverse` is
 ignored during export so archives always contain natural tag order. Use
 `--convert` to reverse tags for display.
 
-For text output, bare `--color`, `-c`, and `--color=auto` use automatic terminal
+Color defaults to `auto`, detecting terminals independently for stdout and
+stderr. It applies to tags, file-info decorations, broken-link markers, and
+diagnostic prefixes. Bare `--color`, `-c`, and `--color=auto` use this automatic
 coloring. `--color=yes`, `--color=on`, `--color=always`, and `--color=force`
 force ANSI colors, while
 `--no-color`, `--color=off`, `--color=no`, `--color=none`, and `--color=never`

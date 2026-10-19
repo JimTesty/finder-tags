@@ -2,6 +2,12 @@
 
 ## 9.0 -- Unreleased
 
+- Default color to `auto` for output and diagnostics. Clarify that color also
+  applies to file-info decorations, broken-link markers, and diagnostic prefixes.
+- Keep `-L` traversal of dangling links working without attempting descent;
+  permission failures and symlink loops remain errors. Add focused tests for
+  stdin validation, unavailable metadata, cumulative verbosity, backup aborts,
+  and terminal versus redirected color output.
 - Reject malformed UTF-8 stdin paths before processing any files. Preserve
   embedded CR characters, recognize CRLF only at line boundaries, and reject
   NUL bytes in line-delimited paths.

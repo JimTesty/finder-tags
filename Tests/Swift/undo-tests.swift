@@ -90,8 +90,16 @@ enum UndoTests {
         let absent = safety.appendingPathComponent("must-not-be-created")
         try fileManager.createSymbolicLink(atPath: dangling.path, withDestinationPath: absent.path)
         let beforeBackup = try store.readTags(good)
-        for backup in [protected, dangling] {
-            _ = try context.run(["--set", "Collision", good.path, "--backup-path", backup.path], status: 74)
+        let laterMissing = safetyRoot.appendingPathComponent("must-not-be-visited")
+        try safetyDocument([archiveItem("good"), archiveItem("must-not-be-visited")])
+        for backup in [protected, dangling, absent.appendingPathComponent("undo.jsonl")] {
+            for operation in [["--set", "Collision", good.path, laterMissing.path],
+                              ["--restore", safetyArchive.path]] {
+                let failed = try context.run(operation + ["--quiet", "--backup-path", backup.path], status: 74)
+                expect(failed.out.isEmpty && failed.err.contains("backup failed before changing"))
+                expect(failed.err.contains("--no-backup") && failed.err.split(separator: "\n").count == 1)
+                expect(!failed.err.contains(laterMissing.lastPathComponent))
+            }
             expect(try store.readTags(good) == beforeBackup)
         }
         expect(try Data(contentsOf: protected) == Data("keep".utf8))

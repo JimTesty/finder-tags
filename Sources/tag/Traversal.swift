@@ -68,7 +68,17 @@ struct Traversal {
     }
 
     func directoryFlag(_ logicalURL: URL) throws -> Bool {
-        return try checkedItemKind(for: logicalURL, followSymlinks: options.followSymlinks) == .directory
+        let kind = try checkedItemKind(for: logicalURL)
+        guard kind == .symlink else { return kind == .directory }
+        guard options.followSymlinks else { return false }
+        do {
+            return try checkedItemKind(for: logicalURL, followSymlinks: true) == .directory
+        } catch {
+            // A confirmed dangling link has no contents to descend into.
+            // Permission failures and loops remain inspection errors.
+            if isMissingPathError(error) { return false }
+            throw error
+        }
     }
 
     private func enumerateDirectory(

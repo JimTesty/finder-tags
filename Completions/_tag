@@ -24,7 +24,7 @@ _arguments \
   '--sort-tags[alias for --sorted-tags]' \
   '(-V --reverse)'{-V,--reverse}'[reverse display order]' \
   '(-C --case-sensitive)'{-C,--case-sensitive}'[case-sensitive matching]' \
-  '(-c --color)'{-c,--color}'[color tags]' \
+  '(-c --color)'{-c,--color}'[color output; default auto]' \
   '--no-color[disable colors; alias for --color=off]' \
   '--tagged-only[list/export only tagged items]' \
   '(-n --filename)'{-n,--filename}'[show filenames]' \

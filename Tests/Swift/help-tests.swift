@@ -22,6 +22,7 @@ enum HelpTests {
         expect(brief.out.contains("--filter TAGS") && brief.out.contains("--tagged-only"))
         for text in [brief.out, detailed.out] {
             expect(text.contains("-c, --color[=yes/no]"))
+            expect(text.contains("Color tags and other output (default: auto)"))
         }
         for option in ["--match", "--no-color", "--no-file-info", "--no-backup", "--no-sort-files", "--stdin0",
                        "--compact-tags", "--usage", "--convert", "--backup-path",

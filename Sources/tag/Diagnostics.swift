@@ -1,11 +1,11 @@
 import Foundation
 
 enum Diagnostics {
-    static var colorMode: ColorMode = .never
+    static var colorMode: ColorMode = .auto
     private static var pendingWarnings: [String]?
 
     static func beginParsing() {
-        colorMode = .never
+        colorMode = .auto
         pendingWarnings = []
     }
 

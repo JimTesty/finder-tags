@@ -25,7 +25,7 @@ struct TestContext {
 
     func run(
         _ args: [String], status: Int32 = 0, executable: URL? = nil,
-        input: String? = nil,
+        input: String? = nil, inputData: Data? = nil,
         file: StaticString = #file, line: UInt = #line
     ) throws -> (out: String, err: String) {
         let process = Process()
@@ -34,11 +34,13 @@ struct TestContext {
         let stdout = Pipe(), stderr = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr
-        let stdin = input.map { _ in Pipe() }
+        precondition(input == nil || inputData == nil, "specify input or inputData, not both")
+        let stdinData = inputData ?? input.map { Data($0.utf8) }
+        let stdin = stdinData.map { _ in Pipe() }
         if let stdin = stdin { process.standardInput = stdin }
         try process.run()
-        if let input = input, let stdin = stdin {
-            stdin.fileHandleForWriting.write(Data(input.utf8))
+        if let input = stdinData, let stdin = stdin {
+            stdin.fileHandleForWriting.write(input)
             stdin.fileHandleForWriting.closeFile()
         }
         let out = stdout.fileHandleForReading.readDataToEndOfFile()
@@ -49,7 +51,42 @@ struct TestContext {
             + escapedDisplayText(String(decoding: err, as: UTF8.self)), file: file, line: line)
         return (String(decoding: out, as: UTF8.self), String(decoding: err, as: UTF8.self))
     }
+
+    #if canImport(Darwin)
+    func runInTerminal(_ args: [String], status: Int32 = 0) throws -> String {
+        let log = work.appendingPathComponent("terminal-\(UUID().uuidString).log")
+        let result = try run(["-q", log.path, binary.path] + args, status: status,
+                             executable: URL(fileURLWithPath: "/usr/bin/script"), input: "")
+        expect(result.err.isEmpty, result.err)
+        return result.out
+    }
+    #endif
 }
+
+#if canImport(Darwin)
+func captureOutput(_ body: () throws -> Void) throws -> (out: String, err: String) {
+    fflush(nil)
+    let stdout = Pipe(), stderr = Pipe()
+    let savedOut = dup(STDOUT_FILENO), savedErr = dup(STDERR_FILENO)
+    expect(savedOut >= 0 && savedErr >= 0)
+    do {
+        defer {
+            fflush(nil)
+            expect(dup2(savedOut, STDOUT_FILENO) >= 0 && dup2(savedErr, STDERR_FILENO) >= 0)
+            close(savedOut)
+            close(savedErr)
+        }
+        expect(dup2(stdout.fileHandleForWriting.fileDescriptor, STDOUT_FILENO) >= 0)
+        expect(dup2(stderr.fileHandleForWriting.fileDescriptor, STDERR_FILENO) >= 0)
+        try body()
+    }
+    try stdout.fileHandleForWriting.close()
+    try stderr.fileHandleForWriting.close()
+    let out = try stdout.fileHandleForReading.readToEnd() ?? Data()
+    let err = try stderr.fileHandleForReading.readToEnd() ?? Data()
+    return (String(decoding: out, as: UTF8.self), String(decoding: err, as: UTF8.self))
+}
+#endif
 
 func records(_ text: String) throws -> [[String: Any]] {
     try text.split(separator: "\n").map {
