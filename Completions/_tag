@@ -55,7 +55,8 @@ _arguments \
   '--print-symlinks[print symlink destinations]' \
   '--dry-run[preview mutations]' \
   '--root[relocate restore root]:directory:_files' \
-  '--backup[write undo archive]:archive:_files' \
+  '--backup[enable temporary undo archive]' \
+  '--backup-path[enable undo archive at path]:archive:_files' \
   '--no-backup[disable undo archive]' \
   '--sync-backup[sync each undo record]' \
   '(-h --help)'{-h,--help}'[help]' \

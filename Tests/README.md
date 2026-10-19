@@ -11,6 +11,11 @@ automatically. Use distinct `-tests.swift` filenames for feature suites.
 The repair suite checks raw xattr bytes after otherwise unchanged mutations,
 `--fix` counts, dry runs, backups, repeat runs, copying, restore, and recursion.
 
+The undo suite checks backup defaults for explicit paths, recursion flags,
+entered directories, stdin paths, and restore, plus explicit overrides and
+coverage of every changed target in a mixed operation. It collects the default
+undo archives reported by its commands into the run's fixtures for cleanup.
+
 The file info suite checks missing-field placeholders and broken symlinks,
 including the link's own timestamp, tags, and colors, with and without `-L`.
 It also checks the final warning count, marker colors and tag alignment, and

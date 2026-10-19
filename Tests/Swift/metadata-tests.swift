@@ -108,7 +108,7 @@ enum MetadataTests {
         for (index, args) in edits.enumerated() {
             writeRawTagMetadata(raw, to: file)
             let undo = work.appendingPathComponent("undo-\(index).jsonl")
-            let changed = try context.run(args + ["--jsonl", file.path, "--backup", undo.path])
+            let changed = try context.run(args + ["--jsonl", file.path, "--backup-path", undo.path])
             let record = try records(changed.out).last!
             expect(record["before"] as? [String] == recovered.map { $0.name })
             expect(try ArchiveReader().read(path: undo.path).items.first?.storedTags == recovered)
@@ -145,7 +145,7 @@ enum MetadataTests {
         try Data().write(to: broken)
         writeRawTagMetadata(Data([0xff, 0x00, 0x01]), to: broken)
         let invalidUndo = work.appendingPathComponent("invalid-undo.jsonl")
-        _ = try context.run(["--set", "Healthy", broken.path, "--backup", invalidUndo.path], status: 74)
+        _ = try context.run(["--set", "Healthy", broken.path, "--backup-path", invalidUndo.path], status: 74)
         expect(!fileManager.fileExists(atPath: invalidUndo.path))
         let partial = try records(context.run(["--export", root.path, "--no-file-info"], status: 74).out)
         expect(partial.contains { $0["path"] as? String == "imperfect" })

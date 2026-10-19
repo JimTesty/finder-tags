@@ -107,9 +107,16 @@ func usage(code: Int32 = 0) -> Never {
           --dry-run              Show intended changes without writing; restore
                                  reports the same change count
           --dryrun               Alias for --dry-run
-          --backup PATH          Write a per-file undo archive (default: temp)
-          --no-backup            Disable the default undo archive
+          --backup               Enable a temporary per-file undo archive
+          --backup-path PATH     Enable a per-file undo archive at PATH
+          --no-backup            Disable the undo archive
           --sync-backup          Sync each undo record before mutation
+
+    Backup defaults to off for explicit command-line paths. It defaults to on
+    with -R/--recursive, -e/--enter, stdin path input, or --restore, using a
+    temporary undo archive for the whole operation. -R enables this default
+    even when all supplied paths are files. Explicit backup options override it;
+    the last one wins.
 
     other:
       -h, --help                 Show this help

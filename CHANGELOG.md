@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 9.0 -- Unreleased
 
+- Default backup to off for explicit command-line mutation targets, and to on
+  for the whole operation with recursive or entered traversal, stdin path
+  input, or restore. Recursive flags enable backup even with file-only paths;
+  explicit backup options still override the default.
+- Use `--backup` to enable a temporary undo archive and `--backup-path PATH`
+  to enable one at a chosen path, replacing the former `--backup PATH` syntax.
 - Rename duplicate tag names with repeated U+FFFD suffixes, preserving order
   and colors and avoiding existing names. Warn on renames, count each repaired
   entry once, and warn when identical command-line tags are collapsed.

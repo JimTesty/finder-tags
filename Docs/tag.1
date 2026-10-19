@@ -1,4 +1,4 @@
-.TH TAG 1 "September 2026" "finder-tags 8.0" "User Commands"
+.TH TAG 1 "October 2026" "finder-tags 9.0" "User Commands"
 .SH NAME
 tag \- manipulate macOS Finder tags while preserving tag order
 .SH SYNOPSIS
@@ -319,19 +319,26 @@ does not affect restore or Spotlight --find.
 Compute and display intended mutations without writing. Restore reports the
 same change count as a real run. --dryrun is an alias.
 .TP
-.B --backup PATH
-Write a per-file undo archive at PATH before mutations. Mutating operations
-write a temporary undo archive by default.
+.B --backup
+Enable a temporary per-file undo archive before mutations. Backup defaults to off
+for explicit command-line paths and to on for the entire operation with
+-R/--recursive, -e/--enter, stdin path input, or --restore.
+-R enables this default even when all supplied paths are files; recursive
+aliases use the same rule. Default archives use the system temporary directory.
+Explicit backup options override the default; the last one wins.
+.TP
+.B --backup-path PATH
+Enable a per-file undo archive at PATH before mutations.
 Existing files and symlinks at PATH are refused using exclusive creation.
 Undo journals record resolved file paths, allow repeated paths, replay in reverse
 mutation order, and do not require a final summary.
 .TP
 .B --no-backup
-Disable the default undo archive.
+Disable the undo archive.
 .TP
 .B --sync-backup
-Sync each undo record before its mutation. This is more durable but can be
-expensive.
+Sync each undo record before its mutation when backup is enabled. This is more
+durable but can be expensive.
 .SH TAG SYNTAX
 Mutation TAGS is comma separated. Quoted CSV-style components permit literal
 commas, for example:

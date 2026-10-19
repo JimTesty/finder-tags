@@ -82,7 +82,7 @@ struct Options {
     var fileInfoWasSet = false
     var archivePath: String? = nil
     var restoreRoot: String? = nil
-    var backupEnabled = true
+    var backupOverride: Bool? = nil
     var backupPath: String? = nil
     var syncBackup = false
     var position: PositionSpec? = nil
@@ -118,6 +118,12 @@ struct Options {
         case .add, .remove, .set, .fix, .copy, .move, .restore: return true
         default: return false
         }
+    }
+
+    var backupEnabled: Bool {
+        if let enabled = backupOverride { return enabled }
+        if case .restore = operation { return true }
+        return recursive || enterDirectories || stdinPathMode != nil
     }
 }
 

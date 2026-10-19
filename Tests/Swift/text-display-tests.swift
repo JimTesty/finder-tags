@@ -78,7 +78,7 @@ enum TextDisplayTests {
         let alias = work.appendingPathComponent("tag\t\u{1b}[2J\\n")
         try fileManager.createSymbolicLink(atPath: alias.path, withDestinationPath: context.binary.path)
         let aliasName = escapedDisplayText(alias.lastPathComponent)
-        expect(try context.run(["--version"], executable: alias).out == aliasName + " 8.0\n")
+        expect(try context.run(["--version"], executable: alias).out == aliasName + " 9.0\n")
         let help = try context.run(["--help"], executable: alias).out
         expect(help.hasPrefix(aliasName + " - "))
         expect(!help.contains("\u{1b}"))
@@ -141,7 +141,7 @@ enum TextDisplayTests {
         expect(conflicting.contains("tag '" + escapedDisplayText(tag) + "' has different stored colors [3, 99]"))
         expectSafeDiagnostic(unknown + conflicting)
         let backup = work.appendingPathComponent("undo\n\u{1b}[2J.jsonl")
-        let mutation = try context.run(["--set", "Changed", file.path, "--backup", backup.path])
+        let mutation = try context.run(["--set", "Changed", file.path, "--backup-path", backup.path])
         expect(mutation.err.contains(escapedDisplayText(backup.path)))
         expectSafeDiagnostic(mutation.err)
         _ = try context.run(["--restore", backup.path, "--no-backup"])

@@ -234,9 +234,12 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
                 options.fileInfoWasSet = true
             case "root": options.restoreRoot = operand()
             case "backup":
+                options.backupPath = nil
+                options.backupOverride = true
+            case "backup-path":
                 options.backupPath = operand()
-                options.backupEnabled = true
-            case "no-backup": options.backupEnabled = false
+                options.backupOverride = true
+            case "no-backup": options.backupOverride = false
             case "sync-backup": options.syncBackup = true
             case "no-follow-symlinks": options.followSymlinks = false
             case "follow-symlinks": options.followSymlinks = true
@@ -410,7 +413,7 @@ private func validateAndApplyDefaults(_ options: inout Options) {
         }
     }
 
-    if options.backupPath != nil || !options.backupEnabled || options.syncBackup {
+    if options.backupPath != nil || options.backupOverride != nil || options.syncBackup {
         if !options.isMutating {
             fail("backup options are only valid with a mutating operation")
         }

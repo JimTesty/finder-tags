@@ -239,11 +239,19 @@ to follow it.
 When converting an archive that did not record target information, the
 converter reports that the target was not recorded rather than guessing.
 
-Mutating operations write a per-file undo archive by default in the system
-temporary directory. The archive path is printed to stderr when the first
-change needs it. Use `--no-backup` to disable this, `--backup PATH` to choose a
-path, or `--sync-backup` to sync each undo record before its mutation. Syncing
-is intentionally opt-in because it can be expensive.
+Backup defaults to off when mutation targets are listed on the command line.
+It defaults to on for the entire operation with `-R`/`--recursive`,
+`-e`/`--enter`, stdin path input, or `--restore`. `-R` enables this default even
+when all supplied paths are files. All recursive aliases use the same rule.
+When enabled, a per-file undo archive is written in the system temporary
+directory, and its path is printed to stderr when the first change needs it.
+Use `--backup` to enable a temporary archive, `--backup-path PATH` to enable
+backup at a chosen path, or `--no-backup` to disable backup. These options
+override the default; the last one wins.
+In 9.0, `--backup` is a switch; scripts using the former `--backup PATH` syntax
+must use `--backup-path PATH`.
+Use `--sync-backup` to sync each undo record before its mutation when backup is
+enabled. Syncing is intentionally opt-in because it can be expensive.
 Backup paths are created exclusively and existing files or symlinks are refused.
 Undo journals record resolved file paths and allow repeated paths. They replay
 in reverse mutation order so multiple aliases of one file return to its original

@@ -60,8 +60,9 @@ ln -s missing "$work/tree/dangling"
 "$bin" --help | grep -q -- '--align-tags N'
 "$bin" --help | grep -q -- '--compact-tags'
 "$bin" --help | grep -q -- '--no-backup'
+"$bin" --help | grep -q -- '--backup-path PATH'
 "$bin" --help | grep -q -- '--verbose'
-[ "$("$bin" --version)" = "tag 8.0" ]
+[ "$("$bin" --version)" = "tag 9.0" ]
 
 verbose_output=$("$bin" -v --no-tags "$work/a" 2>"$work/verbose.err")
 [ "$verbose_output" = "$work/a" ]
@@ -321,7 +322,7 @@ edge_tag=$(printf '\rStart\r')
 grep -Fq '"after":["�Start�"]' "$work/edge.out"
 grep -Fq 'replaced with �' "$work/edge.err"
 
-for flag in follow-symlinks no-backup dry-run recursive help version; do
+for flag in follow-symlinks backup no-backup dry-run recursive help version; do
     if "$bin" --set Safety "--$flag=false" "$work/a" >/dev/null 2>"$work/inline.err"; then
         echo "expected a value on --$flag to fail" >&2
         exit 1
@@ -765,19 +766,18 @@ if [ "$(uname -s)" = Darwin ]; then
     # Explicit undo archives use the same canonical JSONL format, capture the
     # preimage immediately before the mutation, and can themselves be restored.
     undo_archive="$work/undo.jsonl"
-    "$bin" --set UndoNew --backup "$undo_archive" "$restore_root/alpha" \
+    "$bin" --set UndoNew --backup-path "$undo_archive" "$restore_root/alpha" \
         2>"$work/undo.err"
     grep -Fq '"format":"jsonl"' "$undo_archive"
     grep -Fq '"purpose":"undo"' "$undo_archive"
     "$bin" --restore "$undo_archive" --no-backup >/dev/null
     [ "$("$bin" -N "$restore_root/alpha")" = 'BeforeValidation' ]
 
-    # The default undo archive is created in the system temporary directory.
+    # Explicit file mutations default to no undo archive.
     "$bin" --set DefaultUndo "$restore_root/alpha" 2>"$work/default-undo.err"
-    grep -q 'undo archive:' "$work/default-undo.err"
-    default_undo=$(sed -n 's/.*undo archive: //p' "$work/default-undo.err" | tail -n 1)
-    if [ -n "$default_undo" ] && [ -f "$default_undo" ]; then
-        rm -f "$default_undo"
+    if grep -q 'undo archive:' "$work/default-undo.err"; then
+        echo "explicit file mutation unexpectedly created a default undo archive" >&2
+        exit 1
     fi
 
     "$bin" --set 'X,Y' --jsonl --no-backup "$work/b" | grep -q '"dryRun":false'

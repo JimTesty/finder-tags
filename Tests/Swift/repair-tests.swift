@@ -15,13 +15,13 @@ enum RepairTests {
         for (index, args) in edits.enumerated() {
             writeRawTagMetadata(corrupt, to: file)
             let undo = work.appendingPathComponent("undo-\(index).jsonl")
-            let dry = try records(context.run(args + [file.path, "--jsonl", "--dry-run", "--backup", undo.path]).out)
+            let dry = try records(context.run(args + [file.path, "--jsonl", "--dry-run", "--backup-path", undo.path]).out)
             let preview = dry.first { $0["type"] as? String == "item" }!
             expect(preview["changed"] as? Bool == true)
             expect((preview["metadataRepairs"] as? [String: Int])?["deleted"] == 1)
             expect(readRawTagMetadata(file) == corrupt && !fileManager.fileExists(atPath: undo.path))
 
-            let result = try records(context.run(args + [file.path, "--jsonl", "--backup", undo.path]).out)
+            let result = try records(context.run(args + [file.path, "--jsonl", "--backup-path", undo.path]).out)
             let event = result.first { $0["type"] as? String == "item" }!
             expect(event["before"] as? [String] == ["Yellow"] && event["after"] as? [String] == ["Yellow"])
             expect(event["changed"] as? Bool == true)
@@ -30,7 +30,7 @@ enum RepairTests {
             expect(try ArchiveReader().read(path: undo.path).items.first?.storedTags == yellow)
             let clean = readRawTagMetadata(file)
             let unusedUndo = work.appendingPathComponent("unused-\(index).jsonl")
-            let repeated = try records(context.run(args + [file.path, "--jsonl", "--backup", unusedUndo.path]).out)
+            let repeated = try records(context.run(args + [file.path, "--jsonl", "--backup-path", unusedUndo.path]).out)
             expect(repeated.first { $0["type"] as? String == "item" }?["changed"] as? Bool == false)
             expect(readRawTagMetadata(file) == clean && !fileManager.fileExists(atPath: unusedUndo.path))
         }
@@ -43,10 +43,10 @@ enum RepairTests {
         expect(listedDuplicates.err.contains("duplicate tag name 'Yellow' renamed to 'Yellow��'"))
         expect(readRawTagMetadata(file) == duplicateRaw)
         let duplicateUndo = work.appendingPathComponent("duplicate-undo.jsonl")
-        let duplicatePreview = try records(context.run(["--fix", file.path, "--dry-run", "--jsonl", "--backup", duplicateUndo.path]).out)
+        let duplicatePreview = try records(context.run(["--fix", file.path, "--dry-run", "--jsonl", "--backup-path", duplicateUndo.path]).out)
         expect(duplicatePreview.last?["tagsFixed"] as? Int == 2 && duplicatePreview.last?["tagsDeleted"] as? Int == 0)
         expect(readRawTagMetadata(file) == duplicateRaw && !fileManager.fileExists(atPath: duplicateUndo.path))
-        let fixedDuplicates = try records(context.run(["--fix", file.path, "--jsonl", "--backup", duplicateUndo.path]).out)
+        let fixedDuplicates = try records(context.run(["--fix", file.path, "--jsonl", "--backup-path", duplicateUndo.path]).out)
         expect(fixedDuplicates.last?["tagsFixed"] as? Int == 2 && fixedDuplicates.last?["tagsDeleted"] as? Int == 0)
         let rawUnique = try PropertyListSerialization.propertyList(from: readRawTagMetadata(file), format: nil) as? [String]
         expect(rawUnique == ["Yellow\n5", "Yellow�\n3", "Yellow��\n0"])
@@ -91,7 +91,7 @@ enum RepairTests {
         let healthyXML = try PropertyListSerialization.data(fromPropertyList: ["Odd\n99", "Bare"], format: .xml, options: 0)
         writeRawTagMetadata(healthyXML, to: file)
         let unusedUndo = work.appendingPathComponent("healthy-undo.jsonl")
-        let healthy = try context.run(["--fix", file.path, "--backup", unusedUndo.path])
+        let healthy = try context.run(["--fix", file.path, "--backup-path", unusedUndo.path])
         expect(healthy.err.contains("0 tags fixed, 0 deleted"))
         expect(readRawTagMetadata(file) == healthyXML && !fileManager.fileExists(atPath: unusedUndo.path))
 
@@ -123,7 +123,7 @@ enum RepairTests {
         let occupied = work.appendingPathComponent("occupied.jsonl")
         try Data("existing".utf8).write(to: occupied)
         writeRawTagMetadata(corrupt, to: file)
-        let failed = try records(context.run(["--fix", file.path, "--backup", occupied.path, "--jsonl"], status: 74).out)
+        let failed = try records(context.run(["--fix", file.path, "--backup-path", occupied.path, "--jsonl"], status: 74).out)
         expect(failed.last?["tagsFixed"] as? Int == 0 && failed.last?["filesUpdated"] as? Int == 0)
         expect(failed.last?["errors"] as? Int == 1 && readRawTagMetadata(file) == corrupt)
 

@@ -25,6 +25,7 @@ struct TestContext {
 
     func run(
         _ args: [String], status: Int32 = 0, executable: URL? = nil,
+        input: String? = nil,
         file: StaticString = #file, line: UInt = #line
     ) throws -> (out: String, err: String) {
         let process = Process()
@@ -33,7 +34,13 @@ struct TestContext {
         let stdout = Pipe(), stderr = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr
+        let stdin = input.map { _ in Pipe() }
+        if let stdin = stdin { process.standardInput = stdin }
         try process.run()
+        if let input = input, let stdin = stdin {
+            stdin.fileHandleForWriting.write(Data(input.utf8))
+            stdin.fileHandleForWriting.closeFile()
+        }
         let out = stdout.fileHandleForReading.readDataToEndOfFile()
         let err = stderr.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
