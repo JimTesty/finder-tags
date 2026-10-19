@@ -201,8 +201,9 @@ enum UndoTests {
         try check(["--set", "SyncOn", "-R", a.path])
         for flag in ["--backup", "--backup-path", "--no-backup", "--sync-backup"] {
             let args = flag == "--backup-path" ? ["--list", flag, explicit.path, a.path] : ["--list", flag, a.path]
-            _ = try context.run(args, status: 64)
+            try check(args)
         }
+        expect(try store.read(a) == ["SyncOn"])
         _ = try context.run(["--set", "MissingPath", "--backup-path"], status: 64)
     }
 }

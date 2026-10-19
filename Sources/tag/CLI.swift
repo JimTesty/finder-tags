@@ -311,6 +311,12 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
 }
 
 private func validateAndApplyDefaults(_ options: inout Options) {
+    func ignored(_ specified: Bool, _ option: String, _ reason: String) {
+        if specified && options.verbose {
+            reportWarning("\(option) ignored: \(reason)")
+        }
+    }
+
     switch options.operation {
     case .list, .match, .filter, .usage, .find:
         break
@@ -345,7 +351,10 @@ private func validateAndApplyDefaults(_ options: inout Options) {
     if options.fileInfoWasSet {
         switch options.operation {
         case .list, .match, .filter, .find, .export: break
-        default: fail("--file-info is only valid with --list, --match, --filter, --find, or --export")
+        default:
+            ignored(true, options.fileInfo ? "--file-info" : "--no-file-info",
+                    "this operation does not collect file metadata")
+            options.fileInfo = false
         }
     }
 
@@ -363,56 +372,44 @@ private func validateAndApplyDefaults(_ options: inout Options) {
         case .list, .export, .match, .filter, .usage, .find, .add, .remove, .set, .fix, .move:
             break
         default:
-            fail("--no-sort-files is only valid with filesystem traversal or Spotlight --find")
+            ignored(true, "--no-sort-files", "this operation does not enumerate or search files")
         }
     }
 
-    if options.alignTags != nil {
-        switch options.operation {
-        case .list, .match, .filter, .find, .convert:
-            if options.jsonLines { fail("--align-tags is only valid with text output") }
-        default:
-            fail("--align-tags is only valid with file-list output")
-        }
-    }
-
-    if options.compactTags {
-        switch options.operation {
-        case .list, .match, .filter, .find, .convert:
-            if options.jsonLines { fail("--compact-tags is only valid with text output") }
-        default:
-            fail("--compact-tags is only valid with file-list output")
-        }
-    }
-
-    if options.spaceIndent {
-        switch options.operation {
-        case .list, .match, .filter, .find, .usage, .convert:
-            if options.jsonLines { fail("--space-indent is only valid with text output") }
-        default:
-            fail("--space-indent is only valid with text output")
-        }
-    }
-
-    switch options.operation {
-    case .export:
+    if case .export = options.operation {
         // Export is always canonical JSONL. Display-only options are ignored
         // there and remain available to --list and --convert.
         options.recursive = true
         options.includeHidden = true
         options.jsonLines = true
         if !options.fileInfoWasSet { options.fileInfo = true }
-        if options.absolutePaths {
-            fail("--absolute is not valid with --export; archive paths are root-relative")
-        }
-        if options.sortedTags {
-            fail("--sorted-tags is not valid with --export")
-        }
-        if options.oneTagPerLine || options.nulTerminate {
-            fail("text display formatting options are not valid with --export")
-        }
-    default:
-        break
+        ignored(options.absolutePaths, "--absolute", "archive paths are root-relative")
+        ignored(options.sortedTags, "--sorted-tags", "archives preserve stored tag order")
+        ignored(options.reverseWasSet, "--reverse", "archives preserve stored tag order")
+    }
+
+    let fileList: Bool
+    switch options.operation {
+    case .list, .match, .filter, .find, .convert: fileList = true
+    default: fileList = false
+    }
+    let textFileList = fileList && !options.jsonLines
+    let formattingReason = options.jsonLines
+        ? "output is JSONL" : "this operation does not produce file-list output"
+    if !textFileList {
+        ignored(options.alignTags != nil, "--align-tags", formattingReason)
+        ignored(options.compactTags, "--compact-tags layout", formattingReason)
+        ignored(options.oneTagPerLine, "--one-per-line", formattingReason)
+    }
+    var spaceIndentApplies = textFileList
+    if case .usage = options.operation { spaceIndentApplies = !options.jsonLines }
+    ignored(options.spaceIndent && options.alignTags == nil && !spaceIndentApplies,
+            "--space-indent", formattingReason)
+    ignored(options.nulTerminate && options.jsonLines, "--null", "JSONL uses newline-delimited records")
+    let previewPaths = options.isMutating && options.dryRun && !options.jsonLines
+    ignored(options.slashDirectories && !textFileList && !previewPaths, "--slash", formattingReason)
+    if case .convert = options.operation {
+        ignored(options.absolutePaths, "--absolute", "conversion displays recorded archive paths")
     }
 
     if options.restoreRoot != nil {
@@ -424,7 +421,8 @@ private func validateAndApplyDefaults(_ options: inout Options) {
 
     if options.backupPath != nil || options.backupOverride != nil || options.syncBackup {
         if !options.isMutating {
-            fail("backup options are only valid with a mutating operation")
+            ignored(options.backupOverride != nil, "backup options", "this operation does not mutate files")
+            ignored(options.syncBackup, "--sync-backup", "this operation does not mutate files")
         }
     }
 
@@ -449,11 +447,12 @@ private func validateAndApplyDefaults(_ options: inout Options) {
         }
     default:
         if options.position != nil {
-            fail("--at/--before/--after are only valid with --add or --move")
+            if options.isMutating {
+                fail("--at/--before/--after are only valid with --add or --move")
+            }
+            ignored(true, "--at/--before/--after", "this operation does not edit tag placement")
         }
     }
 
-    if options.dryRun && !options.isMutating {
-        fail("--dry-run is only valid with --add, --remove, --set, --move, --copy, or --restore")
-    }
+    ignored(options.dryRun && !options.isMutating, "--dry-run", "this operation does not mutate files")
 }

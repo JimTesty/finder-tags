@@ -187,8 +187,8 @@ private func detailedHelp(name: String) -> String {
     -q and -v accumulate and cancel one for one: below default is quiet,
     above default is verbose. Default reports completed changes and resulting
     tags on stdout, with short bulk summaries on stderr. Empty tags show (empty).
-    Quiet suppresses action reports and routine text summaries, while
-    warnings, errors, backup paths, previews, and requested output remain visible.
+    Quiet suppresses action reports, routine text summaries, and backup paths;
+    warnings, errors, previews, and requested output remain visible.
     Verbose adds stored before-tags, color numbers, unchanged files, skip reasons,
     and full totals. A single explicit file reports unchanged even at default.
     Now: tags follow --sorted-tags and --reverse; Before: uses stored order.
@@ -251,6 +251,13 @@ private func detailedHelp(name: String) -> String {
     yes/on/always/force = always; no/off/never/none = disabled.
     Bare --color and -c use auto. Diagnostics check stderr independently.
     JSONL is never colored.
+
+    Inapplicable display options are accepted and ignored; -v warns about them.
+    --compact-tags still implies --reverse where reversal applies. Export ignores
+    display formatting and preserves root-relative paths and stored tag order.
+    Read-only operations also ignore backup, dry-run, and placement options.
+    Target restrictions (--exclude/--root), misplaced mutation placement, and
+    conflicting operations or output formats remain errors.
 
     Defaults match jdberry/tag where practical: list/filter show filename+tags;
     match/find show filenames only. With no paths, list/match/filter/usage

@@ -130,17 +130,15 @@ explicit_order=$(printf '%s\n%s\n' "$work/b" "$work/a")
 converted_order=$("$bin" --convert "$work/unsorted.jsonl" -T 2>"$work/unsorted-convert.err")
 [ "$converted_order" = "$(printf '.\n%s\n' "$native_recursive")" ]
 
-# Operations that never enumerate or search files reject the option.
+# Operations that never enumerate or search files accept the harmless option.
 for operation in copy restore convert; do
     case "$operation" in
         copy) set -- "$work/a" "$work/b" ;;
         *) set -- "$work/unsorted.jsonl" ;;
     esac
-    if "$bin" --no-sort-files "--$operation" "$@" >"$work/no-sort-invalid.out" 2>"$work/no-sort-invalid.err"; then
-        echo "--no-sort-files unexpectedly accepted with --$operation" >&2
-        exit 1
-    fi
-    grep -q -- '--no-sort-files is only valid' "$work/no-sort-invalid.err"
+    "$bin" --no-sort-files -v --dry-run --no-backup "--$operation" "$@" \
+        >"$work/no-sort-ignored.out" 2>"$work/no-sort-ignored.err"
+    grep -q -- '--no-sort-files ignored:' "$work/no-sort-ignored.err"
 done
 
 # Exclusions skip the matching item and its subtree. A single component is
@@ -253,16 +251,12 @@ fi
 [ -z "$("$bin" --usage '' --tagged-only "$work/a")" ]
 "$bin" --jsonl "$work/a" | grep -q '"tags"'
 "$bin" --ndjson "$work/a" | grep -q '"path"'
-if "$bin" --align-tags 40 --jsonl "$work/a" >"$work/align-tags-json.out" 2>"$work/align-tags-json.err"; then
-    echo "expected --align-tags with --jsonl to fail" >&2
-    exit 1
-fi
-grep -q -- '--align-tags is only valid with text output' "$work/align-tags-json.err"
-if "$bin" --compact-tags --jsonl "$work/a" >"$work/compact-tags-json.out" 2>"$work/compact-tags-json.err"; then
-    echo "expected --compact-tags with --jsonl to fail" >&2
-    exit 1
-fi
-grep -q -- '--compact-tags is only valid with text output' "$work/compact-tags-json.err"
+"$bin" --align-tags 40 --jsonl "$work/a" >"$work/align-tags-json.out" 2>"$work/align-tags-json.err"
+grep -q '"tags"' "$work/align-tags-json.out"
+[ ! -s "$work/align-tags-json.err" ]
+"$bin" --compact-tags --jsonl "$work/a" >"$work/compact-tags-json.out" 2>"$work/compact-tags-json.err"
+grep -q '"tags"' "$work/compact-tags-json.out"
+[ ! -s "$work/compact-tags-json.err" ]
 file_info_json=$("$bin" --file-info --jsonl "$work/a")
 printf '%s\n' "$file_info_json" | grep -q '"size"'
 printf '%s\n' "$file_info_json" | grep -q '"mtime"'
@@ -377,20 +371,14 @@ fi
 "$bin" --prepend First --dry-run "$work/a" >/dev/null
 "$bin" --append First --dry-run "$work/a" >/dev/null
 
-if "$bin" --list --at first "$work/a" >/dev/null 2>&1; then
-    echo "expected --at without --add/--move to fail" >&2
-    exit 1
-fi
+[ "$("$bin" --list --at first --no-tags "$work/a")" = "$work/a" ]
 
 if "$bin" --copy "$work/a" >/dev/null 2>&1; then
     echo "expected malformed --copy to fail" >&2
     exit 1
 fi
 
-if "$bin" --dry-run "$work/a" >/dev/null 2>&1; then
-    echo "expected --dry-run with list to fail" >&2
-    exit 1
-fi
+[ "$("$bin" --dry-run --no-tags "$work/a")" = "$work/a" ]
 
 # Spotlight --find is macOS-only. On other platforms it should fail cleanly,
 # rather than failing to compile or masquerading as an empty successful search.
@@ -668,8 +656,8 @@ if [ "$(uname -s)" = Darwin ]; then
     fi
 
     reverse_archive="$work/export-reverse.jsonl"
-    "$bin" --export -V "$export_root" >"$reverse_archive" 2>"$work/export-reverse.err"
-    grep -q -- '--reverse is ignored during export' "$work/export-reverse.err"
+    "$bin" --export -V -v "$export_root" >"$reverse_archive" 2>"$work/export-reverse.err"
+    grep -q -- '--reverse ignored:' "$work/export-reverse.err"
     grep -Fq '"tags":["Second","First"]' "$reverse_archive"
 
     # Conversion is the human-facing view of canonical JSONL.

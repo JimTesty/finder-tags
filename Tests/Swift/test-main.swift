@@ -13,6 +13,8 @@ enum RegressionTests {
         print("Stdin tests passed")
         try VerbosityTests.run(context)
         print("Verbosity tests passed")
+        try OptionCompatibilityTests.run(context)
+        print("Option compatibility tests passed")
         try MetadataTests.run(context)
         print("Metadata tests passed")
         try FileInfoTests.run(context)

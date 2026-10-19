@@ -441,12 +441,14 @@ final class UndoWriter {
     let path: String
     private let syncEachRecord: Bool
     private let followSymlinks: Bool
+    private let announcePath: Bool
     private var handle: FileHandle?
 
-    init(path: String, syncEachRecord: Bool, followSymlinks: Bool) {
+    init(path: String, syncEachRecord: Bool, followSymlinks: Bool, announcePath: Bool = true) {
         self.path = path
         self.syncEachRecord = syncEachRecord
         self.followSymlinks = followSymlinks
+        self.announcePath = announcePath
     }
 
     func record(target: Target, tags: [StoredTag]) throws {
@@ -501,7 +503,7 @@ final class UndoWriter {
         if syncEachRecord && fsync(file.fileDescriptor) != 0 {
             throw ArchiveIOError.syncFailed(path: path, reason: String(cString: strerror(errno)))
         }
-        eprint("\(programName): undo archive: \(url.path)")
+        if announcePath { eprint("\(programName): undo archive: \(url.path)") }
         return file
     }
 }

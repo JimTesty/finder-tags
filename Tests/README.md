@@ -2,8 +2,8 @@
 
 Run `make test` to build the CLI and run `cli.sh`.
 
-`Swift/test-main.swift` runs the help, stdin, verbosity, metadata, file info,
-Unicode, Finder color, text display, mutation feedback, inspection, repair,
+`Swift/test-main.swift` runs the help, stdin, verbosity, option compatibility,
+metadata, file info, Unicode, Finder color, text display, mutation feedback, inspection, repair,
 archive, and undo suites. `Swift/test-support.swift`
 provides shared assertions, CLI execution, JSONL helpers, and fixtures. The runner compiles all production
 sources except the CLI's `main.swift`; files under `Swift/` are included
@@ -15,7 +15,10 @@ stdin handling, and help-like text used as literal tag operands.
 The stdin suite checks invalid UTF-8 and NUL rejection before any mutations,
 unchanged explicit and piped targets, CRLF handling, and literal CR/LF paths.
 The verbosity suite checks cumulative quiet/verbose flags, preserved previews,
-JSONL and diagnostics, quiet summaries, and visible backup paths.
+JSONL and diagnostics, quiet summaries, and quiet backups without announcements.
+The option compatibility suite checks harmless ignores, verbose-only warnings,
+preserved JSONL and export semantics, mutation display flags, read-only safety,
+and retained errors for target restrictions and conflicting edits/formats.
 The mutation feedback suite checks action descriptions, single-target and bulk
 unchanged reports, summaries, skip reasons, traversal roots, stdin, copy, fix,
 restore, colors, raw placement followed by sorting, reversed display, and JSONL.

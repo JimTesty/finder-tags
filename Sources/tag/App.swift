@@ -22,7 +22,8 @@ final class App {
             self.undoWriter = UndoWriter(
                 path: options.backupPath ?? defaultUndoArchivePath(),
                 syncEachRecord: options.syncBackup,
-                followSymlinks: options.followSymlinks
+                followSymlinks: options.followSymlinks,
+                announcePath: !options.quiet
             )
         }
     }
@@ -104,10 +105,6 @@ final class App {
     }
 
     private func runExport() {
-        if options.reverseWasSet {
-            warn("--reverse is ignored during export; JSONL stores natural tag order")
-        }
-
         do {
             let rootURL: URL
             if let path = options.paths.first {

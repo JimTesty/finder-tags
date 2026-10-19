@@ -548,10 +548,26 @@ counts. Skip reasons and other information, including Spotlight's indexed
 membership notice, go to stderr. Each action or preview is reported once.
 
 Quiet suppresses action reports and routine text summaries. Warnings, errors,
-backup paths, dry-run previews, and requested listing/JSONL output remain visible.
+dry-run previews, and requested listing/JSONL output remain visible. Undo archives
+are still created when enabled, but their path announcements are hidden by quiet.
 Read-only listings gain no default chatter. JSONL retains its structured
 records rather than adding text action reports. `--version` is the long-only
 spelling for the version.
+
+Inapplicable presentation options are accepted and ignored, with warnings only
+under `--verbose`. For example, `--add` accepts `--file-info`, `--compact-tags`,
+and `--align-tags` without adding metadata columns or changing the action-report
+layout. `--compact-tags` still implies display reversal; it never truncates the
+stored tag names. Text layout options are harmless with JSONL. Export ignores
+display formatting, `--absolute`, `--sorted-tags`, and `--reverse`, retaining
+root-relative paths and stored tag order. Commands that do not enumerate files
+ignore `--no-sort-files`. Read-only commands ignore backup, dry-run, and placement
+options without writing files.
+
+Restrictions that protect the intended targets or edit remain errors:
+`--exclude` requires filesystem traversal, `--root` requires restore, and
+placement options on mutations require add or move. Conflicting operations,
+invalid operands, and `--jsonl` with text-only `--convert` also remain errors.
 
 ## JSON Lines / NDJSON
 

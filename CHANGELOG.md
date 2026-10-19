@@ -2,13 +2,19 @@
 
 ## 9.0 -- Unreleased
 
+- Accept harmless inapplicable presentation options across commands, including
+  mutation layout flags, text formatting with JSONL, and export display flags.
+  Ignore read-only backup/dry-run/placement flags and inapplicable file ordering;
+  warn about benign ignores only under verbose. Retain target, edit, and format
+  safety errors. Quiet now hides undo archive path announcements, without
+  disabling backups or hiding backup failures.
 - Report verified mutation actions and resulting tags on stdout by default,
   using `(empty)` for no tags. Honor display sorting/reversal and tag colors;
   identify paths for bulk work and distinguish children across traversal roots.
   Add concise bulk summaries and single-target unchanged confirmations.
   Verbose adds stored before-tags, color numbers, unchanged items, skip reasons,
   and full totals without duplicate action reports. Quiet retains its existing
-  diagnostics, backup paths, previews, and requested output policy.
+  diagnostics, previews, and requested output policy.
 - Clarify that placement uses raw stored order, `--reverse` is display-only,
   and `--sorted-tags` sorts the stored result last, potentially overriding placement.
 - Default color to `auto` for output and diagnostics. Clarify that color also
@@ -28,7 +34,7 @@
   target. Omit unavailable target fields with diagnostics and retain known
   link destinations; report explicit-operand resolution failures.
 - Add cumulative `-q`/`--quiet` and `-v`/`--verbose` controls. Quiet hides routine
-  text summaries while preserving diagnostics, backup paths, previews, and
+  text summaries while preserving diagnostics, previews, and
   requested output.
 - Stop the whole operation on backup creation, record-write, or sync failures
   before the pending mutation. Use throwing backup write/close APIs, report

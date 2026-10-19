@@ -173,9 +173,9 @@ aliases, examples, and behavior notes. Help and verbosity flags may appear in
 either order; --help --verbose is equivalent.
 .TP
 .BR -q , " --quiet"
-Decrease verbosity by one. Suppress action reports and routine text summaries,
-retaining warnings, errors, backup paths, dry-run previews, and requested
-listing/JSONL output.
+Decrease verbosity by one. Suppress action reports, routine text summaries, and
+undo archive path announcements. Archives are still created when enabled.
+Retain warnings, errors, dry-run previews, and requested listing/JSONL output.
 .TP
 .BR -v , " --verbose"
 Increase verbosity by one. Add stored before-tags and color numbers to each
@@ -188,6 +188,16 @@ With --help, show detailed help.
 Repeated -q and -v accumulate and cancel one for one: -qqv is quiet,
 -qv is default, and -vvq is verbose. Levels below default are quiet;
 levels above default are verbose.
+.PP
+Inapplicable presentation options are accepted and ignored, with warnings only
+under --verbose. Mutations accept file-list layout options without changing
+their action-report layout; --compact-tags still implies display reversal.
+Export ignores display formatting, --absolute, --sorted-tags, and --reverse,
+preserving root-relative paths and stored tag order.
+Commands without file enumeration ignore --no-sort-files.
+Read-only commands ignore backup, dry-run, and placement options.
+Target restrictions (--exclude and --root), misplaced placement on mutations,
+conflicting operations, and --jsonl with --convert remain errors.
 .PP
 Default mutations report completed changes and resulting tags on stdout:
 Added Yellow => Now: Red, Yellow. An empty result is shown as (empty).
@@ -239,14 +249,14 @@ converted output.
 .TP
 .B --align-tags N
 In text file-list output, right-pad each file path to at least N display columns,
-then use two spaces before tags. This implies --space-indent and is not valid
+then use two spaces before tags. This implies --space-indent; layout is ignored
 with JSONL output. Common full-width and emoji characters count as two columns.
 .TP
 .B --compact-tags
 Mimic Finder's mini color-circles in text file-list output by displaying the
 first character of each tag in reverse tag order, with no separating commas.
-This implies --color and --reverse and is not valid with JSONL output. Without
---space-indent, one- and two-tag outputs receive extra spaces so their initials
+This implies --color and --reverse; compact layout is ignored with JSONL output.
+Without --space-indent, one- and two-tag outputs receive extra spaces so their initials
 align with three-tag output; --align-tags includes those spaces in its per-file
 minimum width.
 .TP
