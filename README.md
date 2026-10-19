@@ -301,8 +301,11 @@ Foundation `String.compare`, corresponding closely to `jdberry/tag`'s
 `--reverse` is applied after display sorting, so `--sorted-tags --reverse`
 shows descending order. On mutations, `--reverse` remains display-only.
 When `--sorted-tags` is combined with `--at`, `--before`, `--after`, or
-`--move`, the edit is applied first and the final mutation result is then
-sorted, so the explicit placement is naturally superseded by the sort.
+`--move`, placement uses the **raw stored order**, then sorting runs last and
+can override that placement. For example, adding `C --at 0` to `B,A` produces
+`C,B,A`; with `--sorted-tags` the stored result is `A,B,C`. `--reverse` never
+changes placement. Action reports' `Now:` lists follow display sorting and
+reversal.
 
 ## Placement
 
@@ -515,16 +518,40 @@ and `dryRun`; copy records also contain source path information. `changed`
 includes color-only changes. A dry-run can report `null` for the initial color
 of a newly requested name because macOS has not assigned it yet.
 
+## Verbosity
+
 `--quiet` / `-q` decreases verbosity by one; `--verbose` / `-v` increases it by
 one. Repetitions accumulate and cancel one for one: `-qqv` is quiet, `-qv` is
 default, and `-vvq` is verbose. Levels below default are quiet; levels above
 default are verbose.
 
-Quiet suppresses routine text summaries. Warnings, errors, backup paths, dry-run
-previews, and requested listing/JSONL output remain visible. Verbose adds
-informational messages on stderr, including before/after mutation tag arrays
-and Spotlight's indexed-membership notice. Ordinary mutations still produce no
-default action message. `--version` is the long-only spelling for the version.
+Default mutation output reports completed, verified changes on stdout:
+
+```text
+Added Yellow => Now: Red, Yellow
+notes.txt: Removed Red => Now: Yellow
+notes.txt: Cleared tags => Now: (empty)
+```
+
+The path prefix is omitted only for a single explicit target without traversal
+or stdin input. Copy reports identify the destination and source; restore always
+identifies each path. Traversed mutation paths include their supplied root so
+different roots' children remain distinguishable. Tags use their stored colors
+when color is enabled. `Now:` follows `--sorted-tags`, then `--reverse`.
+
+A single unchanged target reports `Unchanged => Now: ...`. Bulk operations
+report changed files individually and count unchanged files in a short stderr
+summary. Default mutation summaries omit zero counts other than the change count.
+Verbose reports unchanged files individually, adds the before-tags in stored
+order and per-tag color numbers to each action, and includes full summary
+counts. Skip reasons and other information, including Spotlight's indexed
+membership notice, go to stderr. Each action or preview is reported once.
+
+Quiet suppresses action reports and routine text summaries. Warnings, errors,
+backup paths, dry-run previews, and requested listing/JSONL output remain visible.
+Read-only listings gain no default chatter. JSONL retains its structured
+records rather than adding text action reports. `--version` is the long-only
+spelling for the version.
 
 ## JSON Lines / NDJSON
 

@@ -46,6 +46,7 @@ private func briefHelp(name: String) -> String {
 
     TAGS are comma-separated; matching ignores case. Listing defaults to cwd.
     Backup defaults on with -R, -e, stdin paths, or restore; otherwise off.
+    Mutations report changes; -q suppresses reports and routine summaries.
     Many options have --no-... negations; detailed help lists them.
     For detailed help: \(name) -hh (or \(name) -h -v)
     """
@@ -184,9 +185,13 @@ private func detailedHelp(name: String) -> String {
           --version              Show version
 
     -q and -v accumulate and cancel one for one: below default is quiet,
-    above default is verbose. Quiet suppresses routine text summaries, while
+    above default is verbose. Default reports completed changes and resulting
+    tags on stdout, with short bulk summaries on stderr. Empty tags show (empty).
+    Quiet suppresses action reports and routine text summaries, while
     warnings, errors, backup paths, previews, and requested output remain visible.
-    Verbose adds informational messages on stderr.
+    Verbose adds stored before-tags, color numbers, unchanged files, skip reasons,
+    and full totals. A single explicit file reports unchanged even at default.
+    Now: tags follow --sorted-tags and --reverse; Before: uses stored order.
 
     TAG matching is case-insensitive by default, but stored case is preserved.
     Case-distinct stored tags are not merged. For example, adding Orange to an
@@ -203,11 +208,13 @@ private func detailedHelp(name: String) -> String {
 
     Placement names map to Finder's visual stack: first/left/bottom = index 0,
     last/right/top = the end, because Finder draws the last/rightmost color on
-    top. --before/--after use the same case-matching rules as other operations.
+    top. Placement uses raw stored order; --reverse never changes placement.
+    --before/--after use the same case-matching rules as other operations.
 
     --sorted-tags is opt-in. Read-only commands only sort their output; they do
     not rewrite metadata. Mutating commands sort the final stored array after
-    applying the requested edit. Default behavior always preserves tag order.
+    applying the requested edit, so sorting runs last and can override placement.
+    Default behavior always preserves tag order.
 
     Filesystem enumeration sorts each directory's children by case-sensitive,
     locale-independent filename order (file10 before file2). Recursion is
@@ -257,6 +264,7 @@ private func detailedHelp(name: String) -> String {
       * --usage requires TAGS instead of making it optional.
       * --home/--local/--network are not implemented for --find.
       * Quoted TAGS can contain commas; jdberry/tag's grammar cannot.
+      * Mutations report completed changes; use -q to suppress these reports.
 
     Normal text and diagnostics escape control characters and backslashes.
     JSON values and NUL-delimited stdout preserve the original names.

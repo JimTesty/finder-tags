@@ -56,6 +56,7 @@ struct Traversal {
                         logicalURL,
                         rootLogicalURL: logicalURL,
                         displayPrefix: "",
+                        displayRoot: options.isMutating ? path : "",
                         recursive: options.recursive,
                         activeDirectories: &active,
                         body: body
@@ -85,6 +86,7 @@ struct Traversal {
         _ logicalDirectoryURL: URL,
         rootLogicalURL: URL,
         displayPrefix: String,
+        displayRoot: String = "",
         recursive: Bool,
         activeDirectories: inout Set<String>,
         body: (Target) -> Void
@@ -133,7 +135,9 @@ struct Traversal {
             let logicalChild = logicalDirectoryURL.appendingPathComponent(name).standardizedFileURL
             let relativePath = displayPrefix.isEmpty ? name : displayPrefix + "/" + name
             if isExcluded(relativePath) { continue }
-            let displayPath = options.absolutePaths ? logicalChild.path : relativePath
+            let rootedPath = displayRoot.isEmpty
+                ? relativePath : (displayRoot as NSString).appendingPathComponent(relativePath)
+            let displayPath = options.absolutePaths ? logicalChild.path : rootedPath
             let targetURL = tagIOURL(logicalChild, followSymlinks: options.followSymlinks)
 
             body(Target(
@@ -150,6 +154,7 @@ struct Traversal {
                             logicalChild,
                             rootLogicalURL: rootLogicalURL,
                             displayPrefix: relativePath,
+                            displayRoot: displayRoot,
                             recursive: true,
                             activeDirectories: &activeDirectories,
                             body: body

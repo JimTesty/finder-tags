@@ -26,7 +26,8 @@ enum VerbosityTests {
         #if canImport(Darwin)
         let baseline = [StoredTag(name: "Keep", color: 0)]
         try FileTagMetadata.write(baseline, to: file)
-        expect(try context.run(["--fix", file.path]).err.contains("fix:"))
+        let unchanged = try context.run(["--fix", file.path])
+        expect(unchanged.out == "Unchanged => Now: Keep\n" && unchanged.err.isEmpty)
         expect(try context.run(["--fix", "--quiet", file.path]).err.isEmpty)
         let fixed = try records(context.run(["--fix", "--quiet", "--jsonl", file.path]).out)
         expect(fixed.last?["operation"] as? String == "fix")

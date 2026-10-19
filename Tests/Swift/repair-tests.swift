@@ -74,7 +74,7 @@ enum RepairTests {
         writeRawTagMetadata(imperfect, to: file)
         let dry = try context.run(["--fix", file.path, "--dry-run"])
         expect(dry.out.contains("would fix 4 tags and delete 2"))
-        expect(dry.err.contains("would fix 4 tags and delete 2"))
+        expect(!dry.err.contains("would fix 4 tags and delete 2"))
         expect(readRawTagMetadata(file) == imperfect)
         let fixed = try records(context.run(["--fix", file.path, "--jsonl", "--no-backup"]).out)
         expect(fixed.last?["tagsFixed"] as? Int == 4 && fixed.last?["tagsDeleted"] as? Int == 2)
@@ -92,7 +92,7 @@ enum RepairTests {
         writeRawTagMetadata(healthyXML, to: file)
         let unusedUndo = work.appendingPathComponent("healthy-undo.jsonl")
         let healthy = try context.run(["--fix", file.path, "--backup-path", unusedUndo.path])
-        expect(healthy.err.contains("0 tags fixed, 0 deleted"))
+        expect(healthy.out == "Unchanged => Now: Odd, Bare\n" && healthy.err.isEmpty)
         expect(readRawTagMetadata(file) == healthyXML && !fileManager.fileExists(atPath: unusedUndo.path))
 
         writeRawTagMetadata(try plist(["", "\n3"]), to: file)

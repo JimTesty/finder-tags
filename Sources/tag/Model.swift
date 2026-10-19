@@ -129,6 +129,12 @@ struct Options {
         if case .restore = operation { return true }
         return recursive || enterDirectories || stdinPathMode != nil
     }
+
+    var singleMutationTarget: Bool {
+        if case .copy = operation { return true }
+        if case .restore = operation { return false }
+        return paths.count == 1 && stdinPathMode == nil && !recursive && !enterDirectories
+    }
 }
 
 struct Target {
@@ -192,7 +198,7 @@ struct TagChange {
     var hasChanges: Bool { needsRepair || beforeTags != afterTags }
 }
 
-struct FixStats {
+struct MutationStats {
     var visited = 0
     var filesUpdated = 0
     var unchanged = 0

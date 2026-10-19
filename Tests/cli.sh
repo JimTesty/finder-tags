@@ -69,7 +69,9 @@ verbose_output=$("$bin" -v --no-tags "$work/a" 2>"$work/verbose.err")
 [ "$verbose_output" = "$work/a" ]
 grep -q 'tag: info: listing traversed files' "$work/verbose.err"
 verbose_dry_run=$("$bin" --verbose --set Verbose --dry-run "$work/a" 2>"$work/verbose-mutation.err")
-grep -q 'tag: info: would set' "$work/verbose-mutation.err"
+grep -q 'tag: info: setting tags' "$work/verbose-mutation.err"
+printf '%s\n' "$verbose_dry_run" | grep -Fq '[dry-run] set '
+printf '%s\n' "$verbose_dry_run" | grep -Fq '[color '
 
 # Explicit directory first, then descendants relative to that argument.
 enter_output=$("$bin" -e "$work/tree")

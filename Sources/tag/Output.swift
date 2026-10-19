@@ -115,7 +115,16 @@ final class Output {
             let cleared = options.dryRun
                 ? "\(stats.cleared) \(clearedNoun) would have tags cleared"
                 : "\(stats.cleared) \(clearedNoun) had tags cleared"
-            eprint("\(programName): restore: \(outcome), \(cleared), \(stats.unchanged) unchanged, \(stats.missing) missing, \(stats.skipped) skipped, \(stats.errors) errors, \(stats.warnings) warnings (\(stats.visited) visited)")
+            let counts = summaryCounts([
+                (outcomeCount, outcome), (stats.cleared, cleared),
+                (stats.unchanged, "\(stats.unchanged) unchanged"),
+                (stats.missing, "\(stats.missing) missing"),
+                (stats.skipped, "\(stats.skipped) skipped"),
+                (stats.errors, "\(stats.errors) errors"),
+                (stats.warnings, "\(stats.warnings) warnings")
+            ])
+            let visited = options.verbose ? " (\(stats.visited) visited)" : ""
+            eprint("\(programName): restore: \(counts)\(visited)")
         }
     }
 
@@ -126,19 +135,6 @@ final class Output {
         source: Target? = nil,
         dryRun: Bool
     ) throws {
-        if options.verbose {
-            let transition: String
-            if !change.hasChanges {
-                transition = "unchanged"
-            } else {
-                transition = "\(verboseTags(change.beforeTags)) -> \(verboseTags(change.afterTags))"
-            }
-            let sourceText = source.map { " from \($0.displayPath)" } ?? ""
-            let action = dryRun ? "would \(operation)" : operation
-            let repairNote = change.needsRepair ? " (repair stored metadata)" : ""
-            eprint("\(programName): info: \(action) \(target.displayPath)\(sourceText): \(transition)\(repairNote)")
-        }
-
         if options.jsonLines {
             try emitJSONState(for: target)
             var object = try pathObject(target)
@@ -155,14 +151,24 @@ final class Output {
             return
         }
 
-        // Mutations are quiet by default, matching jdberry/tag. Dry-run is
-        // intentionally visible because its purpose is to preview changes.
-        if !dryRun { return }
+        if !dryRun {
+            guard !options.quiet else { return }
+            guard change.hasChanges || options.singleMutationTarget || options.verbose else { return }
+            let prefix = options.singleMutationTarget && options.paths.count == 1
+                ? "" : renderer.text(target.displayPath) + ": "
+            let action = changeAction(operation: operation, change: change, source: source)
+            let repairNote = change.needsRepair
+                ? " (\(change.repairs.fixed) tags fixed, \(change.repairs.deleted) deleted)" : ""
+            let before = options.verbose
+                ? " => Before (stored): \(renderedTags(change.beforeTags, detailed: true))" : ""
+            let after = renderedTags(change.afterTags, displayOrder: true, detailed: options.verbose)
+            record("\(prefix)\(action)\(repairNote)\(before) => Now: \(after)")
+            return
+        }
 
-        let before = change.beforeTags.map { renderer.tag($0) }.joined(separator: ",")
-        let after = change.after.isEmpty
-            ? "(no tags)"
-            : change.afterTags.map { renderer.tag($0) }.joined(separator: ",")
+        // Previews remain visible even in quiet mode.
+        let before = renderedTags(change.beforeTags, detailed: options.verbose)
+        let after = renderedTags(change.afterTags, displayOrder: true, detailed: options.verbose)
         let marker = change.hasChanges ? "->" : "="
         let path = try formattedPath(for: target)
         let clearNote = change.hasChanges && change.after.isEmpty
@@ -171,11 +177,15 @@ final class Output {
         let repairNote = change.needsRepair
             ? " (would fix \(change.repairs.fixed) tags and delete \(change.repairs.deleted))"
             : ""
-        record("[dry-run] \(operation) \(path)\t\(before) \(marker) \(after)\(clearNote)\(repairNote)")
+        let sourceText = source.map { " from " + renderer.text($0.displayPath) } ?? ""
+        record("[dry-run] \(operation) \(path)\(sourceText)\t\(before) \(marker) \(after)\(clearNote)\(repairNote)")
     }
 
-    func emitFixSummary(_ stats: FixStats) throws {
+    func emitMutationSummary(_ stats: MutationStats) throws {
+        let isFix: Bool
+        if case .fix = options.operation { isFix = true } else { isFix = false }
         if options.jsonLines {
+            guard isFix else { return }
             try jsonRecord([
                 "type": "summary", "operation": "fix", "dryRun": options.dryRun,
                 "tagsFixed": stats.repairs.fixed,
@@ -186,18 +196,67 @@ final class Output {
             return
         }
         if options.quiet { return }
-        let action = options.dryRun
-            ? "would fix \(stats.repairs.fixed) tags and delete \(stats.repairs.deleted)"
-            : "\(stats.repairs.fixed) tags fixed, \(stats.repairs.deleted) deleted"
-        let fileAction = options.dryRun ? "would be updated" : "updated"
+        guard !options.singleMutationTarget || options.verbose || stats.skipped != 0 || stats.errors != 0 else { return }
+        let fileAction = options.dryRun ? "would change" : "changed"
         let files = stats.filesUpdated == 1 ? "file" : "files"
-        eprint("\(programName): fix: \(action); \(stats.filesUpdated) \(files) \(fileAction), \(stats.unchanged) unchanged, \(stats.skipped) skipped, \(stats.errors) errors (\(stats.visited) visited)")
+        var counts = [
+            (stats.filesUpdated, "\(stats.filesUpdated) \(files) \(fileAction)"),
+            (stats.unchanged, "\(stats.unchanged) unchanged"),
+            (stats.skipped, "\(stats.skipped) skipped"),
+            (stats.errors, "\(stats.errors) errors")
+        ]
+        if isFix || stats.repairs.total != 0 {
+            counts += [
+                (stats.repairs.fixed, "\(stats.repairs.fixed) tags \(options.dryRun ? "would be fixed" : "fixed")"),
+                (stats.repairs.deleted, "\(stats.repairs.deleted) tags \(options.dryRun ? "would be deleted" : "deleted")")
+            ]
+        }
+        let prefix = isFix ? "fix: " : ""
+        let visited = options.verbose ? " (\(stats.visited) visited)" : ""
+        eprint("\(programName): \(prefix)\(summaryCounts(counts))\(visited)")
     }
 
-    private func verboseTags(_ tags: [StoredTag]) -> String {
-        tags.isEmpty ? "(no tags)" : tags.map {
-            "\($0.name) [color \($0.color.map(String.init) ?? "unknown")]"
-        }.joined(separator: ",")
+    private func summaryCounts(_ counts: [(Int, String)]) -> String {
+        counts.enumerated().filter { index, count in
+            index == 0 || count.0 != 0 || options.verbose
+        }.map { $0.element.1 }.joined(separator: ", ")
+    }
+
+    private func renderedTags(_ stored: [StoredTag], displayOrder: Bool = false, detailed: Bool = false) -> String {
+        var tags = displayOrder && options.sortedTags ? sortedStoredTags(stored) : stored
+        if displayOrder && options.reverse { tags.reverse() }
+        if tags.isEmpty { return "(empty)" }
+        return tags.map { tag in
+            renderer.tag(tag) + (detailed ? " [color \(tag.color.map(String.init) ?? "unknown")]" : "")
+        }.joined(separator: ", ")
+    }
+
+    private func changeAction(operation: String, change: TagChange, source: Target?) -> String {
+        if !change.hasChanges { return "Unchanged" }
+        if change.beforeTags == change.afterTags { return "Repaired stored metadata" }
+        if operation == "copy", let source = source {
+            return "Copied tags from " + renderer.text(source.displayPath)
+        }
+        if change.afterTags.isEmpty { return "Cleared tags" }
+        if operation == "restore" { return "Restored tags" }
+
+        let beforeNames = Set(change.before), afterNames = Set(change.after)
+        let added = change.afterTags.filter { !beforeNames.contains($0.name) }
+        let removed = change.beforeTags.filter { !afterNames.contains($0.name) }
+        if operation == "add", !added.isEmpty, removed.isEmpty {
+            return "Added " + renderedTags(added)
+        }
+        if operation == "remove", !removed.isEmpty, added.isEmpty {
+            return "Removed " + renderedTags(removed)
+        }
+        if operation == "add", added.count == 1, removed.count == 1,
+           foldedTag(added[0].name) == foldedTag(removed[0].name) {
+            return "Changed case " + renderedTags(removed) + " to " + renderedTags(added)
+        }
+        if beforeNames == afterNames {
+            return change.before == change.after ? "Updated tag colors" : "Reordered tags"
+        }
+        return operation == "set" ? "Set tags" : "Updated tags"
     }
 
     private func emitText(

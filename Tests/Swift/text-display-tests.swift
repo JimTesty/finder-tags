@@ -99,7 +99,7 @@ enum TextDisplayTests {
         let dry = try context.run(["--set", tag, "--dry-run", "--verbose", file.path])
         expect(dry.out.contains(path + "\t"))
         expect(dry.out.contains(escapedDisplayText(tag)))
-        expect(dry.err.contains(path) && dry.err.contains(escapedDisplayText(tag)))
+        expect(dry.out.contains("[color ") && !dry.err.contains(escapedDisplayText(tag)))
         expectSafeDiagnostic(dry.err)
         let dryJSON = try records(context.run(["--set", tag, "--dry-run", "--jsonl", file.path]).out)
         expect(dryJSON.last?["after"] as? [String] == [tag])
@@ -154,7 +154,7 @@ enum TextDisplayTests {
         let destination = work.appendingPathComponent("destination\t\u{1b}[2J")
         try Data().write(to: destination)
         let copy = try context.run(["--copy", file.path, destination.path, "--dry-run", "--verbose"])
-        expect(copy.err.contains(" from " + path + ":"))
+        expect(copy.out.contains(" from " + path + "\t"))
         expectSafeDiagnostic(copy.err)
         try FileTagMetadata.write([StoredTag(name: tag, color: 99)], to: destination)
         let unknown = try context.run(["--verbose", destination.path]).err

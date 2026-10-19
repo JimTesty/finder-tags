@@ -53,10 +53,14 @@ struct RestoreEngine {
         let items = document.header.purpose == "undo"
             ? Array(document.items.reversed()) : document.items
         for entry in items {
+            stats.visited += 1
             if options.taggedOnly && (entry.tags == nil || entry.tags!.isEmpty) {
+                stats.skipped += 1
+                if options.verbose {
+                    eprint("\(programName): info: skipping \(entry.path): archive item has no tags (--tagged-only)")
+                }
                 continue
             }
-            stats.visited += 1
             do {
                 // Repeat path and parent checks immediately before this item.
                 let logicalURL = try destinationURL(for: entry.path)
@@ -102,7 +106,7 @@ struct RestoreEngine {
                     // Explicit null entries must restore the missing suffix.
                     after = after.map { tag in before.first { $0.name == tag.name } ?? tag }
                 }
-                let change = sortedChangeIfRequested(
+                var change = sortedChangeIfRequested(
                     TagChange(beforeTags: before, afterTags: after, repairs: state.repairs), options: options
                 )
                 let target = Target(
@@ -114,6 +118,9 @@ struct RestoreEngine {
 
                 if !change.hasChanges {
                     stats.unchanged += 1
+                    if options.verbose && !options.jsonLines {
+                        try output.emitChange(operation: "restore", target: target, change: change, dryRun: options.dryRun)
+                    }
                     continue
                 }
 
@@ -122,7 +129,8 @@ struct RestoreEngine {
                     if change.after.isEmpty { stats.cleared += 1 }
                 } else {
                     try beforeMutation(target, change.beforeTags)
-                    try store.apply(change, to: ioURL)
+                    let actual = try store.apply(change, to: ioURL)
+                    change = TagChange(beforeTags: before, afterTags: actual, repairs: change.repairs)
                     stats.changed += 1
                     stats.restored += 1
                     if change.after.isEmpty { stats.cleared += 1 }

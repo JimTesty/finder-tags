@@ -24,6 +24,8 @@ enum RegressionTests {
         try TextDisplayTests.run(context)
         print("Text display tests passed")
         #if canImport(Darwin)
+        try MutationFeedbackTests.run(context)
+        print("Mutation feedback tests passed")
         try InspectionTests.run(context)
         print("Inspection tests passed")
         try RepairTests.run(context)

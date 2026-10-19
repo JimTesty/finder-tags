@@ -7,6 +7,7 @@ final class App {
     private var undoWriter: UndoWriter?
     private var hadError = false
     private var brokenSymlinks = Set<String>()
+    private var mutationStats = MutationStats()
 
     init(options: Options) {
         self.options = options
@@ -41,14 +42,22 @@ final class App {
             runUsage(query)
         case .find(let query):
             runFind(query)
-        case .fix:
-            runFix()
-        case .list, .match, .filter, .add, .remove, .set, .move:
+        case .list, .match, .filter, .add, .remove, .set, .move, .fix:
             runTraversal()
         }
 
         finishUndo()
         reportBrokenSymlinks()
+        switch options.operation {
+        case .add, .remove, .set, .move, .copy, .fix:
+            do {
+                try output.emitMutationSummary(mutationStats)
+            } catch {
+                report("writing mutation summary: \(error.localizedDescription)")
+            }
+        default:
+            break
+        }
         return hadError ? ExitCode.ioError : 0
     }
 
@@ -234,6 +243,7 @@ final class App {
     private func report(_ message: String) {
         reportError(message)
         hadError = true
+        if options.isMutating { mutationStats.errors += 1 }
     }
 
     private func warn(_ message: String) {
@@ -307,6 +317,7 @@ final class App {
     }
 
     private func runCopy() {
+        mutationStats.visited += 1
         let sourcePath = options.paths[0]
         let destinationPath = options.paths[1]
         do {
@@ -321,6 +332,7 @@ final class App {
             if options.taggedOnly {
                 let sourceTags = try store.read(source.url)
                 if sourceTags.isEmpty {
+                    mutationStats.skipped += 1
                     info("copy skipped for \(source.displayPath): source has no tags")
                     return
                 }
@@ -350,6 +362,7 @@ final class App {
         guard options.taggedOnly else { return true }
         let tags = try store.read(target.url)
         if tags.isEmpty {
+            mutationStats.skipped += 1
             info("skipping \(target.displayPath): no tags")
             return false
         }
@@ -406,6 +419,7 @@ final class App {
         let traversal = Traversal(options: options, onError: report)
 
         traversal.forEachTarget { target in
+            if options.isMutating { mutationStats.visited += 1 }
             do {
                 switch options.operation {
                 case .add, .remove, .set, .move:
@@ -458,45 +472,21 @@ final class App {
                     )
                     try performMutation("move", target: target, change: change)
 
-                case .fix, .copy, .usage, .find, .export, .restore, .convert:
+                case .fix:
+                    let change = try store.fixChange(on: target.url)
+                    if options.taggedOnly && change.beforeTags.isEmpty {
+                        mutationStats.skipped += 1
+                        info("skipping \(target.displayPath): no tags")
+                        return
+                    }
+                    try performMutation("fix", target: target, change: change)
+
+                case .copy, .usage, .find, .export, .restore, .convert:
                     preconditionFailure("operation handled outside traversal")
                 }
             } catch {
                 report("\(target.absolutePath): \(error.localizedDescription)")
             }
-        }
-    }
-
-    private func runFix() {
-        var stats = FixStats()
-        let traversal = Traversal(options: options, onError: { message in
-            stats.errors += 1
-            self.report(message)
-        })
-        traversal.forEachTarget { target in
-            stats.visited += 1
-            do {
-                let change = try store.fixChange(on: target.url)
-                if options.taggedOnly && change.beforeTags.isEmpty {
-                    stats.skipped += 1
-                    return
-                }
-                let result = try performMutation("fix", target: target, change: change)
-                if result.hasChanges {
-                    stats.filesUpdated += 1
-                    stats.repairs.add(result.repairs)
-                } else {
-                    stats.unchanged += 1
-                }
-            } catch {
-                stats.errors += 1
-                report("\(target.absolutePath): \(error.localizedDescription)")
-            }
-        }
-        do {
-            try output.emitFixSummary(stats)
-        } catch {
-            report("writing fix summary: \(error.localizedDescription)")
         }
     }
 
@@ -512,6 +502,12 @@ final class App {
             recordUndo(target: target, tags: change.beforeTags)
             let after = try store.apply(change, to: target.url)
             change = TagChange(beforeTags: change.beforeTags, afterTags: after, repairs: change.repairs)
+        }
+        if change.hasChanges {
+            mutationStats.filesUpdated += 1
+            mutationStats.repairs.add(change.repairs)
+        } else {
+            mutationStats.unchanged += 1
         }
         try output.emitChange(
             operation: operation,

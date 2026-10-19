@@ -1,17 +1,5 @@
 # Future work
 
-## Default mutation feedback
-
-Quiet/default/verbose controls are implemented; default mutation feedback is
-still deferred.
-
-* Show a concise completed action and resulting tags at default verbosity,
-  for example `Added Yellow => Now: {resulting tags}`. Omit the filename prefix
-  only when a single file was explicitly specified on the command line;
-  otherwise prepend `{filename}: `. Render tags in color when enabled.
-  Quiet suppresses these messages; verbose retains additional detail.
-  Also consider reducing `--quiet` output further.
-
 ## Imperfect-data recovery audit (2026-10-18)
 
 Tag entries are now recovered individually, with warnings. The remaining
