@@ -554,8 +554,11 @@ Read-only listings gain no default chatter. JSONL retains its structured
 records rather than adding text action reports. `--version` is the long-only
 spelling for the version.
 
-Inapplicable presentation options are accepted and ignored, with warnings only
-under `--verbose`. For example, `--add` accepts `--file-info`, `--compact-tags`,
+Inapplicable presentation options are accepted and ignored. These produce
+warnings at normal verbosity with `--dry-run` (also `--dryrun`), `--jsonl`,
+`--export`, or `--restore`; other modes warn only under `--verbose`.
+Quiet suppresses these option warnings while retaining other warnings and errors.
+For example, `--add` accepts `--file-info`, `--compact-tags`,
 and `--align-tags` without adding metadata columns or changing the action-report
 layout. `--compact-tags` still implies display reversal; it never truncates the
 stored tag names. Text layout options are harmless with JSONL. Export ignores

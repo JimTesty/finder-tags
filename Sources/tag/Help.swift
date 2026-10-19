@@ -252,7 +252,9 @@ private func detailedHelp(name: String) -> String {
     Bare --color and -c use auto. Diagnostics check stderr independently.
     JSONL is never colored.
 
-    Inapplicable display options are accepted and ignored; -v warns about them.
+    Inapplicable options are accepted and ignored. Warn at default verbosity
+    with --dry-run/--dryrun, --jsonl, --export, or --restore; otherwise only at -v.
+    Quiet suppresses these option warnings; other warnings/errors remain visible.
     --compact-tags still implies --reverse where reversal applies. Export ignores
     display formatting and preserves root-relative paths and stored tag order.
     Read-only operations also ignore backup, dry-run, and placement options.

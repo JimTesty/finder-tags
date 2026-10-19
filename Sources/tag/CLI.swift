@@ -311,8 +311,14 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
 }
 
 private func validateAndApplyDefaults(_ options: inout Options) {
+    let warnAtDefault: Bool
+    switch options.operation {
+    case .export, .restore: warnAtDefault = true
+    default: warnAtDefault = options.dryRun || options.jsonLines
+    }
+    let warnAboutIgnores = options.verbose || (warnAtDefault && !options.quiet)
     func ignored(_ specified: Bool, _ option: String, _ reason: String) {
-        if specified && options.verbose {
+        if specified && warnAboutIgnores {
             reportWarning("\(option) ignored: \(reason)")
         }
     }

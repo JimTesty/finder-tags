@@ -16,8 +16,10 @@ The stdin suite checks invalid UTF-8 and NUL rejection before any mutations,
 unchanged explicit and piped targets, CRLF handling, and literal CR/LF paths.
 The verbosity suite checks cumulative quiet/verbose flags, preserved previews,
 JSONL and diagnostics, quiet summaries, and quiet backups without announcements.
-The option compatibility suite checks harmless ignores, verbose-only warnings,
-preserved JSONL and export semantics, mutation display flags, read-only safety,
+The option compatibility suite checks harmless ignores, default warnings for
+dry runs/JSONL/export/restore, verbose-only warnings for everyday commands,
+quiet suppression of option warnings, preserved JSONL and export semantics,
+mutation display flags, read-only safety,
 and retained errors for target restrictions and conflicting edits/formats.
 The mutation feedback suite checks action descriptions, single-target and bulk
 unchanged reports, summaries, skip reasons, traversal roots, stdin, copy, fix,

@@ -5,7 +5,9 @@
 - Accept harmless inapplicable presentation options across commands, including
   mutation layout flags, text formatting with JSONL, and export display flags.
   Ignore read-only backup/dry-run/placement flags and inapplicable file ordering;
-  warn about benign ignores only under verbose. Retain target, edit, and format
+  warn about benign ignores at default verbosity with dry-run, JSONL, export,
+  or restore, and only under verbose for other modes. Quiet suppresses these
+  option warnings. Retain target, edit, and format
   safety errors. Quiet now hides undo archive path announcements, without
   disabling backups or hiding backup failures.
 - Report verified mutation actions and resulting tags on stdout by default,

@@ -253,10 +253,10 @@ fi
 "$bin" --ndjson "$work/a" | grep -q '"path"'
 "$bin" --align-tags 40 --jsonl "$work/a" >"$work/align-tags-json.out" 2>"$work/align-tags-json.err"
 grep -q '"tags"' "$work/align-tags-json.out"
-[ ! -s "$work/align-tags-json.err" ]
+grep -q -- '--align-tags ignored:' "$work/align-tags-json.err"
 "$bin" --compact-tags --jsonl "$work/a" >"$work/compact-tags-json.out" 2>"$work/compact-tags-json.err"
 grep -q '"tags"' "$work/compact-tags-json.out"
-[ ! -s "$work/compact-tags-json.err" ]
+grep -q -- '--compact-tags layout ignored:' "$work/compact-tags-json.err"
 file_info_json=$("$bin" --file-info --jsonl "$work/a")
 printf '%s\n' "$file_info_json" | grep -q '"size"'
 printf '%s\n' "$file_info_json" | grep -q '"mtime"'

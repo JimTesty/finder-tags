@@ -189,8 +189,11 @@ Repeated -q and -v accumulate and cancel one for one: -qqv is quiet,
 -qv is default, and -vvq is verbose. Levels below default are quiet;
 levels above default are verbose.
 .PP
-Inapplicable presentation options are accepted and ignored, with warnings only
-under --verbose. Mutations accept file-list layout options without changing
+Inapplicable presentation options are accepted and ignored. Warn at normal
+verbosity with --dry-run (also --dryrun), --jsonl, --export, or --restore;
+otherwise warn only under --verbose. Quiet suppresses these option warnings,
+while retaining other warnings and errors.
+Mutations accept file-list layout options without changing
 their action-report layout; --compact-tags still implies display reversal.
 Export ignores display formatting, --absolute, --sorted-tags, and --reverse,
 preserving root-relative paths and stored tag order.
