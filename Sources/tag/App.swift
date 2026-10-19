@@ -99,23 +99,22 @@ final class App {
             warn("--reverse is ignored during export; JSONL stores natural tag order")
         }
 
-        let rootURL: URL
-        if let path = options.paths.first {
-            rootURL = argumentFileURL(
-                path,
-                resolveSymlinks: options.resolveSymlinksForArguments
-            )
-        } else {
-            rootURL = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
-                .standardizedFileURL
-        }
-
         do {
-            guard try rootURL.checkResourceIsReachable() else {
+            let rootURL: URL
+            if let path = options.paths.first {
+                rootURL = try argumentFileURL(
+                    path,
+                    resolveSymlinks: options.resolveSymlinksForArguments
+                )
+            } else {
+                rootURL = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+                    .standardizedFileURL
+            }
+            guard try checkedPathExists(rootURL, followSymlinks: true) else {
                 report("export root is not reachable: \(rootURL.path)")
                 return
             }
-            guard try rootURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+            guard try checkedItemKind(for: rootURL, followSymlinks: true) == .directory else {
                 report("export root must be a directory: \(rootURL.path)")
                 return
             }
@@ -134,38 +133,34 @@ final class App {
                 }
             )
             traversal.forEachTarget { target in
-                let isBroken = symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true
-                if isBroken && self.noteBrokenSymlink(target) {
-                    writer.noteWarning()
-                }
-                let tags: [StoredTag]?
+                writer.stats.visited += 1
                 do {
-                    tags = try exportStore.readTags(target.url)
-                } catch {
-                    // Foundation may not expose a usable tag value for a
-                    // symlink itself, or for a dangling target with -L.
-                    // Omitting tags is distinct from an observed empty array,
-                    // so restore will not clear a live target accidentally.
-                    // Keep the item so -L archives retain the link structure.
-                    if isSymbolicLink(target.logicalURL) {
-                        tags = nil
-                        if !isBroken {
-                            writer.noteWarning()
-                            self.warn("\(target.absolutePath): tags unavailable for symlink; recording the item without tags")
-                        }
-                    } else {
-                        writer.stats.errors += 1
-                        writer.stats.visited += 1
-                        self.report("\(target.absolutePath): \(error.localizedDescription)")
-                        return
+                    let link = try symbolicLinkInfo(for: target.logicalURL)
+                    let isBroken = link?.targetIsMissing == true
+                    if isBroken && self.noteBrokenSymlink(target) {
+                        writer.noteWarning()
                     }
-                }
+                    let tags: [StoredTag]?
+                    do {
+                        tags = try exportStore.readTags(target.url)
+                    } catch {
+                        // Omitted tags must never become a clear instruction
+                        // when an unavailable symlink target is restored.
+                        if link != nil {
+                            tags = nil
+                            if !isBroken {
+                                writer.noteWarning()
+                                self.warn("\(target.absolutePath): tags unavailable for symlink; recording the item without tags")
+                            }
+                        } else {
+                            throw error
+                        }
+                    }
 
-                let metadata = self.optionalMetadata(for: target) { message in
-                    writer.noteWarning()
-                    self.warn(message)
-                }
-                do {
+                    let metadata = self.optionalMetadata(for: target) { message in
+                        writer.noteWarning()
+                        self.warn(message)
+                    }
                     try writer.emitTarget(target, tags: tags, metadata: metadata)
                 } catch {
                     writer.stats.errors += 1
@@ -266,7 +261,14 @@ final class App {
     }
 
     private func readTagsForDisplay(_ target: Target) throws -> [StoredTag] {
-        if symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true {
+        let link: SymbolicLinkInfo?
+        do {
+            link = try symbolicLinkInfo(for: target.logicalURL)
+        } catch {
+            warn("\(target.absolutePath): symlink info unavailable: \(error.localizedDescription)")
+            return try store.readTags(target.url)
+        }
+        if link?.targetIsMissing == true {
             noteBrokenSymlink(target)
             // Display can read the link itself; edits still require a readable
             // referent because their writes follow the symlink.
@@ -281,7 +283,7 @@ final class App {
         guard options.fileInfo else { return nil }
         do {
             let metadata = try fileMetadata(for: target)
-            if symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true {
+            if try symbolicLinkInfo(for: target.logicalURL)?.targetIsMissing == true {
                 noteBrokenSymlink(target)
             }
             return metadata
@@ -291,8 +293,8 @@ final class App {
         }
     }
 
-    private func explicitTarget(_ path: String) -> Target {
-        let logical = argumentFileURL(
+    private func explicitTarget(_ path: String) throws -> Target {
+        let logical = try argumentFileURL(
             path,
             resolveSymlinks: options.resolveSymlinksForArguments
         )
@@ -307,14 +309,13 @@ final class App {
     private func runCopy() {
         let sourcePath = options.paths[0]
         let destinationPath = options.paths[1]
-        let source = explicitTarget(sourcePath)
-        let destination = explicitTarget(destinationPath)
-
         do {
-            guard try source.logicalURL.checkResourceIsReachable() else {
+            let source = try explicitTarget(sourcePath)
+            let destination = try explicitTarget(destinationPath)
+            guard try checkedPathExists(source.logicalURL, followSymlinks: true) else {
                 fail("source is not reachable: \(sourcePath)", code: ExitCode.noInput)
             }
-            guard try destination.logicalURL.checkResourceIsReachable() else {
+            guard try checkedPathExists(destination.logicalURL, followSymlinks: true) else {
                 fail("destination is not reachable: \(destinationPath)", code: ExitCode.noInput)
             }
             if options.taggedOnly {

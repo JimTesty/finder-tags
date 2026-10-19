@@ -97,7 +97,7 @@ enum FileInfoTests {
         #endif
         let loop = work.appendingPathComponent("loop")
         try fileManager.createSymbolicLink(atPath: loop.path, withDestinationPath: "loop")
-        expect(symbolicLinkInfo(for: loop)?.targetIsMissing == false)
+        expect(try symbolicLinkInfo(for: loop)?.targetIsMissing == false)
 
         let recursive = try context.run(["-RT", "--file-info", root.path])
         expect(recursive.out.components(separatedBy: "[BROKEN SYMLINK]").count - 1 == 4)

@@ -23,13 +23,13 @@ struct Traversal {
         }
 
         for path in options.paths {
-            let logicalURL = argumentFileURL(
-                path,
-                resolveSymlinks: options.resolveSymlinksForArguments
-            )
+            let logicalURL: URL
             do {
-                let reachable = try logicalURL.checkResourceIsReachable()
-                guard reachable || isSymbolicLink(logicalURL) else {
+                logicalURL = try argumentFileURL(
+                    path,
+                    resolveSymlinks: options.resolveSymlinksForArguments
+                )
+                guard try checkedPathExists(logicalURL) else {
                     onError("not reachable: \(path)")
                     continue
                 }
@@ -68,11 +68,7 @@ struct Traversal {
     }
 
     func directoryFlag(_ logicalURL: URL) throws -> Bool {
-        if isSymbolicLink(logicalURL) && !options.followSymlinks {
-            return false
-        }
-        let url = tagIOURL(logicalURL, followSymlinks: options.followSymlinks)
-        return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+        return try checkedItemKind(for: logicalURL, followSymlinks: options.followSymlinks) == .directory
     }
 
     private func enumerateDirectory(

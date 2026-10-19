@@ -216,22 +216,30 @@ final class Output {
     }
 
     private func formattedPath(for target: Target) throws -> String {
-        if let link = symbolicLinkInfo(for: target.logicalURL) {
-            var path = renderer.path(
-                target.displayPath, isSymlink: true, isBrokenSymlink: link.targetIsMissing
-            )
-            if options.printSymlinks {
-                path += renderer.symlinkDestination(
-                    link.destination, targetExists: link.targetExists, targetIsDirectory: link.targetIsDirectory
+        do {
+            if let link = try symbolicLinkInfo(for: target.logicalURL) {
+                if let error = link.targetInspectionError {
+                    reportWarning("\(target.absolutePath): symlink target info unavailable: \(error.localizedDescription)")
+                }
+                var path = renderer.path(
+                    target.displayPath, isSymlink: true, isBrokenSymlink: link.targetIsMissing
                 )
+                if options.printSymlinks {
+                    path += renderer.symlinkDestination(
+                        link.destination, targetExists: link.targetExists, targetIsDirectory: link.targetIsDirectory == true
+                    )
+                }
+                return path
             }
-            return path
+        } catch {
+            reportWarning("\(target.absolutePath): symlink info unavailable; showing path without suffix: \(error.localizedDescription)")
+            return renderer.path(target.displayPath)
         }
 
         var isDirectory = false
         if options.slashDirectories {
             do {
-                isDirectory = try target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+                isDirectory = try checkedItemKind(for: target.url, followSymlinks: true) == .directory
             } catch {
                 reportWarning("\(target.absolutePath): cannot determine directory suffix; showing path without suffix: \(error.localizedDescription)")
             }
@@ -265,26 +273,34 @@ final class Output {
         }
         var object: [String: Any] = [
             "type": "item",
-            "path": path,
-            "kind": itemKind(for: target).rawValue
+            "path": path
         ]
-        if let link = symbolicLinkInfo(for: target.logicalURL), options.printSymlinks {
-            object["destination"] = link.destination
-            object["targetExists"] = link.targetExists
-            if link.targetExists {
-                object["targetKind"] = link.targetIsDirectory
-                    ? ArchiveItemKind.directory.rawValue
-                    : ArchiveItemKind.file.rawValue
+        let kind: ArchiveItemKind?
+        do {
+            kind = try checkedItemKind(for: target.logicalURL)
+            object["kind"] = kind?.rawValue
+        } catch {
+            kind = nil
+            reportWarning("\(target.absolutePath): file type unavailable; omitting kind: \(error.localizedDescription)")
+        }
+        if options.printSymlinks && kind == .symlink {
+            do {
+                if let link = try symbolicLinkInfo(for: target.logicalURL) {
+                    object["destination"] = link.destination
+                    if let exists = link.targetExists { object["targetExists"] = exists }
+                    if let isDirectory = link.targetIsDirectory {
+                        object["targetKind"] = isDirectory
+                            ? ArchiveItemKind.directory.rawValue : ArchiveItemKind.file.rawValue
+                    }
+                    if let error = link.targetInspectionError {
+                        reportWarning("\(target.absolutePath): symlink target info unavailable: \(error.localizedDescription)")
+                    }
+                }
+            } catch {
+                reportWarning("\(target.absolutePath): symlink info unavailable: \(error.localizedDescription)")
             }
         }
         return object
-    }
-
-    private func itemKind(for target: Target) -> ArchiveItemKind {
-        if isSymbolicLink(target.logicalURL) { return .symlink }
-        return (try? target.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
-            ? .directory
-            : .file
     }
 
     private func emitJSONState(for target: Target) throws {

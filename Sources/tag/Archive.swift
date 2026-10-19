@@ -366,19 +366,11 @@ final class ArchiveWriter {
 
     func emitTarget(_ target: Target, tags: [StoredTag]?, metadata: FileMetadata?) throws {
         guard let rootURL = rootURL else { throw ArchiveError.missingRoot }
-        stats.visited += 1
         let path = try relativePath(target.logicalURL, to: rootURL)
 
         if options.taggedOnly && (tags == nil || tags!.isEmpty) { return }
 
-        let isSymlink = isSymbolicLink(target.logicalURL)
-        let kind: ArchiveItemKind
-        if isSymlink {
-            kind = .symlink
-        } else {
-            let values = try target.url.resourceValues(forKeys: [.isDirectoryKey])
-            kind = values.isDirectory == true ? .directory : .file
-        }
+        let kind = try checkedItemKind(for: target.logicalURL)
 
         var object: [String: Any] = [
             "type": "item",
@@ -396,11 +388,15 @@ final class ArchiveWriter {
         }
 
         if kind == .symlink && options.followSymlinks,
-           let link = symbolicLinkInfo(for: target.logicalURL) {
+           let link = try symbolicLinkInfo(for: target.logicalURL) {
             object["destination"] = link.destination
-            object["targetExists"] = link.targetExists
-            if link.targetExists {
-                object["targetKind"] = link.targetIsDirectory ? ArchiveItemKind.directory.rawValue : ArchiveItemKind.file.rawValue
+            if let exists = link.targetExists { object["targetExists"] = exists }
+            if let isDirectory = link.targetIsDirectory {
+                object["targetKind"] = isDirectory ? ArchiveItemKind.directory.rawValue : ArchiveItemKind.file.rawValue
+            }
+            if let error = link.targetInspectionError {
+                noteWarning()
+                reportWarning("\(target.absolutePath): symlink target info unavailable: \(error.localizedDescription)")
             }
         }
 
@@ -463,7 +459,7 @@ final class UndoWriter {
         let object: [String: Any] = [
             "type": "item",
             "path": path,
-            "kind": try itemKind(for: ioURL).rawValue,
+            "kind": try checkedItemKind(for: ioURL, followSymlinks: true).rawValue,
             "tags": tags.map { $0.name },
             "colors": tagColorNumbers(tags)
         ]
@@ -507,12 +503,6 @@ final class UndoWriter {
         }
         eprint("\(programName): undo archive: \(url.path)")
         return file
-    }
-
-    private func itemKind(for url: URL) throws -> ArchiveItemKind {
-        return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
-            ? .directory
-            : .file
     }
 }
 

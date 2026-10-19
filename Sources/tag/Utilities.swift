@@ -30,7 +30,11 @@ func fileMetadata(for url: URL) throws -> FileMetadata {
             NSLocalizedDescriptionKey: "file size or modification time is unavailable"
         ])
     }
-    let isDirectory = values.isDirectory == true
+    guard let isDirectory = values.isDirectory else {
+        throw NSError(domain: "finder-tags", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "file type is unavailable"
+        ])
+    }
     let size = isDirectory ? 0 : values.fileSize ?? -1
     guard size >= 0 else {
         throw NSError(domain: "finder-tags", code: 1, userInfo: [
@@ -50,7 +54,8 @@ func fileMetadata(for target: Target) throws -> FileMetadata {
     // so a symlink's tags are not paired with the link's own byte length and
     // timestamp. -L still controls traversal and structural symlink metadata.
     // A missing referent falls back to the link itself, just like tag display.
-    if let link = symbolicLinkInfo(for: target.logicalURL) {
+    if let link = try symbolicLinkInfo(for: target.logicalURL) {
+        if let error = link.targetInspectionError { throw error }
         if link.targetIsMissing {
             var info = stat()
             guard lstat(target.logicalURL.path, &info) == 0 else {
@@ -82,12 +87,12 @@ func expandedFileURL(_ path: String) -> URL {
     return URL(fileURLWithPath: NSString(string: path).expandingTildeInPath).standardizedFileURL
 }
 
-func argumentFileURL(_ path: String, resolveSymlinks: Bool) -> URL {
+func argumentFileURL(_ path: String, resolveSymlinks: Bool) throws -> URL {
     let url = expandedFileURL(path)
-    guard resolveSymlinks, isSymbolicLink(url) else { return url }
+    guard resolveSymlinks, try checkedSymbolicLink(url) else { return url }
 
     let resolvedURL = resolvedTagURL(url)
-    return fileManager.fileExists(atPath: resolvedURL.path) ? resolvedURL : url
+    return try checkedPathExists(resolvedURL, followSymlinks: true) ? resolvedURL : url
 }
 
 func resolvedTagURL(_ url: URL) -> URL {
@@ -112,15 +117,16 @@ func relativeLogicalPath(_ url: URL, to rootURL: URL) -> String? {
 struct SymbolicLinkInfo {
     let destination: String
     let targetURL: URL
-    let targetExists: Bool
-    let targetIsMissing: Bool
-    let targetIsDirectory: Bool
+    let targetExists: Bool?
+    let targetIsDirectory: Bool?
+    let targetInspectionError: Error?
+
+    var targetIsMissing: Bool { targetExists == false }
 }
 
-func symbolicLinkInfo(for url: URL) -> SymbolicLinkInfo? {
-    guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: url.path) else {
-        return nil
-    }
+func symbolicLinkInfo(for url: URL) throws -> SymbolicLinkInfo? {
+    guard try checkedItemKind(for: url) == .symlink else { return nil }
+    let destination = try fileManager.destinationOfSymbolicLink(atPath: url.path)
 
     let targetURL: URL
     if destination.hasPrefix("/") {
@@ -131,63 +137,97 @@ func symbolicLinkInfo(for url: URL) -> SymbolicLinkInfo? {
             .standardizedFileURL
     }
 
-    var info = stat()
-    let exists = stat(targetURL.path, &info) == 0
-    // Permission failures and loops must not masquerade as missing targets.
-    let isMissing = !exists && (errno == ENOENT || errno == ENOTDIR)
-    let isDirectory = exists && info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR)
-    return SymbolicLinkInfo(
-        destination: destination,
-        targetURL: targetURL,
-        targetExists: exists,
-        targetIsMissing: isMissing,
-        targetIsDirectory: isDirectory
-    )
+    do {
+        let kind = try checkedItemKind(for: targetURL, followSymlinks: true)
+        return SymbolicLinkInfo(
+            destination: destination, targetURL: targetURL, targetExists: true,
+            targetIsDirectory: kind == .directory, targetInspectionError: nil
+        )
+    } catch {
+        let missing = isMissingPathError(error)
+        return SymbolicLinkInfo(
+            destination: destination, targetURL: targetURL,
+            targetExists: missing ? false : nil, targetIsDirectory: nil,
+            targetInspectionError: missing ? nil : error
+        )
+    }
 }
 
-func isSymbolicLink(_ url: URL) -> Bool {
-    // destinationOfSymbolicLink is an lstat-like question: it succeeds only
-    // when the path itself is a symbolic link, without relying on resource
-    // values that may describe the referent.
-    return (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) != nil
+func isMissingPathError(_ error: Error) -> Bool {
+    let error = error as NSError
+    return error.domain == NSPOSIXErrorDomain && (error.code == Int(ENOENT) || error.code == Int(ENOTDIR))
+}
+
+func checkedItemKind(for url: URL, followSymlinks: Bool = false) throws -> ArchiveItemKind {
+    var info = stat()
+    let status = followSymlinks ? stat(url.path, &info) : lstat(url.path, &info)
+    guard status == 0 else {
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSFilePathErrorKey: url.path])
+    }
+    switch info.st_mode & mode_t(S_IFMT) {
+    case mode_t(S_IFLNK): return .symlink
+    case mode_t(S_IFDIR): return .directory
+    default: return .file
+    }
+}
+
+func checkedPathExists(_ url: URL, followSymlinks: Bool = false) throws -> Bool {
+    do {
+        _ = try checkedItemKind(for: url, followSymlinks: followSymlinks)
+        return true
+    } catch {
+        if isMissingPathError(error) { return false }
+        throw error
+    }
 }
 
 func checkedSymbolicLink(_ url: URL) throws -> Bool {
-    var info = stat()
-    guard lstat(url.path, &info) == 0 else {
+    do {
+        return try checkedItemKind(for: url) == .symlink
+    } catch {
         // Missing parents are handled as missing items by restore. Other
         // inspection failures must not bypass its parent-symlink check.
-        if errno == ENOENT || errno == ENOTDIR { return false }
-        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSFilePathErrorKey: url.path])
+        if isMissingPathError(error) { return false }
+        throw error
     }
-    return info.st_mode & mode_t(S_IFMT) == mode_t(S_IFLNK)
 }
 
 func readPathsFromStdin(_ mode: StdinPathMode) -> [String] {
-    let data = FileHandle.standardInput.readDataToEndOfFile()
-    if data.isEmpty { return [] }
-
-    switch mode {
-    case .lines:
-        let text = String(decoding: data, as: UTF8.self)
-        return text.unicodeScalars.split(whereSeparator: { $0 == "\n" || $0 == "\r" })
-            .map(String.init)
-    case .nul:
-        var result: [String] = []
-        var start = data.startIndex
-        var index = start
-        while index < data.endIndex {
-            if data[index] == 0 {
-                if start < index {
-                    result.append(String(decoding: data[start..<index], as: UTF8.self))
-                }
-                start = data.index(after: index)
-            }
-            index = data.index(after: index)
-        }
-        if start < data.endIndex {
-            result.append(String(decoding: data[start..<data.endIndex], as: UTF8.self))
-        }
-        return result
+    let data: Data
+    do {
+        data = try FileHandle.standardInput.readToEnd() ?? Data()
+    } catch {
+        fail("reading stdin paths: \(error.localizedDescription)", code: ExitCode.ioError)
     }
+    let separator: UInt8
+    switch mode {
+    case .lines: separator = 10
+    case .nul: separator = 0
+    }
+
+    var result: [String] = []
+    var start = data.startIndex
+    var record = 1
+    func appendPath(_ bytes: Data.SubSequence, terminated: Bool) {
+        // Only CR immediately before an LF belongs to a CRLF terminator.
+        let bytes = separator == 10 && terminated && bytes.last == 13 ? bytes.dropLast() : bytes
+        if bytes.isEmpty { return }
+        let path = String(decoding: bytes, as: UTF8.self)
+        // Replacement decoding is usable only if it preserved every byte.
+        // Compare UTF-8 bytes rather than Unicode-equivalent String values.
+        guard path.utf8.elementsEqual(bytes) else {
+            fail("stdin path record \(record) is not valid UTF-8; no files were processed")
+        }
+        guard !bytes.contains(0) else {
+            fail("stdin path record \(record) contains a NUL byte; use --stdin0 for NUL-delimited paths")
+        }
+        result.append(path)
+    }
+    for index in data.indices where data[index] == separator {
+        appendPath(data[start..<index], terminated: true)
+        start = data.index(after: index)
+        record += 1
+    }
+    appendPath(data[start..<data.endIndex], terminated: false)
+    return result
 }

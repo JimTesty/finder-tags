@@ -198,6 +198,9 @@ one final warning counts the affected symlinks. NUL-separated filenames stay
 literal. If file info is unavailable, text output shows `[--------    ---]`;
 JSONL omits the unavailable fields.
 Exports retain a broken link's file info but omit its unavailable target tags.
+Permission errors and symlink loops do not mean a target is missing. When target
+inspection fails, the command reports it and omits unknown `targetExists` and
+`targetKind` fields. A known link destination remains available.
 The human date is for display only; use JSONL/archive values for stable
 change detection.
 
@@ -479,10 +482,14 @@ printf '%s\n' file1 file2 | tag --stdin
 generate_paths | tag --stdin0 --set Reviewed
 ```
 
-`--stdin` accepts LF and CRLF line endings. `--stdin0` is NUL-delimited and is preferred for
-arbitrary filenames. Stdin paths follow command-line paths and retain their
-input order. Explicitly requesting stdin and providing no paths processes zero
-files instead of falling back to the current directory.
+`--stdin` accepts LF and CRLF line endings. Only CR immediately before LF is
+removed; embedded CR characters remain part of the filename. `--stdin0` is
+NUL-delimited and preserves CR/LF characters, so it is preferred for arbitrary
+filenames. Both modes require valid UTF-8. Invalid encoding, or a NUL byte in a
+line-delimited path, rejects the whole input before processing any files,
+including command-line paths. Stdin paths follow command-line paths and retain
+their input order. Explicitly requesting stdin and providing no paths processes
+zero files instead of falling back to the current directory.
 
 Symbolic links are **not followed by default**. `--resolve-symlinks0` resolves
 symlinks supplied as path operands when their targets exist, like `find -H`.
@@ -531,6 +538,11 @@ record, including `.` for the root item itself. `--absolute` emits absolute
 logical item paths instead. Spotlight results and copy source paths are absolute.
 Text output retains its usual argument spelling. `--convert` produces text and
 rejects `--jsonl`/`--ndjson`.
+Ordinary listings retain readable tags when optional file-type inspection fails,
+with a warning and no JSONL `kind` field or unverified text suffix. Export and
+backup require a known item kind. Traversal and restore report inspection errors
+and skip the affected work; restore counts inaccessible items as errors, not as
+missing items.
 
 Example:
 

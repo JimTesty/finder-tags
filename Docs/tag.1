@@ -253,6 +253,8 @@ Display absolute logical paths.
 Emit newline-delimited JSON. --ndjson is an alias. Item paths are relative to
 the current root record, with . for the root item itself, unless --absolute
 is selected. Spotlight results and copy source paths are absolute.
+An unavailable item type produces a warning and an omitted kind field;
+readable tags are retained. Export and backup require a known item type.
 .TP
 .B --tagged-only
 Process only items having at least one tag. With --copy, it filters the source
@@ -272,6 +274,9 @@ least 0.95 MB rounded to the nearest whole MB. MB uses decimal units
 (1 MB = 1,000,000 bytes). Directories are shown as ---.
 Unavailable size or modification time produces a warning and [--------    ---]
 in text output; JSONL omits the unavailable fields.
+Permission errors and symlink loops are reported as unavailable target
+information, not missing targets. Unknown targetExists and targetKind fields
+are omitted while the known link destination is retained.
 .TP
 .B --no-file-info
 Omit size and modification-time fields from export output.
@@ -289,9 +294,14 @@ sorted by display name in ascending order unless --no-sort-files is used.
 .TP
 .B --stdin
 Read LF- or CRLF-delimited paths from standard input.
+Only CR immediately before LF is removed; other CR characters belong to the path.
+Invalid UTF-8 or a NUL inside a line rejects the entire input before any files
+are processed, including command-line paths.
 .TP
 .B --stdin0
 Read NUL-delimited paths from standard input.
+Preserve CR/LF characters within paths. Invalid UTF-8 rejects the entire input
+before any files are processed.
 .TP
 .BR -A , " --all" , " --dot-files"
 Include hidden files and directories while enumerating, including during
@@ -327,6 +337,9 @@ controlled separately by --resolve-symlinks0. This is the default.
 .B -L, --follow-symlinks
 Follow symlinks and symlinked directories. Archive items may record structural
 target information, but target tags are never nested inside symlink metadata.
+.PP
+Filesystem inspection errors are reported and skip the affected traversal or
+restore work. Restore distinguishes inaccessible items from missing items.
 .TP
 .B --exclude PATH
 Skip PATH and its descendants during filesystem traversal. The option may be

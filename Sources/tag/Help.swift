@@ -218,6 +218,8 @@ private func detailedHelp(name: String) -> String {
     Stdin paths follow command-line paths in input order. Spotlight --find sorts
     results by display name in ascending order unless --no-sort-files is used;
     unsorted Spotlight result order is unspecified.
+    Stdin paths require valid UTF-8; malformed input stops before any processing.
+    --stdin accepts LF/CRLF; --stdin0 preserves CR/LF within filenames.
 
     Symbolic links are not followed by default. --resolve-symlinks0 resolves
     symlinks supplied as path operands when their targets exist, like find -H;

@@ -24,8 +24,8 @@ struct SpotlightSearch {
         metadataQuery.predicate = predicate(for: query)
 
         if !options.paths.isEmpty {
-            metadataQuery.searchScopes = options.paths.map {
-                argumentFileURL($0, resolveSymlinks: options.resolveSymlinksForArguments) as Any
+            metadataQuery.searchScopes = try options.paths.map {
+                try argumentFileURL($0, resolveSymlinks: options.resolveSymlinksForArguments) as Any
             }
         }
 

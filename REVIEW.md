@@ -175,7 +175,7 @@ still reject the document; remaining recovery work is recorded in `TODO.md`.
 It validates path separators as bytes, rejects parent symlinks without `-L`,
 and repeats destination checks immediately before comparing and changing each item. It
 does not lock files or roll back earlier changes if a later file fails. A
-per-file undo archive is created exclusively and written before each mutation by default, but without
+per-file undo archive, when enabled, is created exclusively and written before each mutation, but without
 `--sync-backup` a sudden power loss can still leave the most recent buffered
 preimage unavailable. The undo archive is deliberately a local temporary file;
 compressed/journaled undo output needs a separate atomicity design.

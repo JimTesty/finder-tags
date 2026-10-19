@@ -14,12 +14,12 @@ struct RestoreEngine {
         var stats = ArchiveStats()
 
         do {
-            guard try destinationRoot.checkResourceIsReachable() else {
+            guard try checkedPathExists(destinationRoot, followSymlinks: true) else {
                 stats.errors += 1
                 onError("restore root is not reachable: \(destinationRoot.path)")
                 return stats
             }
-            guard try destinationRoot.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+            guard try checkedItemKind(for: destinationRoot, followSymlinks: true) == .directory else {
                 stats.errors += 1
                 onError("restore root must be a directory: \(destinationRoot.path)")
                 return stats
@@ -60,19 +60,20 @@ struct RestoreEngine {
             do {
                 // Repeat path and parent checks immediately before this item.
                 let logicalURL = try destinationURL(for: entry.path)
-                // Use a direct existence check here. Foundation can cache a
-                // successful resource reachability result after a file has
-                // been removed, which would misclassify a missing archive
-                // item as a metadata-read error. A symlink itself exists even
-                // when its referent does not.
-                guard fileManager.fileExists(atPath: logicalURL.path)
-                    || isSymbolicLink(logicalURL) else {
-                    stats.missing += 1
-                    onError("restore item is missing: \(entry.path)")
-                    continue
+                // Use an uncached lstat, preserving inspection failures as
+                // errors. A dangling symlink is still an existing item.
+                let currentKind: ArchiveItemKind
+                do {
+                    currentKind = try checkedItemKind(for: logicalURL)
+                } catch {
+                    if isMissingPathError(error) {
+                        stats.missing += 1
+                        onError("restore item is missing: \(entry.path)")
+                        continue
+                    }
+                    throw error
                 }
 
-                let currentKind = try itemKind(for: logicalURL)
                 guard currentKind == entry.kind else {
                     stats.errors += 1
                     onError(
@@ -160,43 +161,45 @@ struct RestoreEngine {
     private func warnAboutChangedSymlinks(_ stats: inout ArchiveStats) {
         guard options.followSymlinks else { return }
         for item in document.items where item.kind == .symlink {
-            guard let archivedDestination = item.symlinkDestination,
-                  let current = symbolicLinkInfo(
+            guard let archivedDestination = item.symlinkDestination else { continue }
+            do {
+                guard let current = try symbolicLinkInfo(
                     for: destinationRoot.appendingPathComponent(item.path)
-                  ) else { continue }
-            if current.destination != archivedDestination {
-                stats.warnings += 1
-                onWarning(
-                    "symlink \(item.path) now points to \(current.destination), "
-                    + "but the archive recorded \(archivedDestination); following the current target"
-                )
-            }
+                ) else { continue }
+                if current.destination != archivedDestination {
+                    stats.warnings += 1
+                    onWarning(
+                        "symlink \(item.path) now points to \(current.destination), "
+                        + "but the archive recorded \(archivedDestination); following the current target"
+                    )
+                }
 
-            if let archivedExists = item.symlinkTargetExists,
-               archivedExists != current.targetExists {
+                if let error = current.targetInspectionError {
+                    throw error
+                }
+                if let archivedExists = item.symlinkTargetExists,
+                   let currentExists = current.targetExists,
+                   archivedExists != currentExists {
+                    stats.warnings += 1
+                    onWarning(
+                        "symlink \(item.path) target existence changed; "
+                        + "following the current target"
+                    )
+                } else if let archivedKind = item.symlinkTargetKind,
+                          let isDirectory = current.targetIsDirectory,
+                          (isDirectory ? ArchiveItemKind.directory : .file) != archivedKind {
+                    stats.warnings += 1
+                    onWarning(
+                        "symlink \(item.path) target type changed; "
+                        + "following the current target"
+                    )
+                }
+            } catch {
+                // The item loop reports confirmed missing paths separately.
+                if isMissingPathError(error) { continue }
                 stats.warnings += 1
-                onWarning(
-                    "symlink \(item.path) target existence changed; "
-                    + "following the current target"
-                )
-            } else if let archivedKind = item.symlinkTargetKind,
-                      current.targetExists,
-                      (current.targetIsDirectory ? ArchiveItemKind.directory : .file) != archivedKind {
-                stats.warnings += 1
-                onWarning(
-                    "symlink \(item.path) target type changed; "
-                    + "following the current target"
-                )
+                onWarning("\(item.path): symlink comparison unavailable: \(error.localizedDescription)")
             }
         }
-    }
-
-    private func itemKind(for logicalURL: URL) throws -> ArchiveItemKind {
-        if isSymbolicLink(logicalURL) { return .symlink }
-        let values = try tagIOURL(
-            logicalURL,
-            followSymlinks: options.followSymlinks
-        ).resourceValues(forKeys: [.isDirectoryKey])
-        return values.isDirectory == true ? .directory : .file
     }
 }

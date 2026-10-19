@@ -2,6 +2,16 @@
 
 ## 9.0 -- Unreleased
 
+- Reject malformed UTF-8 stdin paths before processing any files. Preserve
+  embedded CR characters, recognize CRLF only at line boundaries, and reject
+  NUL bytes in line-delimited paths.
+- Replace guessed filesystem types and existence results with checked
+  `stat`/`lstat` lookups. Keep readable listing tags with warnings and omit an
+  unknown JSONL kind; required export, backup, traversal, and restore checks
+  report errors. Restore no longer counts inspection failures as missing.
+- Preserve unknown symlink target status instead of reporting a missing
+  target. Omit unavailable target fields with diagnostics and retain known
+  link destinations; report explicit-operand resolution failures.
 - Add cumulative `-q`/`--quiet` and `-v`/`--verbose` controls. Quiet hides routine
   text summaries while preserving diagnostics, backup paths, previews, and
   requested output; default mutation feedback remains deferred.
