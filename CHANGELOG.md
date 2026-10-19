@@ -2,6 +2,12 @@
 
 ## 9.0 -- Unreleased
 
+- Make `-h` / `--help` brief, with detailed help via `-hh` or `-h -v` in either
+  order. Keep negations, aliases, and advanced options in detailed help.
+- Add `--no-color` as an alias for `--color=off`, accepting `off` alongside
+  the existing color modes. Prefer `--filter` in brief help and show `--tagged-only`.
+- Accept `--color=on` and make `yes` and `on` force color. `--color=auto` and
+  bare `--color` / `-c` use terminal detection. Show `--color[=yes/no]` in help.
 - Add `--repair`, `--include-hidden`, and `--replace` as synonyms for `--fix`,
   `--all`, and `--set`, with completions and documentation.
 - Add `--del` and `--delete` as synonyms for `--remove`, available in shell

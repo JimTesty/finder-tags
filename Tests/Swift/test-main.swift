@@ -7,6 +7,8 @@ enum RegressionTests {
             work: URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true),
             binary: URL(fileURLWithPath: CommandLine.arguments[2])
         )
+        try HelpTests.run(context)
+        print("Help tests passed")
         try MetadataTests.run(context)
         print("Metadata tests passed")
         try FileInfoTests.run(context)

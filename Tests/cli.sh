@@ -35,33 +35,34 @@ ln -s large-target "$work/tree/file-link"
 ln -s .. "$work/tree/real/back-to-tree"
 ln -s missing "$work/tree/dangling"
 
-"$bin" --help | grep -q -- 'finder-tags executable: tag'
-"$bin" --help | grep -q -- '--case-sensitive'
-"$bin" --help | grep -q -- '--sorted-tags'
-"$bin" --help | grep -q -- '--no-sort-files'
-"$bin" --help | grep -q -- '--before TAG'
-"$bin" --help | grep -q -- '--filter TAGS'
-"$bin" --help | grep -q -- '--fix'
-"$bin" --help | grep -q -- '--absolute'
-"$bin" --help | grep -q -- '--stdin0'
-"$bin" --help | grep -q -- '--no-follow-symlinks'
-"$bin" --help | grep -q -- '-L, --follow-symlinks'
-"$bin" --help | grep -q -- '--print-symlinks'
-"$bin" --help | grep -q -- '--exclude PATH'
-"$bin" --help | grep -q -- '--find TAGS'
-"$bin" --help | grep -q -- '--jsonl'
-"$bin" --help | grep -q -- '--export'
-"$bin" --help | grep -q -- '--restore ARCHIVE'
-"$bin" --help | grep -q -- '--tagged-only'
-"$bin" --help | grep -q -- '--file-info'
-"$bin" --help | grep -q -- '--no-file-info'
-"$bin" --help | grep -q -- '--convert ARCHIVE'
-"$bin" --help | grep -q -- '--space-indent'
-"$bin" --help | grep -q -- '--align-tags N'
-"$bin" --help | grep -q -- '--compact-tags'
-"$bin" --help | grep -q -- '--no-backup'
-"$bin" --help | grep -q -- '--backup-path PATH'
-"$bin" --help | grep -q -- '--verbose'
+"$bin" -hh >"$work/detailed-help.out"
+grep -q -- 'finder-tags executable: tag' "$work/detailed-help.out"
+grep -q -- '--case-sensitive' "$work/detailed-help.out"
+grep -q -- '--sorted-tags' "$work/detailed-help.out"
+grep -q -- '--no-sort-files' "$work/detailed-help.out"
+grep -q -- '--before TAG' "$work/detailed-help.out"
+grep -q -- '--filter TAGS' "$work/detailed-help.out"
+grep -q -- '--fix' "$work/detailed-help.out"
+grep -q -- '--absolute' "$work/detailed-help.out"
+grep -q -- '--stdin0' "$work/detailed-help.out"
+grep -q -- '--no-follow-symlinks' "$work/detailed-help.out"
+grep -q -- '-L, --follow-symlinks' "$work/detailed-help.out"
+grep -q -- '--print-symlinks' "$work/detailed-help.out"
+grep -q -- '--exclude PATH' "$work/detailed-help.out"
+grep -q -- '--find TAGS' "$work/detailed-help.out"
+grep -q -- '--jsonl' "$work/detailed-help.out"
+grep -q -- '--export' "$work/detailed-help.out"
+grep -q -- '--restore ARCHIVE' "$work/detailed-help.out"
+grep -q -- '--tagged-only' "$work/detailed-help.out"
+grep -q -- '--file-info' "$work/detailed-help.out"
+grep -q -- '--no-file-info' "$work/detailed-help.out"
+grep -q -- '--convert ARCHIVE' "$work/detailed-help.out"
+grep -q -- '--space-indent' "$work/detailed-help.out"
+grep -q -- '--align-tags N' "$work/detailed-help.out"
+grep -q -- '--compact-tags' "$work/detailed-help.out"
+grep -q -- '--no-backup' "$work/detailed-help.out"
+grep -q -- '--backup-path PATH' "$work/detailed-help.out"
+grep -q -- '--verbose' "$work/detailed-help.out"
 [ "$("$bin" --version)" = "tag 9.0" ]
 
 verbose_output=$("$bin" -v --no-tags "$work/a" 2>"$work/verbose.err")
@@ -344,7 +345,7 @@ edge_tag=$(printf '\rStart\r')
 grep -Fq '"after":["�Start�"]' "$work/edge.out"
 grep -Fq 'replaced with �' "$work/edge.err"
 
-for flag in follow-symlinks backup no-backup dry-run recursive include-hidden help version; do
+for flag in follow-symlinks backup no-backup no-color dry-run recursive include-hidden help version; do
     if "$bin" --set Safety "--$flag=false" "$work/a" >/dev/null 2>"$work/inline.err"; then
         echo "expected a value on --$flag to fail" >&2
         exit 1

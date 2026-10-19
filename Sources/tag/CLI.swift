@@ -25,11 +25,11 @@ private func requireValue(_ option: String, args: [String], index: inout Int) ->
 
 private func parseColorMode(_ raw: String) -> ColorMode {
     switch raw.lowercased() {
-    case "auto", "yes": return .auto
-    case "always", "force": return .always
-    case "no", "none", "never": return .never
+    case "auto": return .auto
+    case "yes", "on", "always", "force": return .always
+    case "off", "no", "none", "never": return .never
     default:
-        fail("invalid color mode '\(raw)'; use auto, always/force, or never/no")
+        fail("invalid color mode '\(raw)'; use auto, yes/on/always/force, or no/off/never/none")
     }
 }
 
@@ -79,7 +79,7 @@ private func applyShortFlag(_ ch: Character, options: inout Options) {
     case "p": options.slashDirectories = true
     case "L": options.followSymlinks = true
     case "0": options.nulTerminate = true
-    case "h": usage()
+    case "h": options.helpRequests += 1
     case "v": options.verbose = true
     default: fail("unknown option: -\(ch)")
     }
@@ -91,6 +91,9 @@ func parseArguments() -> Options {
     var options = parseCommandLineArguments(Array(CommandLine.arguments.dropFirst()))
     Diagnostics.colorMode = options.colorMode
     Diagnostics.finishParsing()
+    if options.helpRequests > 0 {
+        usage(detailed: options.helpRequests > 1 || options.verbose)
+    }
     if let mode = options.stdinPathMode {
         options.paths.append(contentsOf: readPathsFromStdin(mode))
     }
@@ -195,6 +198,10 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
                 options.colorMode = inlineValue.map(parseColorMode) ?? .auto
                 Diagnostics.colorMode = options.colorMode
                 options.colorWasSet = true
+            case "no-color":
+                options.colorMode = .never
+                Diagnostics.colorMode = options.colorMode
+                options.colorWasSet = true
             case "reverse": options.reverse = true; options.reverseWasSet = true
             case "case-sensitive": options.caseSensitive = true
             case "filename", "name": options.showNamesOverride = true
@@ -252,7 +259,7 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
                 if options.stdinPathMode != nil { fail("stdin path mode may be specified only once") }
                 options.stdinPathMode = .nul
                 options.pathInputExplicit = true
-            case "help": rejectInlineValue(); usage()
+            case "help": rejectInlineValue(); options.helpRequests += 1
             case "version": rejectInlineValue(); version()
             default: fail("unknown option: --\(name)")
             }

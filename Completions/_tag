@@ -25,6 +25,7 @@ _arguments \
   '(-V --reverse)'{-V,--reverse}'[reverse display order]' \
   '(-C --case-sensitive)'{-C,--case-sensitive}'[case-sensitive matching]' \
   '(-c --color)'{-c,--color}'[color tags]' \
+  '--no-color[disable colors; alias for --color=off]' \
   '--tagged-only[list/export only tagged items]' \
   '(-n --filename)'{-n,--filename}'[show filenames]' \
   '(-N --no-filename)'{-N,--no-filename}'[hide filenames]' \
@@ -59,7 +60,8 @@ _arguments \
   '--backup-path[enable undo archive at path]:archive:_files' \
   '--no-backup[disable undo archive]' \
   '--sync-backup[sync each undo record]' \
-  '(-h --help)'{-h,--help}'[help]' \
-  '(-v --verbose)'{-v,--verbose}'[show informational messages]' \
+  '(-h --help)'{-h,--help}'[brief help; add -v for details]' \
+  '-hh[show detailed help]' \
+  '(-v --verbose)'{-v,--verbose}'[show informational messages; expand help]' \
   '--version[version]' \
   '*:path:_files'

@@ -1,9 +1,57 @@
 import Foundation
 
-func usage(code: Int32 = 0) -> Never {
+func usage(code: Int32 = 0, detailed: Bool = false) -> Never {
     Diagnostics.finishParsing()
     let name = escapedDisplayText(programName)
-    let text = """
+    let text = detailed ? detailedHelp(name: name) : briefHelp(name: name)
+    let stream = code == 0 ? FileHandle.standardOutput : FileHandle.standardError
+    stream.write(Data((text + "\n").utf8))
+    exit(code)
+}
+
+private func briefHelp(name: String) -> String {
+    """
+    \(name) - manage macOS Finder tags; preserve tag order
+    Compatible with jdberry/tag where practical.
+
+    Usage: \(name) [operation] [options] [path ...]
+
+    operations:
+      -l, --list                 List tags (default)
+      -a, --add TAGS             Add tags
+      -r, --remove TAGS          Remove tags; '*' removes all
+      -s, --set TAGS             Replace all tags
+          --fix                  Repair stored tags
+          --copy SRC DST         Copy tags
+          --move TAG POSITION    Reorder a tag
+          --filter TAGS          List matching files with their tags
+          --export [ROOT]        Export a JSONL archive
+          --restore ARCHIVE      Restore tags from an archive
+
+    options:
+      -e, --enter                Enter listed directories
+      -R, --recursive            Enter directories recursively
+      -A, --all                  Include hidden files and directories
+      -c, --color[=yes/no]       Show tag colors
+          --file-info            Show file size and modification time
+          --tagged-only          Process only files with tags
+          --sorted-tags          Sort displayed or written tags
+          --exclude PATH         Skip paths during traversal
+          --dry-run              Preview changes
+          --backup               Enable a temporary undo archive
+      -v, --verbose              Show informational messages
+      -h, --help                 Show brief help
+          --version              Show version
+
+    TAGS are comma-separated; matching ignores case. Listing defaults to cwd.
+    Backup defaults on with -R, -e, stdin paths, or restore; otherwise off.
+    Many options have --no-... negations; detailed help lists them.
+    For detailed help: \(name) -hh (or \(name) -h -v)
+    """
+}
+
+private func detailedHelp(name: String) -> String {
+    """
     \(name) - manipulate macOS Finder tags while preserving tag order
 
     finder-tags executable: tag
@@ -35,13 +83,17 @@ func usage(code: Int32 = 0) -> Never {
       -l, --list                 List tags (default)
           --export               Export ordered tags for one root
           --restore ARCHIVE      Restore an archive (use '-' for stdin)
+          --root DEST            Relocate the restore destination
           --convert ARCHIVE      Convert JSONL archive to human-readable text
       -a, --add TAGS             Add/re-case tags, preserving existing order
           --append TAGS          Alias for --add (insert new tags last)
           --prepend TAGS         Add new tags at first/left/bottom
       -r, --remove TAGS          Remove matching tags; '*' removes all tags
+          --del, --delete TAGS    Aliases for --remove
       -s, --set TAGS             Replace all tags in the specified order
+          --replace TAGS         Alias for --set
           --fix                  Repair invalid tag names
+          --repair               Alias for --fix
           --copy SRC DST         Copy SRC's ordered tag names and colors to DST
       -m, --match TAGS           List traversed files matching TAGS
           --filter TAGS          Match tags with list-style output
@@ -56,12 +108,14 @@ func usage(code: Int32 = 0) -> Never {
           --after TAG            Place added/moved tag(s) after TAG
           --sorted-tags          Sort displayed tags; mutating operations also
                                  store their resulting tag arrays sorted
+          --sort-tags            Alias for --sorted-tags
       -V, --reverse              Reverse display order; export ignores it
       -C, --case-sensitive       Make tag matching case-sensitive
                                  (default matching is case-insensitive)
 
     output:
-      -c, --color                Display known Finder tag colors when appropriate
+      -c, --color[=yes/no]       Display known Finder tag colors when appropriate
+          --no-color             Alias for --color=off
       -n, --filename             Show filenames
       -N, --no-filename          Hide filenames
           --name/--no-name       Backward-compatible aliases
@@ -95,8 +149,10 @@ func usage(code: Int32 = 0) -> Never {
       -A, --all                  Include hidden files and directories (export
                                  includes them by default)
           --dot-files            Alias for --all
+          --include-hidden       Alias for --all
       -e, --enter                Enumerate contents of explicit directories
       -R, -d, --recursive        Recursively enumerate directories
+          --descend              Alias for --recursive
           --no-sort-files        Use filesystem/Spotlight order instead of sorting
           --resolve-symlinks0    Resolve symlinks supplied as path operands, like find -H
       -L, --follow-symlinks      Resolve/follow symlinks and symlinked directories
@@ -119,7 +175,8 @@ func usage(code: Int32 = 0) -> Never {
     the last one wins.
 
     other:
-      -h, --help                 Show this help
+      -h, --help                 Show brief help; repeat -h or add -v for details
+      -hh                       Show this detailed help (also -h -v)
       -v, --verbose              Show informational messages on stderr
           --version              Show version
 
@@ -171,8 +228,10 @@ func usage(code: Int32 = 0) -> Never {
     is relative to the traversal root. Use --convert ARCHIVE for human-readable
     output; its --reverse, --slash, --space-indent, --align-tags, and --color options affect
     only that display. Restore follows symlink targets only with the same
-    --follow-symlinks setting recorded in the archive. --color accepts
-    auto/yes, always/force, and never/no/none aliases; JSONL is never colored.
+    --follow-symlinks setting recorded in the archive.
+    --color settings: auto = terminal detection; yes/on/always/force = always;
+    no/off/never/none = disabled. Bare --color and -c use auto.
+    JSONL is never colored.
 
     Defaults match jdberry/tag where practical: list/filter show filename+tags;
     match/find show filenames only. With no paths, list/match/filter/usage
@@ -192,9 +251,6 @@ func usage(code: Int32 = 0) -> Never {
     Use -- before a path beginning with '-'.
     """
 
-    let stream = code == 0 ? FileHandle.standardOutput : FileHandle.standardError
-    stream.write(Data((text + "\n").utf8))
-    exit(code)
 }
 
 func version() -> Never {

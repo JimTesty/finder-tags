@@ -51,9 +51,17 @@ enum TextDisplayTests {
         let coloredOptionError = try context.run(["--color=force", "--bad\t\u{1b}[2J"], status: 64).err
         expect(coloredOptionError.hasPrefix(errorPrefix))
         expect(coloredOptionError.contains(#"--bad\t\u{1b}[2J"#))
-        for mode in ["auto", "never"] {
-            expect(try context.run(["--color=\(mode)", "--no-tags", missing.path], status: 74).err == error)
+        for args in [["--color=auto"], ["--color=never"], ["--color=off"], ["--no-color"],
+                     ["--color=force", "--no-color"], ["--color=force", "--color"],
+                     ["--color=force", "-c"]] {
+            expect(try context.run(args + ["--no-tags", missing.path], status: 74).err == error)
         }
+        for mode in ["yes", "on", "always"] {
+            expect(try context.run(["--color=\(mode)", "--no-tags", missing.path], status: 74).err
+                == coloredError)
+        }
+        expect(try context.run(["--no-color", "--color=force", "--no-tags", missing.path], status: 74).err
+            == coloredError)
 
         // Parser warnings use the final color choice, even if it follows TAGS.
         let repairArgs = ["--set", "Bad\rName", "--dry-run", "--jsonl", file.path]
@@ -61,7 +69,7 @@ enum TextDisplayTests {
         expect(coloredWarning.err.hasPrefix(warningPrefix))
         expect(!coloredWarning.out.contains("\u{1b}"))
         expect(try records(coloredWarning.out).last?["after"] as? [String] == ["Bad�Name"])
-        let plainWarning = try context.run(["--color=force"] + repairArgs + ["--color=never"])
+        let plainWarning = try context.run(["--color=force"] + repairArgs + ["--no-color"])
         expect(!plainWarning.err.contains("\u{1b}"))
         expectSafeDiagnostic(plainWarning.err)
         let parserFailure = try context.run(["--color=force", "--set", "Bad\rName", "--unknown"], status: 64)
@@ -79,9 +87,11 @@ enum TextDisplayTests {
         try fileManager.createSymbolicLink(atPath: alias.path, withDestinationPath: context.binary.path)
         let aliasName = escapedDisplayText(alias.lastPathComponent)
         expect(try context.run(["--version"], executable: alias).out == aliasName + " 9.0\n")
-        let help = try context.run(["--help"], executable: alias).out
-        expect(help.hasPrefix(aliasName + " - "))
-        expect(!help.contains("\u{1b}"))
+        for args in [["--help"], ["-hh"]] {
+            let help = try context.run(args, executable: alias).out
+            expect(help.hasPrefix(aliasName + " - "))
+            expect(!help.contains("\u{1b}"))
+        }
         let aliasError = try context.run(["--color=force", "--unknown"], status: 64, executable: alias)
         expect(aliasError.err.hasPrefix(red + aliasName + ":" + reset + " "))
 
@@ -117,8 +127,13 @@ enum TextDisplayTests {
         // Real stored names and color numbers must remain unchanged by display.
         let stored = [StoredTag(name: tag, color: 3)]
         try FileTagMetadata.write(stored, to: file)
-        expect(try context.run(["--no-name", "--color=force", file.path]).out
-            == purple + escapedDisplayText(tag) + reset + "\n")
+        for mode in ["force", "always", "yes", "on"] {
+            expect(try context.run(["--no-name", "--color=\(mode)", file.path]).out
+                == purple + escapedDisplayText(tag) + reset + "\n")
+        }
+        for args in [["--color=force", "--no-color"], ["--color=force", "--color=off"]] {
+            expect(try context.run(args + ["--no-name", file.path]).out == escapedDisplayText(tag) + "\n")
+        }
         expect(try context.run(["-0N", file.path]).out == tag + "\0")
         expect(try context.run(["--one-per-line", "--no-name", file.path]).out == escapedDisplayText(tag) + "\n")
         expect(try context.run(["--usage", "*", file.path]).out == "1\t" + escapedDisplayText(tag) + "\n")

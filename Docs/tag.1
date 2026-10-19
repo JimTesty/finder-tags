@@ -165,21 +165,31 @@ before the program adds colors and layout. Stored names, JSON values, and
 NUL-delimited stdout retain their original contents. Diagnostics are always
 escaped. Use -0 --no-tags for an exact filename stream.
 .TP
+.BR -h , " --help"
+Show brief help. Use -hh or -h -v for detailed help, including all options,
+aliases, examples, and behavior notes. Help and verbosity flags may appear in
+either order; --help --verbose is equivalent.
+.TP
 .BR -v , " --verbose"
 Show informational messages on standard error. Mutations include their
 before/after tag names and color numbers; Spotlight searches report that indexed
 results determine membership. Usage reports conflicting stored color numbers.
+With --help, show detailed help.
 .TP
 .B --version
 Show the program version.
 .TP
-.BR -c , " --color"
+.BR -c , " --color[=yes/no]"
 Display each tag's stored color when stdout is a terminal. Names and Finder
 preferences do not determine displayed colors. Zero, unavailable, and unknown
 color numbers are displayed uncolored.
-The explicit modes are auto/yes, always/force, and no/none/never; JSONL is
-never colored. Error and warning prefixes use bold red; automatic mode checks
-whether stderr is a terminal for diagnostics.
+Explicit settings use =: auto detects terminals; yes/on/always/force always
+use color; no/off/none/never disable color. Bare --color and -c use auto.
+JSONL is never colored. Error and warning prefixes use bold red; automatic
+mode checks whether stderr is a terminal for diagnostics.
+.TP
+.B --no-color
+Alias for --color=off. The last explicit color setting wins.
 .TP
 .BR -n , " --filename"
 Show filenames. --name is an alias.

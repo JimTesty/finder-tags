@@ -55,6 +55,7 @@ struct FileMetadata {
 struct Options {
     var operation: Operation = .list
     var operationWasSet = false
+    var helpRequests = 0
 
     var colorMode: ColorMode = .never
     var colorWasSet = false
