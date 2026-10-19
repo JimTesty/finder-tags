@@ -16,6 +16,8 @@ struct ArchiveConverter {
             if let tags = item.tags, !tags.isEmpty { tagged += 1 }
         }
 
-        eprint("\(programName): converted \(tagged) tagged items (\(emitted) records)")
+        if !options.quiet {
+            eprint("\(programName): converted \(tagged) tagged items (\(emitted) records)")
+        }
     }
 }

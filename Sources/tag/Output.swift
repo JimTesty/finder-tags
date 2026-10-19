@@ -102,6 +102,8 @@ final class Output {
             return
         }
 
+        if options.quiet { return }
+
         if operation == "export" {
             eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors, \(stats.warnings) warnings)")
         } else {
@@ -183,6 +185,7 @@ final class Output {
             ])
             return
         }
+        if options.quiet { return }
         let action = options.dryRun
             ? "would fix \(stats.repairs.fixed) tags and delete \(stats.repairs.deleted)"
             : "\(stats.repairs.fixed) tags fixed, \(stats.repairs.deleted) deleted"

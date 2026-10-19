@@ -59,7 +59,10 @@ struct Options {
 
     var colorMode: ColorMode = .never
     var colorWasSet = false
-    var verbose = false
+    // Preserve the full balance so repeated -q and -v cancel one for one.
+    var verbosity = 0
+    var quiet: Bool { verbosity < 0 }
+    var verbose: Bool { verbosity > 0 }
     var reverse = false
     var reverseWasSet = false
     var sortedTags = false

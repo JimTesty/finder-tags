@@ -1,10 +1,15 @@
 # Future work
 
-## Help-page cleanup
+## Default mutation feedback
 
-* Simplify `tag -h` / `--help`: reduce density and repetition, keep command
-  descriptions short and action-focused, and leave detailed behavior in the
-  manual or README. Defer the broader help-page redesign until a later pass.
+Quiet/default/verbose controls are implemented; default mutation feedback is
+still deferred.
+
+* Show a concise completed action and resulting tags at default verbosity,
+  for example `Added Yellow => Now: {resulting tags}`. Omit the filename prefix
+  only when a single file was explicitly specified on the command line;
+  otherwise prepend `{filename}: `. Render tags in color when enabled.
+  Quiet suppresses these messages; verbose retains additional detail.
 
 ## Imperfect-data recovery audit (2026-10-18)
 
@@ -54,15 +59,44 @@ stopping points and silent fallbacks need these policies or larger changes:
   Directory enumeration/type failures already allow sibling work to continue
   but cannot recover inaccessible children. Spotlight startup/platform errors
   still stop that search; malformed individual results now warn and continue.
+  Source investigation on 2026-10-19 confirmed:
+
+  * `Output.itemKind` converts a thrown directory lookup or absent directory
+    flag into JSONL `kind: "file"` without a warning.
+  * `symbolicLinkInfo` and `isSymbolicLink` erase all readlink errors with
+    `try?`, so unavailable inspection and an ordinary non-link look identical.
+    This affects display, export/undo classification, and traversal decisions.
+  * `symbolicLinkInfo` reports `targetExists: false` for every failed `stat`,
+    including permission errors and loops. Its separate `targetIsMissing` is
+    correctly limited to ENOENT/ENOTDIR, but export serializes `targetExists`
+    and conversion can then falsely mark the link broken.
+  * Other directory lookups throw on read failure but still treat a missing
+    `.isDirectory` value as false (traversal, file info, export, restore, undo).
+  * `argumentFileURL` silently keeps the unresolved operand when `fileExists`
+    cannot confirm its target; restore similarly counts an uninspectable item
+    as missing. Distinguish unavailable from absent with checked lookups.
+  * Restore's parent-symlink protection already uses throwing
+    `checkedSymbolicLink`; do not weaken it while fixing the display helpers.
+
 * **Path input encoding** (`readPathsFromStdin`): invalid UTF-8 is currently
   replaced silently before lookup. Decide between warning/skipping each bad
   path and supporting byte-preserving filesystem paths; avoid silently acting
   on a different name. Truncated or ambiguous tag/query syntax and missing
   required operands remain command errors rather than partial instructions.
+  Source investigation on 2026-10-19 confirmed that both input modes use
+  replacement decoding, allowing invalid bytes to select a real name containing
+  U+FFFD. Line mode also splits at every CR, not only the CR in CRLF, so an
+  embedded CR creates extra path operands. Prefer strict decoding with explicit
+  errors; choosing all-input rejection versus per-path skipping still needs a
+  policy decision. Split line input at LF and remove only a trailing CR if
+  retaining CRLF support; NUL mode must preserve embedded CR/LF.
 * **Output I/O** (`Output`, archive/undo writers): older nonthrowing FileHandle
   write/close APIs can terminate or hide underlying write failures. Move to
   throwing APIs with explicit diagnostics and a policy for stopping after a
   broken output stream or failed journal write.
+  Undo writes/closes now use throwing APIs, and any backup record failure
+  stops the operation before the pending mutation. Ordinary stdout, export,
+  help, and diagnostics still use nonthrowing writes.
 
 ## Deferred audit work (2026-10-15)
 

@@ -170,11 +170,19 @@ Show brief help. Use -hh or -h -v for detailed help, including all options,
 aliases, examples, and behavior notes. Help and verbosity flags may appear in
 either order; --help --verbose is equivalent.
 .TP
+.BR -q , " --quiet"
+Decrease verbosity by one. Suppress routine text summaries, retaining warnings,
+errors, backup paths, dry-run previews, and requested listing/JSONL output.
+.TP
 .BR -v , " --verbose"
-Show informational messages on standard error. Mutations include their
-before/after tag names and color numbers; Spotlight searches report that indexed
+Increase verbosity by one. Show informational messages on standard error.
+Mutations include their before/after tag names and color numbers; Spotlight searches report that indexed
 results determine membership. Usage reports conflicting stored color numbers.
 With --help, show detailed help.
+.PP
+Repeated -q and -v accumulate and cancel one for one: -qqv is quiet,
+-qv is default, and -vvq is verbose. Levels below default are quiet;
+levels above default are verbose.
 .TP
 .B --version
 Show the program version.
@@ -343,6 +351,10 @@ Explicit backup options override the default; the last one wins.
 .B --backup-path PATH
 Enable a per-file undo archive at PATH before mutations.
 Existing files and symlinks at PATH are refused using exclusive creation.
+Creation occurs before the first tag write; failure stops the command with an
+error. A later backup record write or sync failure stops before the pending edit,
+without rolling back earlier edits. Backup errors suggest --no-backup to run
+without backup.
 Undo journals record resolved file paths, allow repeated paths, replay in reverse
 mutation order, and do not require a final summary.
 .TP

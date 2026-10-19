@@ -39,7 +39,8 @@ private func briefHelp(name: String) -> String {
           --exclude PATH         Skip paths during traversal
           --dry-run              Preview changes
           --backup               Enable a temporary undo archive
-      -v, --verbose              Show informational messages
+      -q, --quiet                Decrease verbosity (repeatable)
+      -v, --verbose              Increase verbosity (repeatable)
       -h, --help                 Show brief help
           --version              Show version
 
@@ -173,12 +174,19 @@ private func detailedHelp(name: String) -> String {
     temporary undo archive for the whole operation. -R enables this default
     even when all supplied paths are files. Explicit backup options override it;
     the last one wins.
+    Backup creation or record failures stop the operation before the pending edit.
 
     other:
       -h, --help                 Show brief help; repeat -h or add -v for details
       -hh                       Show this detailed help (also -h -v)
-      -v, --verbose              Show informational messages on stderr
+      -q, --quiet                Decrease verbosity (repeatable)
+      -v, --verbose              Increase verbosity (repeatable)
           --version              Show version
+
+    -q and -v accumulate and cancel one for one: below default is quiet,
+    above default is verbose. Quiet suppresses routine text summaries, while
+    warnings, errors, backup paths, previews, and requested output remain visible.
+    Verbose adds informational messages on stderr.
 
     TAG matching is case-insensitive by default, but stored case is preserved.
     Case-distinct stored tags are not merged. For example, adding Orange to an

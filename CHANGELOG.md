@@ -2,6 +2,12 @@
 
 ## 9.0 -- Unreleased
 
+- Add cumulative `-q`/`--quiet` and `-v`/`--verbose` controls. Quiet hides routine
+  text summaries while preserving diagnostics, backup paths, previews, and
+  requested output; default mutation feedback remains deferred.
+- Stop the whole operation on backup creation, record-write, or sync failures
+  before the pending mutation. Use throwing backup write/close APIs, report
+  creation failures with their OS reason, and suggest `--no-backup` on failure.
 - Make `-h` / `--help` brief, with detailed help via `-hh` or `-h -v` in either
   order. Keep negations, aliases, and advanced options in detailed help.
 - Add `--no-color` as an alias for `--color=off`, accepting `off` alongside

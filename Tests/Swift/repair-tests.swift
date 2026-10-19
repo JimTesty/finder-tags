@@ -119,13 +119,12 @@ enum RepairTests {
         expect(restored.last?["restored"] as? Int == 1 && restored.last?["unchanged"] as? Int == 0)
         expect(try FileTagMetadata.readState(file)?.needsRepair == false)
 
-        // A failed backup must prevent the repair and must not inflate totals.
+        // A failed backup aborts before the repair or a success summary.
         let occupied = work.appendingPathComponent("occupied.jsonl")
         try Data("existing".utf8).write(to: occupied)
         writeRawTagMetadata(corrupt, to: file)
-        let failed = try records(context.run(["--fix", file.path, "--backup-path", occupied.path, "--jsonl"], status: 74).out)
-        expect(failed.last?["tagsFixed"] as? Int == 0 && failed.last?["filesUpdated"] as? Int == 0)
-        expect(failed.last?["errors"] as? Int == 1 && readRawTagMetadata(file) == corrupt)
+        let failed = try context.run(["--fix", file.path, "--backup-path", occupied.path, "--jsonl"], status: 74)
+        expect(failed.out.isEmpty && readRawTagMetadata(file) == corrupt)
 
         let root = work.appendingPathComponent("tree", isDirectory: true)
         let nested = root.appendingPathComponent("nested", isDirectory: true)

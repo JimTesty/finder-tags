@@ -256,6 +256,10 @@ must use `--backup-path PATH`.
 Use `--sync-backup` to sync each undo record before its mutation when backup is
 enabled. Syncing is intentionally opt-in because it can be expensive.
 Backup paths are created exclusively and existing files or symlinks are refused.
+Creation happens before the first tag write; if it fails, the command stops with
+an error. A later backup record write or sync failure also stops the operation
+before the pending edit; earlier edits are not rolled back. Backup errors suggest
+`--no-backup` for running without backup.
 Undo journals record resolved file paths and allow repeated paths. They replay
 in reverse mutation order so multiple aliases of one file return to its original
 state, even if a symlink used for the edit later points elsewhere. Unlike
@@ -504,10 +508,16 @@ and `dryRun`; copy records also contain source path information. `changed`
 includes color-only changes. A dry-run can report `null` for the initial color
 of a newly requested name because macOS has not assigned it yet.
 
-`--verbose` / `-v` writes informational messages to stderr without changing
-normal output. Mutation messages include before/after tag arrays, and Spotlight
-searches report that indexed results determine membership. `--version` is the
-long-only spelling for the program version.
+`--quiet` / `-q` decreases verbosity by one; `--verbose` / `-v` increases it by
+one. Repetitions accumulate and cancel one for one: `-qqv` is quiet, `-qv` is
+default, and `-vvq` is verbose. Levels below default are quiet; levels above
+default are verbose.
+
+Quiet suppresses routine text summaries. Warnings, errors, backup paths, dry-run
+previews, and requested listing/JSONL output remain visible. Verbose adds
+informational messages on stderr, including before/after mutation tag arrays
+and Spotlight's indexed-membership notice. Ordinary mutations still produce no
+default action message. `--version` is the long-only spelling for the version.
 
 ## JSON Lines / NDJSON
 
@@ -617,6 +627,7 @@ and convenience synonyms are also supported:
 | `--all` | `--dot-files`, `--include-hidden` | `-A` |
 | `--no-sort-files` | none | none |
 | `--verbose` | none | `-v` |
+| `--quiet` | none | `-q` |
 
 The existing `-d` alias for `-R/--recursive` is also retained.
 

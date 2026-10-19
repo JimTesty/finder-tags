@@ -422,7 +422,9 @@ final class ArchiveWriter {
             "errors": stats.errors,
             "warnings": stats.warnings
         ])
-        eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors, \(stats.warnings) warnings)")
+        if !options.quiet {
+            eprint("\(programName): exported \(stats.tagged) tagged items (\(stats.visited) visited, \(stats.emitted) records, \(stats.errors) errors, \(stats.warnings) warnings)")
+        }
     }
 
     private func relativePath(_ logicalURL: URL, to rootURL: URL) throws -> String {
@@ -452,7 +454,7 @@ final class UndoWriter {
     }
 
     func record(target: Target, tags: [StoredTag]) throws {
-        try openIfNeeded()
+        let handle = try openIfNeeded()
         // The preimage belongs to the file edited, even when an operand or a
         // parent directory is a symlink. Later retargeting must not redirect undo.
         let ioURL = resolvedTagURL(target.url)
@@ -465,29 +467,27 @@ final class UndoWriter {
             "tags": tags.map { $0.name },
             "colors": tagColorNumbers(tags)
         ]
-        if let handle = handle {
-            let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-            handle.write(data)
-            handle.write(Data([10]))
-            if syncEachRecord && fsync(handle.fileDescriptor) != 0 {
-                throw ArchiveIOError.syncFailed(path: path, reason: String(cString: strerror(errno)))
-            }
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        try handle.write(contentsOf: data)
+        try handle.write(contentsOf: Data([10]))
+        if syncEachRecord && fsync(handle.fileDescriptor) != 0 {
+            throw ArchiveIOError.syncFailed(path: self.path, reason: String(cString: strerror(errno)))
         }
     }
 
     func finish() throws {
         guard let handle = handle else { return }
-        handle.closeFile()
+        try handle.close()
         self.handle = nil
     }
 
-    private func openIfNeeded() throws {
-        if handle != nil { return }
+    private func openIfNeeded() throws -> FileHandle {
+        if let handle = handle { return handle }
         let url = expandedFileURL(path)
         let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL, mode_t(0o600))
         guard descriptor >= 0 else {
             if errno == EEXIST { throw ArchiveIOError.alreadyExists(path: url.path) }
-            throw ArchiveIOError.cannotCreate(path: url.path)
+            throw ArchiveIOError.cannotCreate(path: url.path, reason: String(cString: strerror(errno)))
         }
         let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         handle = file
@@ -500,12 +500,13 @@ final class UndoWriter {
             tagColors: []
         )
         let headerData = try JSONSerialization.data(withJSONObject: header, options: [.sortedKeys])
-        file.write(headerData)
-        file.write(Data("\n{\"path\":\"/\",\"type\":\"root\"}\n".utf8))
+        try file.write(contentsOf: headerData)
+        try file.write(contentsOf: Data("\n{\"path\":\"/\",\"type\":\"root\"}\n".utf8))
         if syncEachRecord && fsync(file.fileDescriptor) != 0 {
             throw ArchiveIOError.syncFailed(path: path, reason: String(cString: strerror(errno)))
         }
         eprint("\(programName): undo archive: \(url.path)")
+        return file
     }
 
     private func itemKind(for url: URL) throws -> ArchiveItemKind {
@@ -517,13 +518,13 @@ final class UndoWriter {
 
 enum ArchiveIOError: LocalizedError {
     case alreadyExists(path: String)
-    case cannotCreate(path: String)
+    case cannotCreate(path: String, reason: String)
     case syncFailed(path: String, reason: String)
 
     var errorDescription: String? {
         switch self {
         case let .alreadyExists(path): return "undo archive already exists: \(path)"
-        case let .cannotCreate(path): return "cannot create undo archive: \(path)"
+        case let .cannotCreate(path, reason): return "cannot create undo archive \(path): \(reason)"
         case let .syncFailed(path, reason): return "cannot sync undo archive \(path): \(reason)"
         }
     }

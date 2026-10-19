@@ -206,7 +206,7 @@ final class App {
                 onError: report,
                 onWarning: reportWarning,
                 beforeMutation: { target, tags in
-                    try self.recordUndo(target: target, tags: tags)
+                    self.recordUndo(target: target, tags: tags)
                 }
             )
             var stats = engine.run()
@@ -508,7 +508,7 @@ final class App {
     ) throws -> TagChange {
         var change = sortedChangeIfRequested(rawChange, options: options)
         if !options.dryRun && change.hasChanges {
-            try recordUndo(target: target, tags: change.beforeTags)
+            recordUndo(target: target, tags: change.beforeTags)
             let after = try store.apply(change, to: target.url)
             change = TagChange(beforeTags: change.beforeTags, afterTags: after, repairs: change.repairs)
         }
@@ -526,11 +526,18 @@ final class App {
         do {
             try undoWriter?.finish()
         } catch {
-            report("closing undo archive: \(error.localizedDescription)")
+            report("closing undo archive: \(error.localizedDescription); use --no-backup to run without backup")
         }
     }
 
-    private func recordUndo(target: Target, tags: [StoredTag]) throws {
-        try undoWriter?.record(target: target, tags: tags)
+    private func recordUndo(target: Target, tags: [StoredTag]) {
+        do {
+            try undoWriter?.record(target: target, tags: tags)
+        } catch {
+            // A backup failure stops the whole operation, rather than entering
+            // the per-file recovery path and attempting later mutations.
+            fail("backup failed before changing \(target.displayPath): \(error.localizedDescription); use --no-backup to run without backup",
+                 code: ExitCode.ioError)
+        }
     }
 }

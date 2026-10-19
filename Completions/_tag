@@ -62,6 +62,7 @@ _arguments \
   '--sync-backup[sync each undo record]' \
   '(-h --help)'{-h,--help}'[brief help; add -v for details]' \
   '-hh[show detailed help]' \
-  '(-v --verbose)'{-v,--verbose}'[show informational messages; expand help]' \
+  '*'{-q,--quiet}'[decrease verbosity]' \
+  '*'{-v,--verbose}'[increase verbosity; expand help]' \
   '--version[version]' \
   '*:path:_files'
