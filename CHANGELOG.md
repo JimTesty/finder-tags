@@ -2,6 +2,8 @@
 
 ## 9.0 -- Unreleased
 
+- Add `--repair`, `--include-hidden`, and `--replace` as synonyms for `--fix`,
+  `--all`, and `--set`, with completions and documentation.
 - Add `--del` and `--delete` as synonyms for `--remove`, available in shell
   completions and documentation without expanding the brief help.
 - Default backup to off for explicit command-line mutation targets, and to on

@@ -597,6 +597,8 @@ and convenience synonyms are also supported:
 | Preferred | Aliases | Short |
 |---|---|---|
 | `--remove` | `--del`, `--delete` | `-r` |
+| `--set` | `--replace` | `-s` |
+| `--fix` | `--repair` | none |
 | `--filename` | `--name` | `-n` |
 | `--no-filename` | `--no-name` | `-N` |
 | `--one-per-line` | `--garrulous` | `-g` |
@@ -607,7 +609,7 @@ and convenience synonyms are also supported:
 | `--reverse` | none | `-V` |
 | `--case-sensitive` | none | `-C` |
 | `--sorted-tags` | `--sort-tags` | none |
-| `--all` | `--dot-files` | `-A` |
+| `--all` | `--dot-files`, `--include-hidden` | `-A` |
 | `--no-sort-files` | none | none |
 | `--verbose` | none | `-v` |
 

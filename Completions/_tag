@@ -9,8 +9,8 @@ _arguments \
   '--append[add tags at end]:tags:' \
   '--prepend[add tags at beginning]:tags:' \
   '(-r --remove --del --delete)'{-r,--remove,--del,--delete}'[remove tags]:tags:' \
-  '(-s --set)'{-s,--set}'[replace tags]:tags:' \
-  '--fix[repair invalid tag names]' \
+  '(-s --set --replace)'{-s,--set,--replace}'[replace tags]:tags:' \
+  '(--fix --repair)'{--fix,--repair}'[repair invalid tag names]' \
   '--copy[copy ordered tags]:source:_files:destination:_files' \
   '(-m --match)'{-m,--match}'[match tags]:tags:' \
   '--filter[match tags with list-style output]:tags:' \
@@ -44,7 +44,7 @@ _arguments \
   '--ndjson[alias for --jsonl]' \
   '--stdin[read newline-delimited paths]' \
   '--stdin0[read NUL-delimited paths]' \
-  '(-A --all --dot-files)'{-A,--all,--dot-files}'[include hidden files and directories]' \
+  '(-A --all --dot-files --include-hidden)'{-A,--all,--dot-files,--include-hidden}'[include hidden files and directories]' \
   '(-e --enter)'{-e,--enter}'[enter directories]' \
   '(-R -d --recursive)'{-R,-d,--recursive}'[recursive]' \
   '--no-sort-files[use filesystem/Spotlight order without sorting]' \

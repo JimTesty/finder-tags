@@ -11,7 +11,7 @@ enum RepairTests {
 
         // A metadata-only repair is a real change even when tag arrays match.
         let edits = [["--set", "Yellow"], ["--add", "Yellow"], ["--remove", "Missing"],
-                     ["--move", "Yellow", "first"], ["--set", "Yellow", "--sorted-tags"], ["--fix"]]
+                     ["--move", "Yellow", "first"], ["--set", "Yellow", "--sorted-tags"], ["--fix"], ["--repair"]]
         for (index, args) in edits.enumerated() {
             writeRawTagMetadata(corrupt, to: file)
             let undo = work.appendingPathComponent("undo-\(index).jsonl")
@@ -143,8 +143,10 @@ enum RepairTests {
         expect(readRawTagMetadata(broken) == unreadable)
         expect(try FileTagMetadata.readState(child)?.needsRepair == false)
 
-        _ = try context.run(["--fix"], status: 64)
-        _ = try context.run(["--fix=yes", file.path], status: 64)
+        for operation in ["--fix", "--repair"] {
+            _ = try context.run([operation], status: 64)
+            _ = try context.run([operation + "=yes", file.path], status: 64)
+        }
     }
 }
 #endif

@@ -104,10 +104,11 @@ Remove matching tags. A TAGS value of * removes all tags.
 .TP
 .BR -s , " --set " TAGS
 Replace the complete tag array.
+--replace is a synonym for --set.
 .TP
 .B --fix
 Repair invalid tag names and remove empty tags. Valid tags keep their order
-and colors.
+and colors. --repair is a synonym for --fix.
 .TP
 .B --copy SOURCE DESTINATION
 Replace DESTINATION's ordered tag names and stored colors with SOURCE's tags.
@@ -276,7 +277,8 @@ Read NUL-delimited paths from standard input.
 .TP
 .BR -A , " --all" , " --dot-files"
 Include hidden files and directories while enumerating, including during
-recursive traversal. --dot-files is an alias for --all. Hidden entries include
+recursive traversal. --dot-files and --include-hidden are aliases for --all.
+Hidden entries include
 dot-prefixed names and other entries marked hidden by macOS; they are skipped
 by default. Explicitly supplied hidden paths are processed regardless of this
 option. Export includes hidden entries by default.

@@ -154,9 +154,9 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
                 setPosition(.first, options: &options, option: "--prepend")
             case "remove", "del", "delete":
                 setOperation(.remove(parseTagList(operand())), options: &options)
-            case "set":
+            case "set", "replace":
                 setOperation(.set(parseTagList(operand())), options: &options)
-            case "fix":
+            case "fix", "repair":
                 setOperation(.fix, options: &options)
             case "match":
                 setOperation(.match(parseTagQuery(operand())), options: &options)
@@ -213,7 +213,7 @@ private func parseCommandLineArguments(_ args: [String]) -> Options {
                 Diagnostics.colorMode = options.colorMode
                 options.reverse = true
                 options.reverseWasSet = true
-            case "all", "dot-files": options.includeHidden = true
+            case "all", "dot-files", "include-hidden": options.includeHidden = true
             case "enter": options.enterDirectories = true
             case "recursive", "descend": options.recursive = true
             case "no-sort-files": options.sortFiles = false

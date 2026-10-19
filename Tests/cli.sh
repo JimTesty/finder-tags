@@ -192,6 +192,7 @@ if "$bin" -e "$work/tree" | grep -q '^\.hidden$'; then
     exit 1
 fi
 "$bin" -Ae "$work/tree" | grep -q '^\.hidden$'
+[ "$("$bin" --include-hidden -RT "$work/tree")" = "$("$bin" --all -RT "$work/tree")" ]
 
 # Absolute paths and compact stateful JSONL path provenance.
 absolute_output=$(cd "$work" && "$bin" --absolute a)
@@ -309,6 +310,15 @@ for alias in del delete; do
     grep -q -- "--$alias requires an argument" "$work/remove-alias.err"
 done
 
+replace_preview=$("$bin" --set 'Second,First' --dry-run --jsonl "$work/a")
+[ "$("$bin" --replace 'Second,First' --dry-run --jsonl "$work/a")" = "$replace_preview" ]
+[ "$("$bin" --replace=Second,First --dry-run --jsonl "$work/a")" = "$replace_preview" ]
+if "$bin" --replace >/dev/null 2>"$work/replace-alias.err"; then
+    echo "expected --replace without TAGS to fail" >&2
+    exit 1
+fi
+grep -q -- '--replace requires an argument' "$work/replace-alias.err"
+
 if "$bin" --set '"unterminated' --dry-run "$work/a" >/dev/null 2>&1; then
     echo "expected malformed quoted TAGS to fail" >&2
     exit 1
@@ -334,7 +344,7 @@ edge_tag=$(printf '\rStart\r')
 grep -Fq '"after":["�Start�"]' "$work/edge.out"
 grep -Fq 'replaced with �' "$work/edge.err"
 
-for flag in follow-symlinks backup no-backup dry-run recursive help version; do
+for flag in follow-symlinks backup no-backup dry-run recursive include-hidden help version; do
     if "$bin" --set Safety "--$flag=false" "$work/a" >/dev/null 2>"$work/inline.err"; then
         echo "expected a value on --$flag to fail" >&2
         exit 1
@@ -392,7 +402,8 @@ fi
 # Real Finder-tag integration checks when running on macOS. Everything remains
 # inside Tests/.cli-work.*, including symlink targets.
 if [ "$(uname -s)" = Darwin ]; then
-    "$bin" --set 'First,Second' --no-backup "$work/a"
+    "$bin" --set Stale --no-backup "$work/a"
+    "$bin" --replace 'First,Second' --no-backup "$work/a"
     [ "$("$bin" -N "$work/a")" = 'First,Second' ]
     space_indent_output=$("$bin" --space-indent "$work/a")
     printf '%s\n' "$space_indent_output" | grep -Fq '  First,Second'
