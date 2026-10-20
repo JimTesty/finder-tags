@@ -186,7 +186,7 @@ private func detailedHelp(name: String) -> String {
 
     -q and -v accumulate and cancel one for one: below default is quiet,
     above default is verbose. Default reports completed changes and resulting
-    tags on stdout, with short bulk summaries on stderr. Empty tags show (empty).
+    tags on stdout, with short bulk summaries on stderr. Empty tags show (no tags).
     Quiet suppresses action reports, routine text summaries, and backup paths;
     warnings, errors, previews, and requested output remain visible.
     Verbose adds stored before-tags, color numbers, unchanged files, skip reasons,

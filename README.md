@@ -530,7 +530,7 @@ Default mutation output reports completed, verified changes on stdout:
 ```text
 Added Yellow => Now: Red, Yellow
 notes.txt: Removed Red => Now: Yellow
-notes.txt: Cleared tags => Now: (empty)
+notes.txt: Cleared tags => Now: (no tags)
 ```
 
 The path prefix is omitted only for a single explicit target without traversal
@@ -539,9 +539,10 @@ identifies each path. Traversed mutation paths include their supplied root so
 different roots' children remain distinguishable. Tags use their stored colors
 when color is enabled. `Now:` follows `--sorted-tags`, then `--reverse`.
 
-A single unchanged target reports `Unchanged => Now: ...`. Bulk operations
-report changed files individually and count unchanged files in a short stderr
-summary. Default mutation summaries omit zero counts other than the change count.
+A single unchanged target reports `Unchanged => Now: ...`. Empty tag lists show
+`(no tags)`. Bulk operations report changed files individually and count
+unchanged files in a short stderr summary. Default mutation summaries omit zero
+counts other than the change count.
 Verbose reports unchanged files individually, adds the before-tags in stored
 order and per-tag color numbers to each action, and includes full summary
 counts. Skip reasons and other information, including Spotlight's indexed

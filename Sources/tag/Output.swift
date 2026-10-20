@@ -225,7 +225,7 @@ final class Output {
     private func renderedTags(_ stored: [StoredTag], displayOrder: Bool = false, detailed: Bool = false) -> String {
         var tags = displayOrder && options.sortedTags ? sortedStoredTags(stored) : stored
         if displayOrder && options.reverse { tags.reverse() }
-        if tags.isEmpty { return "(empty)" }
+        if tags.isEmpty { return "(no tags)" }
         return tags.map { tag in
             renderer.tag(tag) + (detailed ? " [color \(tag.color.map(String.init) ?? "unknown")]" : "")
         }.joined(separator: ", ")

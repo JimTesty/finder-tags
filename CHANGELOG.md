@@ -11,7 +11,7 @@
   safety errors. Quiet now hides undo archive path announcements, without
   disabling backups or hiding backup failures.
 - Report verified mutation actions and resulting tags on stdout by default,
-  using `(empty)` for no tags. Honor display sorting/reversal and tag colors;
+  using `(no tags)` for empty results. Honor display sorting/reversal and tag colors;
   identify paths for bulk work and distinguish children across traversal roots.
   Add concise bulk summaries and single-target unchanged confirmations.
   Verbose adds stored before-tags, color numbers, unchanged items, skip reasons,

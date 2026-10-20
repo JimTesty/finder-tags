@@ -12,8 +12,8 @@ enum MutationFeedbackTests {
         expect(try context.run(["--add", "yellow", file.path]).out
             == "Changed case Yellow to yellow => Now: Red, yellow\n")
         expect(try context.run(["--remove", "Missing,Red", file.path]).out == "Removed Red => Now: yellow\n")
-        expect(try context.run(["--remove", "*", file.path]).out == "Cleared tags => Now: (empty)\n")
-        expect(try context.run(["--set", "", file.path]).out == "Unchanged => Now: (empty)\n")
+        expect(try context.run(["--remove", "*", file.path]).out == "Cleared tags => Now: (no tags)\n")
+        expect(try context.run(["--set", "", file.path]).out == "Unchanged => Now: (no tags)\n")
         expect(try context.run(["--set", "B,A,C", file.path]).out == "Set tags => Now: B, A, C\n")
         let moved = try context.run(["--move", "C", "first", "--reverse", file.path])
         expect(moved.out == "Reordered tags => Now: A, B, C\n")
